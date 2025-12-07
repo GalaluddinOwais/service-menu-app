@@ -1,5 +1,4 @@
-import { promises as fs } from 'fs';
-import path from 'path';
+import { put, head } from '@vercel/blob';
 
 export interface Admin {
   id: string;
@@ -42,30 +41,29 @@ export const THEMES = {
   rose: { primary: '#ec4899', secondary: '#f472b6', accent: '#db2777' },
 };
 
-const DB_FILE = path.join(process.cwd(), 'data', 'menu.json');
-
-async function ensureDataDir() {
-  const dataDir = path.join(process.cwd(), 'data');
-  try {
-    await fs.access(dataDir);
-  } catch {
-    await fs.mkdir(dataDir, { recursive: true });
-  }
-}
+const BLOB_FILENAME = 'menu-database.json';
 
 async function readDB(): Promise<Database> {
   try {
-    await ensureDataDir();
-    const data = await fs.readFile(DB_FILE, 'utf-8');
-    return JSON.parse(data);
-  } catch {
-    return { admins: [], lists: [], items: [] };
+    // محاولة قراءة البيانات من Vercel Blob
+    const blobInfo = await head(BLOB_FILENAME);
+    if (blobInfo && blobInfo.url) {
+      const response = await fetch(blobInfo.url);
+      const data = await response.text();
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    // إذا لم يوجد الملف، نعيد قاعدة بيانات فارغة
   }
+  return { admins: [], lists: [], items: [] };
 }
 
 async function writeDB(db: Database): Promise<void> {
-  await ensureDataDir();
-  await fs.writeFile(DB_FILE, JSON.stringify(db, null, 2));
+  const jsonData = JSON.stringify(db, null, 2);
+  await put(BLOB_FILENAME, jsonData, {
+    access: 'public',
+    addRandomSuffix: false // للحفاظ على نفس اسم الملف
+  });
 }
 
 // دوال إدارة القوائم
