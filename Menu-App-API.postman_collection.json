@@ -1,0 +1,670 @@
+{
+	"info": {
+		"_postman_id": "menu-app-api-collection",
+		"name": "Menu App API",
+		"description": "Complete API collection for Menu Application with Session Token and API Key authentication",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "noauth"
+	},
+	"item": [
+		{
+			"name": "Developer Endpoints (API Key)",
+			"description": "Endpoints for developers to manage admins directly using API Key",
+			"item": [
+				{
+					"name": "Get All Admins",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-api-key",
+								"value": "{{API_KEY}}",
+								"type": "text",
+								"description": "Your secret API key from .env.local"
+							}
+						],
+						"url": {
+							"raw": "{{BASE_URL}}/api/admins",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"admins"
+							]
+						},
+						"description": "Get list of all admins (passwords excluded)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Admin by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-api-key",
+								"value": "{{API_KEY}}",
+								"type": "text",
+								"description": "Your secret API key from .env.local"
+							}
+						],
+						"url": {
+							"raw": "{{BASE_URL}}/api/admins/:id",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"admins",
+								":id"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "1764632000001",
+									"description": "Admin ID"
+								}
+							]
+						},
+						"description": "Get specific admin details by ID (password excluded)"
+					},
+					"response": []
+				},
+				{
+					"name": "Create New Admin",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-api-key",
+								"value": "{{API_KEY}}",
+								"type": "text",
+								"description": "Your secret API key from .env.local"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"newadmin\",\n  \"password\": \"password123\",\n  \"theme\": \"ocean\",\n  \"logoUrl\": \"https://example.com/logo.png\",\n  \"backgroundUrl\": \"https://example.com/background.jpg\",\n  \"welcomeMessage\": \"مرحباً بكم في مطعمنا\\nنقدم أفضل الأطباق\",\n  \"contactMessage\": \"للطلب اتصل على\\n0123456789\"\n}\n\n// Required fields:\n// - username: unique username (string)\n// - password: user password (string)\n// - theme: one of \"ocean\", \"sunset\", \"forest\", \"royal\", \"rose\"\n//\n// Optional fields:\n// - logoUrl: URL to logo image (string or empty)\n// - backgroundUrl: URL to background image (string or empty)\n// - welcomeMessage: multi-line welcome message (supports \\n for new lines)\n// - contactMessage: multi-line contact message (supports \\n for new lines)",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/admins",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"admins"
+							]
+						},
+						"description": "Create a new admin with all fields"
+					},
+					"response": []
+				},
+				{
+					"name": "PATCH Admin (Direct Edit)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "x-api-key",
+								"value": "{{API_KEY}}",
+								"type": "text",
+								"description": "Your secret API key from .env.local"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"updated_username\",\n  \"password\": \"new_password_directly\",\n  \"theme\": \"sunset\",\n  \"logoUrl\": \"https://example.com/new-logo.png\",\n  \"backgroundUrl\": \"\",\n  \"welcomeMessage\": \"رسالة ترحيب محدثة\\nسطر ثاني\",\n  \"contactMessage\": \"رسالة تواصل محدثة\"\n}\n\n// Developer PATCH - Direct modification without restrictions\n// - No current password required\n// - Any field can be updated directly\n// - Send only the fields you want to update\n// - Empty string \"\" removes the value\n//\n// Available fields:\n// - username: change username\n// - password: change password directly (no old password needed)\n// - theme: one of \"ocean\", \"sunset\", \"forest\", \"royal\", \"rose\"\n// - logoUrl: update or remove logo\n// - backgroundUrl: update or remove background\n// - welcomeMessage: update or remove welcome message\n// - contactMessage: update or remove contact message\n//\n// Examples:\n// Change password only: {\"password\": \"new_pass\"}\n// Remove logo: {\"logoUrl\": \"\"}\n// Change theme only: {\"theme\": \"royal\"}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/admins/:id",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"admins",
+								":id"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "1764632000001",
+									"description": "Admin ID"
+								}
+							]
+						},
+						"description": "Direct admin modification (developer only). No password verification required. Any field in body will be updated directly."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Admin",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "x-api-key",
+								"value": "{{API_KEY}}",
+								"type": "text",
+								"description": "Your secret API key from .env.local"
+							}
+						],
+						"url": {
+							"raw": "{{BASE_URL}}/api/admins/:id",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"admins",
+								":id"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "1764632000001",
+									"description": "Admin ID to delete"
+								}
+							]
+						},
+						"description": "Delete admin and ALL associated lists and menu items"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Admin User Endpoints (Session Token)",
+			"description": "Endpoints for admin users to manage their own data using Session Token",
+			"item": [
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Auto-save session token to environment variable",
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    if (response.token) {",
+									"        pm.environment.set(\"SESSION_TOKEN\", response.token);",
+									"        console.log(\"Session token saved:\", response.token);",
+									"    }",
+									"    if (response.admin) {",
+									"        pm.environment.set(\"CURRENT_ADMIN_ID\", response.admin.id);",
+									"        pm.environment.set(\"CURRENT_USERNAME\", response.admin.username);",
+									"        console.log(\"Admin ID saved:\", response.admin.id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"samakawy\",\n  \"password\": \"password123\"\n}\n\n// Login to get session token\n// Required fields:\n// - username: admin username\n// - password: admin password\n//\n// Response includes:\n// - token: session token (valid for 24 hours)\n// - admin: admin data (without password)\n//\n// The session token will be automatically saved to environment variable",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/auth/login",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"login"
+							]
+						},
+						"description": "Login and get session token (auto-saved to environment)"
+					},
+					"response": []
+				},
+				{
+					"name": "Update My Profile",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{SESSION_TOKEN}}",
+								"type": "text",
+								"description": "Session token from login"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"updated_username\",\n  \"theme\": \"royal\",\n  \"logoUrl\": \"https://example.com/my-logo.png\",\n  \"backgroundUrl\": \"https://example.com/my-bg.jpg\",\n  \"welcomeMessage\": \"مرحباً بكم\\nفي مطعمنا\",\n  \"contactMessage\": \"اتصل بنا\\n0123456789\",\n  \"currentPassword\": \"old_password\",\n  \"newPassword\": \"new_password\"\n}\n\n// Update your own profile (ownership verified)\n// Optional fields (send only what you want to update):\n// - username: change username\n// - theme: one of \"ocean\", \"sunset\", \"forest\", \"royal\", \"rose\"\n// - logoUrl: update logo (empty string \"\" to remove)\n// - backgroundUrl: update background (empty string \"\" to remove)\n// - welcomeMessage: update welcome message\n// - contactMessage: update contact message\n// - newPassword: new password\n// - currentPassword: REQUIRED only if changing password\n//\n// Password change:\n// If you send newPassword, you MUST send currentPassword\n// Otherwise currentPassword is not needed\n//\n// Examples:\n// Change theme only: {\"theme\": \"sunset\"}\n// Remove logo: {\"logoUrl\": \"\"}\n// Change password: {\"currentPassword\": \"old\", \"newPassword\": \"new\"}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/admins/:id",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"admins",
+								":id"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{CURRENT_ADMIN_ID}}",
+									"description": "Your admin ID (auto-filled from login)"
+								}
+							]
+						},
+						"description": "Update your own profile. Requires session token. Can only edit your own data."
+					},
+					"response": []
+				},
+				{
+					"name": "Get My Lists",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{BASE_URL}}/api/lists?adminId={{CURRENT_ADMIN_ID}}",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"lists"
+							],
+							"query": [
+								{
+									"key": "adminId",
+									"value": "{{CURRENT_ADMIN_ID}}",
+									"description": "Filter by admin ID"
+								}
+							]
+						},
+						"description": "Get all lists for current admin"
+					},
+					"response": []
+				},
+				{
+					"name": "Create List",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{SESSION_TOKEN}}",
+								"type": "text",
+								"description": "Session token from login"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"المشروبات\",\n  \"adminId\": \"{{CURRENT_ADMIN_ID}}\"\n}\n\n// Create a new menu list\n// Required fields:\n// - name: list name (e.g., \"المشروبات\", \"الأطباق الرئيسية\")\n// - adminId: your admin ID (must match your session)\n//\n// Note: itemType is automatically set to \"عنصر\"",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/lists",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"lists"
+							]
+						},
+						"description": "Create a new list (requires session token and ownership)"
+					},
+					"response": []
+				},
+				{
+					"name": "Update List",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{SESSION_TOKEN}}",
+								"type": "text",
+								"description": "Session token from login"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"المشروبات الساخنة\"\n}\n\n// Update list name\n// Required field:\n// - name: new list name\n//\n// Note: Can only update your own lists",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/lists/:id",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"lists",
+								":id"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "list_id_here",
+									"description": "List ID"
+								}
+							]
+						},
+						"description": "Update list (ownership verified)"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete List",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{SESSION_TOKEN}}",
+								"type": "text",
+								"description": "Session token from login"
+							}
+						],
+						"url": {
+							"raw": "{{BASE_URL}}/api/lists/:id",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"lists",
+								":id"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "list_id_here",
+									"description": "List ID to delete"
+								}
+							]
+						},
+						"description": "Delete list and all its items (ownership verified)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Menu Items",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{BASE_URL}}/api/menu?listId=list_id_here",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"menu"
+							],
+							"query": [
+								{
+									"key": "listId",
+									"value": "list_id_here",
+									"description": "Optional: filter by list ID"
+								}
+							]
+						},
+						"description": "Get all menu items (optionally filtered by list)"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Menu Item",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{SESSION_TOKEN}}",
+								"type": "text",
+								"description": "Session token from login"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"قهوة عربية\",\n  \"price\": 15.50,\n  \"description\": \"قهوة عربية أصيلة\\nمحضرة بعناية من أجود أنواع البن\\nتقدم ساخنة مع التمر\",\n  \"listId\": \"list_id_here\"\n}\n\n// Create a new menu item\n// Required fields:\n// - name: item name\n// - price: item price (number)\n// - listId: ID of the list this item belongs to\n//\n// Optional fields:\n// - description: multi-line description\n//   * First line will be displayed in BOLD\n//   * Remaining lines in normal font\n//   * Use \\n for new lines\n//\n// Note: Can only add items to your own lists",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/menu",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"menu"
+							]
+						},
+						"description": "Create menu item with optional multi-line description"
+					},
+					"response": []
+				},
+				{
+					"name": "Update Menu Item",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{SESSION_TOKEN}}",
+								"type": "text",
+								"description": "Session token from login"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"قهوة عربية ممتازة\",\n  \"price\": 18.00,\n  \"description\": \"قهوة عربية فاخرة\\nمن أجود أنواع البن البرازيلي\\nتقدم مع التمر والشوكولاتة\",\n  \"listId\": \"new_list_id_here\"\n}\n\n// Update menu item\n// Optional fields (send only what you want to update):\n// - name: update item name\n// - price: update price\n// - description: update description (empty string \"\" to remove)\n// - listId: move to different list (must be your own list)\n//\n// Note: Can only update your own items",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/api/menu/:id",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"menu",
+								":id"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "item_id_here",
+									"description": "Menu item ID"
+								}
+							]
+						},
+						"description": "Update menu item (ownership verified)"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Menu Item",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{SESSION_TOKEN}}",
+								"type": "text",
+								"description": "Session token from login"
+							}
+						],
+						"url": {
+							"raw": "{{BASE_URL}}/api/menu/:id",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"menu",
+								":id"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "item_id_here",
+									"description": "Menu item ID to delete"
+								}
+							]
+						},
+						"description": "Delete menu item (ownership verified)"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Public Endpoints",
+			"description": "Public endpoints (no authentication required)",
+			"item": [
+				{
+					"name": "Get Admin by Username (Public)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{BASE_URL}}/api/public/admin/:username",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"api",
+								"public",
+								"admin",
+								":username"
+							],
+							"variable": [
+								{
+									"key": "username",
+									"value": "samakawy",
+									"description": "Admin username"
+								}
+							]
+						},
+						"description": "Get public admin data by username (for menu pages). Returns admin data without password."
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "BASE_URL",
+			"value": "http://localhost:3000",
+			"type": "string"
+		},
+		{
+			"key": "API_KEY",
+			"value": "your-secret-api-key-here",
+			"type": "string"
+		},
+		{
+			"key": "SESSION_TOKEN",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "CURRENT_ADMIN_ID",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "CURRENT_USERNAME",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
