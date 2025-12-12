@@ -1,5 +1,5 @@
 import { put, head } from '@vercel/blob';
-
+// Vercel Blob Storage Integration - v2
 export interface Admin {
   id: string;
   username: string; // اسم فريد
