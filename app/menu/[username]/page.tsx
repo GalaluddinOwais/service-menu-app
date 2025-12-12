@@ -248,27 +248,17 @@ export default function PublicMenuPage() {
           <>
             {/* Lists Navigation */}
             <div className="mb-8 relative">
-              {/* Scroll Indicator - Left */}
-              <div
-                className="absolute left-0 top-0 bottom-4 w-12 pointer-events-none z-10 flex items-center justify-start pl-2"
-                style={{
-                  background: `linear-gradient(to right, ${theme.primary}80, transparent)`
-                }}
-              >
-                <svg className="w-6 h-6 text-white/70 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              {/* Scroll Indicator - Left Arrow */}
+              <div className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none z-10">
+                <svg className="w-8 h-8 text-gray-700 animate-pulse drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" />
                 </svg>
               </div>
 
-              {/* Scroll Indicator - Right */}
-              <div
-                className="absolute right-0 top-0 bottom-4 w-12 pointer-events-none z-10 flex items-center justify-end pr-2"
-                style={{
-                  background: `linear-gradient(to left, ${theme.primary}80, transparent)`
-                }}
-              >
-                <svg className="w-6 h-6 text-white/70 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              {/* Scroll Indicator - Right Arrow */}
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none z-10">
+                <svg className="w-8 h-8 text-gray-700 animate-pulse drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" />
                 </svg>
               </div>
 
