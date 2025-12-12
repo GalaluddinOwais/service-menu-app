@@ -177,6 +177,8 @@ export default function PublicMenuPage() {
                 src={admin.logoUrl}
                 alt="Logo"
                 className="h-32 w-32 object-contain mx-auto shadow-2xl ring-4 ring-white"
+                                style={{ borderRadius: '25px' }}
+
               />
             </div>
           )}
@@ -211,7 +213,7 @@ export default function PublicMenuPage() {
         ) : (
           <>
             {/* Lists Navigation */}
-            <div className="mb-8 overflow-hidden">
+            <div className="mb-8 overflow-x-auto scrollbar-hide">
               <div className="flex animate-infinite-scroll">
                 <div className="flex gap-3 px-12">
                   <button
