@@ -62,7 +62,9 @@ async function writeDB(db: Database): Promise<void> {
   const jsonData = JSON.stringify(db, null, 2);
   await put(BLOB_FILENAME, jsonData, {
     access: 'public',
-    addRandomSuffix: false // للحفاظ على نفس اسم الملف
+    addRandomSuffix: false,
+    contentType: 'application/json',
+    allowOverwrite: true // السماح بالكتابة فوق الملف الموجود
   });
 }
 
