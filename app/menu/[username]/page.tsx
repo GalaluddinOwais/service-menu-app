@@ -193,11 +193,9 @@ export default function PublicMenuPage() {
 
 
 
-                    <p className="text-gray-700 text-2xl font-bold p-5 mt-6">
+          <p className="text-gray-700 text-2xl font-bold p-5 mt-6">
             استكشف قوائمنا المميزة
           </p>
-
-          {/* Theme indicator */}
 
         </div>
 
@@ -382,10 +380,10 @@ export default function PublicMenuPage() {
       <style jsx>{`
         @keyframes infiniteScroll {
           0% {
-            transform: translateX(0);
+            transform: translateX(-50%);
           }
           100% {
-            transform: translateX(-50%);
+            transform: translateX(0);
           }
         }
         .animate-infinite-scroll {
