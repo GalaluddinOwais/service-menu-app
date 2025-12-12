@@ -380,7 +380,7 @@ export default function PublicMenuPage() {
       <style jsx>{`
         @keyframes infiniteScroll {
           0% {
-            transform: translateX(-50%);
+            transform: translateX(-100%);
           }
           100% {
             transform: translateX(0);
