@@ -76,10 +76,26 @@ export default function PublicMenuPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
+  const [shouldLoop, setShouldLoop] = useState(false);
 
   useEffect(() => {
     fetchMenuData();
   }, [username]);
+
+  useEffect(() => {
+    // Check if lists navigation is wider than viewport
+    const checkScroll = () => {
+      const navElement = document.getElementById('lists-navigation');
+      if (navElement) {
+        const isScrollable = navElement.scrollWidth > navElement.clientWidth;
+        setShouldLoop(isScrollable);
+      }
+    };
+
+    checkScroll();
+    window.addEventListener('resize', checkScroll);
+    return () => window.removeEventListener('resize', checkScroll);
+  }, [lists]);
 
   const fetchMenuData = async () => {
     try {
@@ -211,9 +227,9 @@ export default function PublicMenuPage() {
         ) : (
           <>
             {/* Lists Navigation */}
-            <div className="mb-8 overflow-x-auto scrollbar-hide">
-              <div className="flex animate-infinite-scroll">
-                <div className="flex gap-3 px-12">
+            <div id="lists-navigation" className="mb-8 overflow-x-auto scrollbar-hide">
+              <div className={shouldLoop ? "flex animate-infinite-scroll" : "flex gap-3 px-4"}>
+                <div className="flex gap-3 px-4">
                   <button
                     onClick={() => setSelectedListId(null)}
                     className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg ${
@@ -238,32 +254,34 @@ export default function PublicMenuPage() {
                     </button>
                   ))}
                 </div>
-                {/* Duplicate for seamless loop */}
-                <div className="flex gap-3 px-12">
-                  <button
-                    onClick={() => setSelectedListId(null)}
-                    className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg ${
-                      selectedListId === null
-                        ? `bg-gradient-to-r ${theme.gradient} text-white shadow-xl`
-                        : 'bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white'
-                    }`}
-                  >
-                    جميع القوائم
-                  </button>
-                  {lists.map((list) => (
+                {/* Duplicate for seamless loop - only if needed */}
+                {shouldLoop && (
+                  <div className="flex gap-3 px-4">
                     <button
-                      key={`duplicate-${list.id}`}
-                      onClick={() => setSelectedListId(list.id)}
-                      className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg whitespace-nowrap ${
-                        selectedListId === list.id
+                      onClick={() => setSelectedListId(null)}
+                      className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg ${
+                        selectedListId === null
                           ? `bg-gradient-to-r ${theme.gradient} text-white shadow-xl`
                           : 'bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white'
                       }`}
                     >
-                      {list.name}
+                      جميع القوائم
                     </button>
-                  ))}
-                </div>
+                    {lists.map((list) => (
+                      <button
+                        key={`duplicate-${list.id}`}
+                        onClick={() => setSelectedListId(list.id)}
+                        className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg whitespace-nowrap ${
+                          selectedListId === list.id
+                            ? `bg-gradient-to-r ${theme.gradient} text-white shadow-xl`
+                            : 'bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white'
+                        }`}
+                      >
+                        {list.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -379,15 +397,15 @@ export default function PublicMenuPage() {
       {/* Custom animations */}
       <style jsx>{`
         @keyframes infiniteScroll {
-          0% {
-            transform: translateX(-100%);
-          }
-          100% {
+          from {
             transform: translateX(0);
+          }
+          to {
+            transform: translateX(-50%);
           }
         }
         .animate-infinite-scroll {
-          animation: infiniteScroll 20s linear infinite;
+          animation: infiniteScroll 30s linear infinite;
         }
         .animate-infinite-scroll:hover {
           animation-play-state: paused;
