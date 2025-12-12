@@ -77,7 +77,6 @@ export default function PublicMenuPage() {
   const [error, setError] = useState('');
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [scrollContainerRef, setScrollContainerRef] = useState<HTMLDivElement | null>(null);
-  const [hasAutoScrolled, setHasAutoScrolled] = useState(false);
 
   useEffect(() => {
     fetchMenuData();
@@ -85,13 +84,15 @@ export default function PublicMenuPage() {
 
   // Auto-scroll animation when section comes into view - ONCE only
   useEffect(() => {
-    if (!scrollContainerRef || lists.length === 0 || hasAutoScrolled) return;
+    if (!scrollContainerRef || lists.length === 0) return;
+
+    let hasTriggered = false;
 
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting && !hasAutoScrolled) {
-            setHasAutoScrolled(true);
+          if (entry.isIntersecting && !hasTriggered) {
+            hasTriggered = true;
             // Animate scroll: move right, pause, then back to original position
             setTimeout(() => {
               const originalScroll = scrollContainerRef.scrollLeft;
@@ -105,13 +106,13 @@ export default function PublicMenuPage() {
           }
         });
       },
-      { threshold: 0.3 }
+      { threshold: 0.1 }
     );
 
     observer.observe(scrollContainerRef);
 
     return () => observer.disconnect();
-  }, [scrollContainerRef, lists, hasAutoScrolled]);
+  }, [scrollContainerRef, lists]);
 
   const fetchMenuData = async () => {
     try {
@@ -189,7 +190,7 @@ export default function PublicMenuPage() {
       dir="rtl"
       style={{
         background: admin.backgroundUrl
-          ? `url(${admin.backgroundUrl}) repeat`
+          ? `linear-gradient(rgba(255,255,255,0.85), rgba(255,255,255,0.85)), url(${admin.backgroundUrl}) repeat`
           : `linear-gradient(135deg, ${theme.primary}20, ${theme.secondary}30, ${theme.accent}10)`
       }}
     >
@@ -208,7 +209,8 @@ export default function PublicMenuPage() {
               <img
                 src={admin.logoUrl}
                 alt="Logo"
-                className="h-32 w-32 object-contain mx-auto rounded-full shadow-2xl ring-4 ring-white"
+                className="h-32 w-32 object-contain mx-auto shadow-2xl ring-4 ring-white"
+                style={{ borderRadius: '50px' }}
               />
             </div>
           )}
@@ -230,7 +232,7 @@ export default function PublicMenuPage() {
 
 
 
-                    <p className="text-gray-700 text-2xl font-medium  p-5 mt-6">
+                    <p className="text-gray-700 text-2xl font-bold p-5 mt-6">
             استكشف قوائمنا المميزة
           </p>
 
