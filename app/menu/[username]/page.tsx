@@ -90,19 +90,20 @@ export default function PublicMenuPage() {
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            // Animate scroll: move right then back
+            // Animate scroll: move right, pause, then back to original position
             setTimeout(() => {
-              scrollContainerRef.scrollBy({ left: 150, behavior: 'smooth' });
+              const originalScroll = scrollContainerRef.scrollLeft;
+              scrollContainerRef.scrollBy({ left: 300, behavior: 'smooth' });
               setTimeout(() => {
-                scrollContainerRef.scrollBy({ left: -150, behavior: 'smooth' });
-              }, 800);
-            }, 300);
+                scrollContainerRef.scrollTo({ left: originalScroll, behavior: 'smooth' });
+              }, 2500);
+            }, 500);
             // Disconnect after first trigger
             observer.disconnect();
           }
         });
       },
-      { threshold: 0.5 }
+      { threshold: 0.3 }
     );
 
     observer.observe(scrollContainerRef);
@@ -186,7 +187,7 @@ export default function PublicMenuPage() {
       dir="rtl"
       style={{
         background: admin.backgroundUrl
-          ? `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url(${admin.backgroundUrl}) center/cover`
+          ? `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url(${admin.backgroundUrl}) repeat`
           : `linear-gradient(135deg, ${theme.primary}20, ${theme.secondary}30, ${theme.accent}10)`
       }}
     >
@@ -201,11 +202,11 @@ export default function PublicMenuPage() {
         {/* Header */}
         <div className="text-center mb-12 animate-fade-in">
           {admin.logoUrl && (
-            <div className="mb-6">
+            <div className="mb-3">
               <img
                 src={admin.logoUrl}
                 alt="Logo"
-                className="h-24 w-24 object-contain mx-auto rounded-full shadow-2xl ring-4 ring-white"
+                className="h-32 w-32 object-contain mx-auto rounded-full shadow-2xl ring-4 ring-white"
               />
             </div>
           )}
@@ -247,21 +248,7 @@ export default function PublicMenuPage() {
         ) : (
           <>
             {/* Lists Navigation */}
-            <div className="mb-8 relative">
-              {/* Scroll Indicator - Left Arrow */}
-              <div className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none z-10">
-                <svg className="w-8 h-8 text-gray-700 animate-pulse drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" />
-                </svg>
-              </div>
-
-              {/* Scroll Indicator - Right Arrow */}
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none z-10">
-                <svg className="w-8 h-8 text-gray-700 animate-pulse drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" />
-                </svg>
-              </div>
-
+            <div className="mb-8">
               <div
                 ref={setScrollContainerRef}
                 className="overflow-x-auto pb-4 scrollbar-hide"
