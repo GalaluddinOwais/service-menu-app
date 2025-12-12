@@ -218,31 +218,47 @@ export default function PublicMenuPage() {
         ) : (
           <>
             {/* Lists Navigation */}
-            <div className="mb-8 overflow-x-auto pb-4">
-              <div className="flex gap-3 min-w-max justify-center">
-                <button
-                  onClick={() => setSelectedListId(null)}
-                  className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg ${
-                    selectedListId === null
-                      ? `bg-gradient-to-r ${theme.gradient} text-white shadow-xl`
-                      : 'bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white'
-                  }`}
-                >
-                  جميع القوائم
-                </button>
-                {lists.map((list) => (
+            <div className="mb-8 relative">
+              {/* Scroll Indicator - Left */}
+              <div className="absolute left-0 top-0 bottom-4 w-12 bg-gradient-to-r from-gray-100/80 to-transparent pointer-events-none z-10 flex items-center justify-start pl-2">
+                <svg className="w-6 h-6 text-gray-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </div>
+
+              {/* Scroll Indicator - Right */}
+              <div className="absolute right-0 top-0 bottom-4 w-12 bg-gradient-to-l from-gray-100/80 to-transparent pointer-events-none z-10 flex items-center justify-end pr-2">
+                <svg className="w-6 h-6 text-gray-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+
+              <div className="overflow-x-auto pb-4 scrollbar-hide">
+                <div className="flex gap-3 min-w-max justify-center px-12">
                   <button
-                    key={list.id}
-                    onClick={() => setSelectedListId(list.id)}
-                    className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg whitespace-nowrap ${
-                      selectedListId === list.id
+                    onClick={() => setSelectedListId(null)}
+                    className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg ${
+                      selectedListId === null
                         ? `bg-gradient-to-r ${theme.gradient} text-white shadow-xl`
                         : 'bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white'
                     }`}
                   >
-                    {list.name}
+                    جميع القوائم
                   </button>
-                ))}
+                  {lists.map((list) => (
+                    <button
+                      key={list.id}
+                      onClick={() => setSelectedListId(list.id)}
+                      className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg whitespace-nowrap ${
+                        selectedListId === list.id
+                          ? `bg-gradient-to-r ${theme.gradient} text-white shadow-xl`
+                          : 'bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white'
+                      }`}
+                    >
+                      {list.name}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
