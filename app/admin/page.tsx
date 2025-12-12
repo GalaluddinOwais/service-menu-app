@@ -122,6 +122,30 @@ export default function AdminPage() {
 
     const url = editingList ? `/api/lists/${editingList.id}` : '/api/lists';
     const method = editingList ? 'PUT' : 'POST';
+
+    // Optimistic Update: تحديث الواجهة فوراً
+    if (editingList) {
+      // تحديث قائمة موجودة
+      setLists(lists.map(list =>
+        list.id === editingList.id
+          ? { ...list, name: listFormData.name }
+          : list
+      ));
+    } else {
+      // إضافة قائمة جديدة
+      const tempList: MenuList = {
+        id: 'temp-' + Date.now(),
+        name: listFormData.name,
+        itemType: 'عنصر',
+        adminId: currentAdmin.id,
+      };
+      setLists([...lists, tempList]);
+    }
+
+    setListFormData({ name: '' });
+    setEditingList(null);
+
+    // إرسال الطلب للسيرفر في الخلفية
     const res = await fetch(url, {
       method,
       headers: getAuthHeaders(),
@@ -130,9 +154,12 @@ export default function AdminPage() {
         adminId: currentAdmin.id,
       }),
     });
-    if (res.ok) {
-      setListFormData({ name: '' });
-      setEditingList(null);
+
+    // إذا فشل، استرجاع البيانات الحقيقية
+    if (!res.ok) {
+      fetchData(currentAdmin.id);
+    } else {
+      // تحديث بالبيانات الحقيقية من السيرفر
       fetchData(currentAdmin.id);
     }
   };
@@ -148,14 +175,29 @@ export default function AdminPage() {
     if (!confirm('هل أنت متأكد؟ سيتم حذف جميع العناصر في هذه القائمة')) return;
     if (!currentAdmin) return;
 
+    // Optimistic Update: حذف من الواجهة فوراً
+    const oldLists = [...lists];
+    const oldItems = [...items];
+
+    setLists(lists.filter(list => list.id !== id));
+    setItems(items.filter(item => item.listId !== id));
+
+    if (selectedList?.id === id) {
+      setSelectedList(null);
+    }
+
+    // إرسال الطلب للسيرفر في الخلفية
     const res = await fetch(`/api/lists/${id}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
     });
-    if (res.ok) {
-      if (selectedList?.id === id) {
-        setSelectedList(null);
-      }
+
+    // إذا فشل، استرجاع البيانات القديمة
+    if (!res.ok) {
+      setLists(oldLists);
+      setItems(oldItems);
+    } else {
+      // تحديث بالبيانات الحقيقية
       fetchData(currentAdmin.id);
     }
   };
@@ -171,6 +213,36 @@ export default function AdminPage() {
 
     const url = editingItem ? `/api/menu/${editingItem.id}` : '/api/menu';
     const method = editingItem ? 'PUT' : 'POST';
+
+    // Optimistic Update: تحديث الواجهة فوراً
+    if (editingItem) {
+      // تحديث عنصر موجود
+      setItems(items.map(item =>
+        item.id === editingItem.id
+          ? {
+              ...item,
+              name: itemFormData.name,
+              price: parseFloat(itemFormData.price),
+              description: itemFormData.description,
+            }
+          : item
+      ));
+    } else {
+      // إضافة عنصر جديد
+      const tempItem: MenuItem = {
+        id: 'temp-' + Date.now(),
+        name: itemFormData.name,
+        price: parseFloat(itemFormData.price),
+        description: itemFormData.description,
+        listId: selectedList.id,
+      };
+      setItems([...items, tempItem]);
+    }
+
+    setItemFormData({ name: '', price: '', description: '' });
+    setEditingItem(null);
+
+    // إرسال الطلب للسيرفر في الخلفية
     const res = await fetch(url, {
       method,
       headers: getAuthHeaders(),
@@ -179,9 +251,12 @@ export default function AdminPage() {
         listId: selectedList.id,
       }),
     });
-    if (res.ok) {
-      setItemFormData({ name: '', price: '', description: '' });
-      setEditingItem(null);
+
+    // إذا فشل، استرجاع البيانات الحقيقية
+    if (!res.ok) {
+      fetchData(currentAdmin.id);
+    } else {
+      // تحديث بالبيانات الحقيقية من السيرفر
       fetchData(currentAdmin.id);
     }
   };
@@ -199,11 +274,23 @@ export default function AdminPage() {
     if (!confirm('هل أنت متأكد؟')) return;
     if (!currentAdmin) return;
 
+    // Optimistic Update: حذف من الواجهة فوراً
+    const oldItems = [...items];
+    setItems(items.filter(item => item.id !== id));
+
+    // إرسال الطلب للسيرفر في الخلفية
     const res = await fetch(`/api/menu/${id}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
     });
-    if (res.ok) fetchData(currentAdmin.id);
+
+    // إذا فشل، استرجاع البيانات القديمة
+    if (!res.ok) {
+      setItems(oldItems);
+    } else {
+      // تحديث بالبيانات الحقيقية
+      fetchData(currentAdmin.id);
+    }
   };
 
   const handleCancelItem = () => {
