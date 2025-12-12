@@ -1,5 +1,5 @@
-import { put, list } from '@vercel/blob';
-// Vercel Blob Storage Integration - v3 (fix cache issue)
+import { kv } from '@vercel/kv';
+// Vercel KV (Redis) Storage Integration - Ultra Fast!
 export interface Admin {
   id: string;
   username: string; // اسم فريد
@@ -41,38 +41,32 @@ export const THEMES = {
   rose: { primary: '#ec4899', secondary: '#f472b6', accent: '#db2777' },
 };
 
-const BLOB_FILENAME = 'menu-database.json';
+const KV_KEY = 'menu-database';
 
 async function readDB(): Promise<Database> {
   try {
-    // استخدام list() للحصول على أحدث نسخة من الملف
-    const { blobs } = await list({
-      prefix: BLOB_FILENAME,
-      limit: 1
-    });
+    // قراءة البيانات من Vercel KV (Redis) - سريع جداً!
+    const data = await kv.get<Database>(KV_KEY);
 
-    if (blobs.length > 0 && blobs[0].url) {
-      const response = await fetch(blobs[0].url, {
-        cache: 'no-store' // منع cache
-      });
-      const data = await response.text();
-      return JSON.parse(data);
+    if (data) {
+      return data;
     }
   } catch (error) {
-    // إذا لم يوجد الملف، نعيد قاعدة بيانات فارغة
-    console.error('Error reading blob:', error);
+    console.error('Error reading from KV:', error);
   }
+
+  // إرجاع قاعدة بيانات فارغة إذا لم توجد بيانات
   return { admins: [], lists: [], items: [] };
 }
 
 async function writeDB(db: Database): Promise<void> {
-  const jsonData = JSON.stringify(db, null, 2);
-  await put(BLOB_FILENAME, jsonData, {
-    access: 'public',
-    addRandomSuffix: false,
-    contentType: 'application/json',
-    allowOverwrite: true // السماح بالكتابة فوق الملف الموجود
-  });
+  try {
+    // كتابة البيانات إلى Vercel KV (Redis) - سريع جداً!
+    await kv.set(KV_KEY, db);
+  } catch (error) {
+    console.error('Error writing to KV:', error);
+    throw error;
+  }
 }
 
 // دوال إدارة القوائم
