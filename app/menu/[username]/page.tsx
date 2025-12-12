@@ -77,19 +77,21 @@ export default function PublicMenuPage() {
   const [error, setError] = useState('');
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [scrollContainerRef, setScrollContainerRef] = useState<HTMLDivElement | null>(null);
+  const [hasAutoScrolled, setHasAutoScrolled] = useState(false);
 
   useEffect(() => {
     fetchMenuData();
   }, [username]);
 
-  // Auto-scroll animation when section comes into view
+  // Auto-scroll animation when section comes into view - ONCE only
   useEffect(() => {
-    if (!scrollContainerRef || lists.length === 0) return;
+    if (!scrollContainerRef || lists.length === 0 || hasAutoScrolled) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting) {
+          if (entry.isIntersecting && !hasAutoScrolled) {
+            setHasAutoScrolled(true);
             // Animate scroll: move right, pause, then back to original position
             setTimeout(() => {
               const originalScroll = scrollContainerRef.scrollLeft;
@@ -109,7 +111,7 @@ export default function PublicMenuPage() {
     observer.observe(scrollContainerRef);
 
     return () => observer.disconnect();
-  }, [scrollContainerRef, lists]);
+  }, [scrollContainerRef, lists, hasAutoScrolled]);
 
   const fetchMenuData = async () => {
     try {
@@ -187,7 +189,7 @@ export default function PublicMenuPage() {
       dir="rtl"
       style={{
         background: admin.backgroundUrl
-          ? `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url(${admin.backgroundUrl}) repeat`
+          ? `url(${admin.backgroundUrl}) repeat`
           : `linear-gradient(135deg, ${theme.primary}20, ${theme.secondary}30, ${theme.accent}10)`
       }}
     >
