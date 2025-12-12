@@ -76,10 +76,39 @@ export default function PublicMenuPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
+  const [scrollContainerRef, setScrollContainerRef] = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
     fetchMenuData();
   }, [username]);
+
+  // Auto-scroll animation when section comes into view
+  useEffect(() => {
+    if (!scrollContainerRef || lists.length === 0) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            // Animate scroll: move right then back
+            setTimeout(() => {
+              scrollContainerRef.scrollBy({ left: 150, behavior: 'smooth' });
+              setTimeout(() => {
+                scrollContainerRef.scrollBy({ left: -150, behavior: 'smooth' });
+              }, 800);
+            }, 300);
+            // Disconnect after first trigger
+            observer.disconnect();
+          }
+        });
+      },
+      { threshold: 0.5 }
+    );
+
+    observer.observe(scrollContainerRef);
+
+    return () => observer.disconnect();
+  }, [scrollContainerRef, lists]);
 
   const fetchMenuData = async () => {
     try {
@@ -220,20 +249,33 @@ export default function PublicMenuPage() {
             {/* Lists Navigation */}
             <div className="mb-8 relative">
               {/* Scroll Indicator - Left */}
-              <div className="absolute left-0 top-0 bottom-4 w-12 bg-gradient-to-r from-gray-100/80 to-transparent pointer-events-none z-10 flex items-center justify-start pl-2">
-                <svg className="w-6 h-6 text-gray-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div
+                className="absolute left-0 top-0 bottom-4 w-12 pointer-events-none z-10 flex items-center justify-start pl-2"
+                style={{
+                  background: `linear-gradient(to right, ${theme.primary}80, transparent)`
+                }}
+              >
+                <svg className="w-6 h-6 text-white/70 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
               </div>
 
               {/* Scroll Indicator - Right */}
-              <div className="absolute right-0 top-0 bottom-4 w-12 bg-gradient-to-l from-gray-100/80 to-transparent pointer-events-none z-10 flex items-center justify-end pr-2">
-                <svg className="w-6 h-6 text-gray-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div
+                className="absolute right-0 top-0 bottom-4 w-12 pointer-events-none z-10 flex items-center justify-end pr-2"
+                style={{
+                  background: `linear-gradient(to left, ${theme.primary}80, transparent)`
+                }}
+              >
+                <svg className="w-6 h-6 text-white/70 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </div>
 
-              <div className="overflow-x-auto pb-4 scrollbar-hide">
+              <div
+                ref={setScrollContainerRef}
+                className="overflow-x-auto pb-4 scrollbar-hide"
+              >
                 <div className="flex gap-3 min-w-max justify-center px-12">
                   <button
                     onClick={() => setSelectedListId(null)}
