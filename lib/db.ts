@@ -1,5 +1,5 @@
-import { put, head } from '@vercel/blob';
-// Vercel Blob Storage Integration - v2
+import { put, list } from '@vercel/blob';
+// Vercel Blob Storage Integration - v3 (fix cache issue)
 export interface Admin {
   id: string;
   username: string; // اسم فريد
@@ -45,15 +45,22 @@ const BLOB_FILENAME = 'menu-database.json';
 
 async function readDB(): Promise<Database> {
   try {
-    // محاولة قراءة البيانات من Vercel Blob
-    const blobInfo = await head(BLOB_FILENAME);
-    if (blobInfo && blobInfo.url) {
-      const response = await fetch(blobInfo.url);
+    // استخدام list() للحصول على أحدث نسخة من الملف
+    const { blobs } = await list({
+      prefix: BLOB_FILENAME,
+      limit: 1
+    });
+
+    if (blobs.length > 0 && blobs[0].url) {
+      const response = await fetch(blobs[0].url, {
+        cache: 'no-store' // منع cache
+      });
       const data = await response.text();
       return JSON.parse(data);
     }
   } catch (error) {
     // إذا لم يوجد الملف، نعيد قاعدة بيانات فارغة
+    console.error('Error reading blob:', error);
   }
   return { admins: [], lists: [], items: [] };
 }
