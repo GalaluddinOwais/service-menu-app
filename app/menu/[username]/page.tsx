@@ -202,6 +202,33 @@ export default function PublicMenuPage() {
     return items.filter(item => item.listId === listId);
   };
 
+  // دالة لتحويل أرقام الهاتف في النص إلى روابط واتساب
+  const renderContactMessage = (message: string) => {
+    // البحث عن أرقام الهاتف (تدعم الصيغ المختلفة)
+    const phoneRegex = /(\+?\d[\d\s\-\(\)]{8,}\d)/g;
+    const parts = message.split(phoneRegex);
+
+    return parts.map((part, index) => {
+      // إذا كان الجزء يطابق رقم هاتف
+      if (phoneRegex.test(part)) {
+        // إزالة المسافات والرموز للحصول على الرقم النظيف
+        const cleanNumber = part.replace(/[\s\-\(\)]/g, '');
+        return (
+          <a
+            key={index}
+            href={`https://wa.me/${cleanNumber}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-green-600 hover:text-green-800 font-bold underline transition-colors"
+          >
+            {part}
+          </a>
+        );
+      }
+      return <span key={index}>{part}</span>;
+    });
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50">
@@ -458,7 +485,7 @@ export default function PublicMenuPage() {
                         {admin.contactMessage && (
                           <div className="mt-6 bg-gradient-to-r from-blue-50 to-purple-50 p-5 rounded-xl border-2 border-blue-100">
                             <div className="text-gray-800 text-center whitespace-pre-line leading-relaxed font-medium">
-                              {admin.contactMessage}
+                              {renderContactMessage(admin.contactMessage)}
                             </div>
                           </div>
                         )}
@@ -587,7 +614,7 @@ export default function PublicMenuPage() {
                         {admin.contactMessage && (
                           <div className="mt-6 bg-gradient-to-r from-blue-50 to-purple-50 p-5 rounded-xl border-2 border-blue-100">
                             <div className="text-gray-800 text-center whitespace-pre-line leading-relaxed font-medium">
-                              {admin.contactMessage}
+                              {renderContactMessage(admin.contactMessage)}
                             </div>
                           </div>
                         )}
