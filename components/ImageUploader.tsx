@@ -106,49 +106,24 @@ export default function ImageUploader({
 
   return (
     <div className="space-y-3">
-      <label className="block text-sm font-medium text-gray-700">
-        {label}
-      </label>
+      <div className="flex items-center justify-between">
+        <label className="block text-sm font-medium text-gray-700">
+          {label}
+        </label>
 
-      {/* Toggle between upload modes */}
-      <div className="flex gap-2 mb-3">
-        <button
-          type="button"
-          onClick={() => setUploadMode('file')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            uploadMode === 'file'
-              ? 'bg-blue-500 text-white'
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          }`}
-        >
-          رفع من الجهاز
-        </button>
-        <button
-          type="button"
-          onClick={() => setUploadMode('url')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            uploadMode === 'url'
-              ? 'bg-blue-500 text-white'
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          }`}
-        >
-          إدخال رابط
-        </button>
+        {/* Checkbox to toggle URL mode */}
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={uploadMode === 'url'}
+            onChange={(e) => setUploadMode(e.target.checked ? 'url' : 'file')}
+            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+          />
+          <span className="text-sm text-gray-600">استخدام رابط خارجي</span>
+        </label>
       </div>
 
-      {uploadMode === 'file' ? (
-        /* File Upload Mode */
-        <div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-            disabled={isUploading}
-            className="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50"
-          />
-        </div>
-      ) : (
+      {uploadMode === 'url' ? (
         /* URL Input Mode */
         <div className="flex gap-2">
           <input
@@ -165,6 +140,18 @@ export default function ImageUploader({
           >
             تطبيق
           </button>
+        </div>
+      ) : (
+        /* File Upload Mode */
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleFileChange}
+            disabled={isUploading}
+            className="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50"
+          />
         </div>
       )}
 
@@ -194,15 +181,15 @@ export default function ImageUploader({
           <img
             src={previewUrl}
             alt="معاينة"
-            className="max-w-xs max-h-48 rounded-lg border-2 border-gray-200 object-cover"
+            className="w-32 h-32 rounded-lg border-2 border-gray-200 object-cover"
           />
           <button
             type="button"
             onClick={handleRemoveImage}
-            className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-2 shadow-lg transition"
+            className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full p-1.5 shadow-lg transition"
             title="إزالة الصورة"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>

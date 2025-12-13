@@ -702,14 +702,14 @@ export default function AdminPage() {
               <ImageUploader
                 currentImageUrl={settingsFormData.logoUrl}
                 onImageUploaded={(url) => setSettingsFormData({ ...settingsFormData, logoUrl: url })}
-                label="رابط الشعار (Logo URL)"
+                label="صورة الشعار"
                 helperText="اختياري: شعارك الذي سيظهر في القائمة العامة - اتركه فارغاً ولن يظهر أي شعار"
               />
 
               <ImageUploader
                 currentImageUrl={settingsFormData.backgroundUrl}
                 onImageUploaded={(url) => setSettingsFormData({ ...settingsFormData, backgroundUrl: url })}
-                label="رابط الخلفية (Background URL)"
+                label="صورة الخلفية"
                 helperText="اختياري: صورة خلفية لقائمتك - اتركه فارغاً وستظهر خلفية تلقائية بألوان السمة"
               />
 
