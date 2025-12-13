@@ -67,7 +67,7 @@ export async function PUT(
       }
     }
 
-    if (theme && !['ocean', 'sunset', 'forest', 'royal', 'rose'].includes(theme)) {
+    if (theme && !['ocean', 'sunset', 'forest', 'royal', 'rose', 'midnight', 'coral', 'emerald', 'lavender', 'crimson', 'coffee', 'canary'].includes(theme)) {
       return NextResponse.json({ error: 'Invalid theme' }, { status: 400 });
     }
 

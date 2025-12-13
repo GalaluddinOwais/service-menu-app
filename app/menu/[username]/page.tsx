@@ -419,7 +419,7 @@ export default function PublicMenuPage() {
                                           ? Number(item.discountedPrice).toFixed(0)
                                           : Number(item.discountedPrice).toFixed(2)} جـ
                                       </div>
-                                      <div className="text-xl mt-1 font-bold" style={{ color: theme.accent }}>
+                                      <div className="text-lg mt-1 font-bold" style={{ color: theme.primary }}>
                                         بدلاً من {Number(item.price) % 1 === 0
                                           ? Number(item.price).toFixed(0)
                                           : Number(item.price).toFixed(2)} جـ
@@ -540,7 +540,7 @@ export default function PublicMenuPage() {
                                               ? Number(item.discountedPrice).toFixed(0)
                                               : Number(item.discountedPrice).toFixed(2)} جـ
                                           </div>
-                                          <div className="text-xs mt-1 font-bold" style={{ color: theme.secondary }}>
+                                          <div className="text-lg mt-1 font-bold" style={{ color: theme.primary }}>
                                             بدلاً من {Number(item.price) % 1 === 0
                                               ? Number(item.price).toFixed(0)
                                               : Number(item.price).toFixed(2)} جـ
