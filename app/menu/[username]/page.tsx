@@ -79,10 +79,38 @@ export default function PublicMenuPage() {
   const [error, setError] = useState('');
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [displayedText, setDisplayedText] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
 
   useEffect(() => {
     fetchMenuData();
   }, [username]);
+
+  // Typewriter effect for welcome message
+  useEffect(() => {
+    if (!admin?.welcomeMessage) {
+      setDisplayedText('');
+      setIsTyping(false);
+      return;
+    }
+
+    let currentIndex = 0;
+    const text = admin.welcomeMessage;
+    setDisplayedText('');
+    setIsTyping(true);
+
+    const interval = setInterval(() => {
+      if (currentIndex <= text.length) {
+        setDisplayedText(text.slice(0, currentIndex));
+        currentIndex++;
+      } else {
+        clearInterval(interval);
+        setIsTyping(false); // إخفاء الكيرسر بعد انتهاء الكتابة
+      }
+    }, 50); // سرعة الكتابة: 50ms لكل حرف
+
+    return () => clearInterval(interval);
+  }, [admin?.welcomeMessage]);
 
   const fetchMenuData = async () => {
     try {
@@ -189,7 +217,8 @@ export default function PublicMenuPage() {
           {admin.welcomeMessage && (
             <div className="mt-8 bg-white/95 backdrop-blur-md p-7 rounded-2xl shadow-2xl max-w-3xl mx-auto" >
               <div className="text-gray-900 text-2xl whitespace-pre-line leading-relaxed font-semibold" >
-                {admin.welcomeMessage}
+                {displayedText}
+                {isTyping && <span className="animate-pulse">|</span>}
               </div>
             </div>
           )}
@@ -228,6 +257,16 @@ export default function PublicMenuPage() {
                 >
                   جميع القوائم
                 </button>
+                <button
+                  onClick={() => setSelectedListId('discounts')}
+                  className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg whitespace-nowrap ${
+                    selectedListId === 'discounts'
+                      ? `bg-gradient-to-r ${theme.gradient} text-white shadow-xl`
+                      : 'bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white'
+                  }`}
+                >
+                  العروض والخصومات
+                </button>
                 {lists.map((list) => (
                   <button
                     key={list.id}
@@ -246,28 +285,152 @@ export default function PublicMenuPage() {
 
             {/* Menu Lists */}
             <div className="grid gap-8">
-              {lists
-                .filter(list => selectedListId === null || list.id === selectedListId)
-                .map((list, idx) => {
-                  const listItems = getListItems(list.id);
+              {selectedListId === 'discounts' ? (
+                // عرض قائمة العروض والخصومات
+                (() => {
+                  const discountedItems = items.filter(item => item.discountedPrice);
 
-                  if (listItems.length === 0) return null;
+                  if (discountedItems.length === 0) {
+                    return (
+                      <div className="text-center py-20">
+                        <div className="bg-white/90 backdrop-blur-sm p-12 rounded-2xl shadow-2xl max-w-md mx-auto">
+                          <svg className="mx-auto h-16 w-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
+                          </svg>
+                          <p className="text-xl text-gray-600 font-medium">لا توجد عروض متاحة حالياً</p>
+                        </div>
+                      </div>
+                    );
+                  }
 
                   return (
                     <div
-                      key={list.id}
                       className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl overflow-hidden transform hover:scale-[1.02] transition-all duration-300 animate-slide-up"
-                      style={{ animationDelay: `${idx * 100}ms` }}
                     >
                       {/* List Header */}
                       <div
                         className={`bg-gradient-to-r ${theme.gradient} p-6 text-white`}
                       >
-                        <h2 className="text-3xl font-black mb-2">{list.name}</h2>
+                        <h2 className="text-3xl font-black mb-2">العروض والخصومات</h2>
                         <p className="text-white/90 font-medium">
-                          {listItems.length} عنصر
+                          {discountedItems.length} عنصر
                         </p>
                       </div>
+
+                      {/* List Items */}
+                      <div className="p-6">
+                        <div className="grid md:grid-cols-2 gap-4">
+                          {discountedItems.map((item, itemIdx) => {
+                            const discountPercentage = Math.round(((item.price - item.discountedPrice!) / item.price) * 100);
+
+                            return (
+                              <div
+                                key={item.id}
+                                className="group relative bg-gradient-to-br from-gray-50 to-white p-5 rounded-xl border-2 border-gray-100 hover:border-transparent hover:shadow-xl transition-all duration-300"
+                                style={{
+                                  animation: `slideUp 0.5s ease-out ${itemIdx * 50}ms`
+                                }}
+                              >
+                                {/* Discount Badge */}
+                                <div className="absolute -top-2 -left-2 bg-yellow-400 text-black w-11 h-11 rounded-full flex items-center justify-center font-black text-xs shadow-lg animate-fast-pulse">
+                                  -{discountPercentage}%
+                                </div>
+
+                                <div className="flex justify-between items-start gap-4">
+                                  <div className="flex-1">
+                                    <h3 className="text-lg font-bold text-gray-800 group-hover:text-gray-900 transition-colors mb-1">
+                                      {item.name}
+                                    </h3>
+
+                                    {/* Description - first line bold, rest normal */}
+                                    {item.description && (
+                                      <div className="text-sm text-gray-700 mt-2 leading-relaxed">
+                                        {item.description.split('\n').map((line, i) => (
+                                          <div key={i} className={i === 0 ? 'font-bold' : ''}>
+                                            {line}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-col items-center gap-2 w-1/2">
+                                    {/* Price Section */}
+                                    <div
+                                      className="text-center w-full"
+                                      style={{ color: theme.accent }}
+                                    >
+                                      <div className="text-2xl font-black">
+                                        {Number(item.discountedPrice) % 1 === 0
+                                          ? Number(item.discountedPrice).toFixed(0)
+                                          : Number(item.discountedPrice).toFixed(2)} جـ
+                                      </div>
+                                      <div className="text-xs text-gray-500 mt-1">
+                                        بدلاً من {Number(item.price) % 1 === 0
+                                          ? Number(item.price).toFixed(0)
+                                          : Number(item.price).toFixed(2)} جـ
+                                      </div>
+                                    </div>
+
+                                    {/* Item Image - clickable */}
+                                    {item.imageUrl && (
+                                      <div className="mt-2 w-full h-32">
+                                        <img
+                                          src={item.imageUrl}
+                                          alt={item.name}
+                                          onClick={() => setSelectedImage(item.imageUrl!)}
+                                          className="w-full h-full object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity shadow-md"
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Decorative element */}
+                                <div
+                                  className="h-1 w-0 group-hover:w-full transition-all duration-500 mt-3 rounded-full mx-auto"
+                                  style={{ backgroundColor: theme.primary }}
+                                ></div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Contact Message */}
+                        {admin.contactMessage && (
+                          <div className="mt-6 bg-gradient-to-r from-blue-50 to-purple-50 p-5 rounded-xl border-2 border-blue-100">
+                            <div className="text-gray-800 text-center whitespace-pre-line leading-relaxed font-medium">
+                              {admin.contactMessage}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()
+              ) : (
+                // عرض القوائم العادية
+                lists
+                  .filter(list => selectedListId === null || list.id === selectedListId)
+                  .map((list, idx) => {
+                    const listItems = getListItems(list.id);
+
+                    if (listItems.length === 0) return null;
+
+                    return (
+                      <div
+                        key={list.id}
+                        className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl overflow-hidden transform hover:scale-[1.02] transition-all duration-300 animate-slide-up"
+                        style={{ animationDelay: `${idx * 100}ms` }}
+                      >
+                        {/* List Header */}
+                        <div
+                          className={`bg-gradient-to-r ${theme.gradient} p-6 text-white`}
+                        >
+                          <h2 className="text-3xl font-black mb-2">{list.name}</h2>
+                          <p className="text-white/90 font-medium">
+                            {listItems.length} عنصر
+                          </p>
+                        </div>
 
                       {/* List Items */}
                       <div className="p-6">
@@ -372,7 +535,8 @@ export default function PublicMenuPage() {
                       </div>
                     </div>
                   );
-                })}
+                })
+              )}
             </div>
           </>
         )}
