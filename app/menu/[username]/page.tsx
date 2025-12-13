@@ -285,8 +285,8 @@ export default function PublicMenuPage() {
                               >
                                 {/* Discount Badge */}
                                 {item.discountedPrice && (
-                                  <div className="absolute -top-2 -left-2 bg-yellow-400 text-yellow-900 w-14 h-14 rounded-full flex items-center justify-center font-black text-sm shadow-lg animate-pulse">
-                                    -{discountPercentage}%
+                                  <div className="absolute -top-1 -left-1 bg-yellow-400 text-black w-11 h-11 rounded-full flex items-center justify-center font-black text-xs shadow-lg animate-pulse">
+                                    %{discountPercentage}-
                                   </div>
                                 )}
 
@@ -307,36 +307,42 @@ export default function PublicMenuPage() {
                                       </div>
                                     )}
                                   </div>
-                                  <div className="flex flex-col items-end gap-2">
+                                  <div className="flex flex-col items-end gap-2 w-1/2">
                                     {/* Price Section */}
                                     <div
-                                      className="text-right"
+                                      className="text-right w-full"
                                       style={{ color: theme.accent }}
                                     >
                                       {item.discountedPrice ? (
                                         <>
                                           <div className="text-2xl font-black">
-                                            {Number(item.discountedPrice).toFixed(2)} جـ
+                                            {Number(item.discountedPrice) % 1 === 0
+                                              ? Number(item.discountedPrice).toFixed(0)
+                                              : Number(item.discountedPrice).toFixed(2)} جـ
                                           </div>
                                           <div className="text-xs text-gray-500 mt-1">
-                                            بدلاً من {Number(item.price).toFixed(2)} جـ
+                                            بدلاً من {Number(item.price) % 1 === 0
+                                              ? Number(item.price).toFixed(0)
+                                              : Number(item.price).toFixed(2)} جـ
                                           </div>
                                         </>
                                       ) : (
                                         <div className="text-2xl font-black">
-                                          {Number(item.price).toFixed(2)} جـ
+                                          {Number(item.price) % 1 === 0
+                                            ? Number(item.price).toFixed(0)
+                                            : Number(item.price).toFixed(2)} جـ
                                         </div>
                                       )}
                                     </div>
 
                                     {/* Item Image - clickable */}
                                     {item.imageUrl && (
-                                      <div className="mt-2">
+                                      <div className="mt-2 w-full">
                                         <img
                                           src={item.imageUrl}
                                           alt={item.name}
                                           onClick={() => setSelectedImage(item.imageUrl!)}
-                                          className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity shadow-md"
+                                          className="w-full h-auto object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity shadow-md"
                                         />
                                       </div>
                                     )}
