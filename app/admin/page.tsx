@@ -549,7 +549,7 @@ export default function AdminPage() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          رابط صورة العنصر (اختياري)
+                          رابط صورة (اختياري)
                         </label>
                         <input
                           type="url"

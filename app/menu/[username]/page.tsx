@@ -285,8 +285,11 @@ export default function PublicMenuPage() {
                               >
                                 {/* Discount Badge */}
                                 {item.discountedPrice && (
-                                  <div className="absolute -top-1 -left-1 bg-yellow-400 text-black w-11 h-11 rounded-full flex items-center justify-center font-black text-xs shadow-lg animate-pulse">
-                                    %{discountPercentage}-
+                                  <div
+                                    className="absolute -top-2 -left-2 bg-yellow-400 text-black w-11 h-11 rounded-full flex items-center justify-center font-black text-xs shadow-lg"
+                                    style={{ animation: 'pulse 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}
+                                  >
+                                    -{discountPercentage}%
                                   </div>
                                 )}
 
@@ -337,12 +340,12 @@ export default function PublicMenuPage() {
 
                                     {/* Item Image - clickable */}
                                     {item.imageUrl && (
-                                      <div className="mt-2 w-full">
+                                      <div className="mt-2 w-full h-32">
                                         <img
                                           src={item.imageUrl}
                                           alt={item.name}
                                           onClick={() => setSelectedImage(item.imageUrl!)}
-                                          className="w-full h-auto object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity shadow-md"
+                                          className="w-full h-full object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity shadow-md"
                                         />
                                       </div>
                                     )}
