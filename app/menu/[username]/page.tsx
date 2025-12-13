@@ -162,7 +162,7 @@ export default function PublicMenuPage() {
       }, 50); // سرعة الكتابة: 50ms لكل حرف
 
       return () => clearInterval(interval);
-    }, 800);
+    }, 1500);
 
     return () => clearTimeout(startDelay);
   }, [admin?.welcomeMessage]);
@@ -419,7 +419,7 @@ export default function PublicMenuPage() {
                                           ? Number(item.discountedPrice).toFixed(0)
                                           : Number(item.discountedPrice).toFixed(2)} جـ
                                       </div>
-                                      <div className="text-xs mt-1 font-bold" style={{ color: theme.secondary }}>
+                                      <div className="text-xl mt-1 font-bold" style={{ color: theme.accent }}>
                                         بدلاً من {Number(item.price) % 1 === 0
                                           ? Number(item.price).toFixed(0)
                                           : Number(item.price).toFixed(2)} جـ

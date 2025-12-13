@@ -8,7 +8,7 @@ interface Admin {
   username: string;
   logoUrl?: string;
   backgroundUrl?: string;
-  theme: 'ocean' | 'sunset' | 'forest' | 'royal' | 'rose';
+  theme: 'ocean' | 'sunset' | 'forest' | 'royal' | 'rose' | 'midnight' | 'coral' | 'emerald' | 'lavender' | 'crimson' | 'coffee' | 'canary';
   welcomeMessage?: string;
   contactMessage?: string;
 }
@@ -36,6 +36,13 @@ const THEMES = {
   forest: { name: 'الغابة', primary: '#10b981', secondary: '#34d399' },
   royal: { name: 'الملكي', primary: '#8b5cf6', secondary: '#a78bfa' },
   rose: { name: 'الوردي', primary: '#ec4899', secondary: '#f472b6' },
+  midnight: { name: 'منتصف الليل', primary: '#1e293b', secondary: '#475569' },
+  coral: { name: 'المرجان', primary: '#ff6b6b', secondary: '#ff8787' },
+  emerald: { name: 'الزمرد', primary: '#2dd4bf', secondary: '#5eead4' },
+  lavender: { name: 'الخزامى', primary: '#a78bfa', secondary: '#c4b5fd' },
+  crimson: { name: 'القرمزي', primary: '#dc2626', secondary: '#ef4444' },
+  coffee: { name: 'القهوة', primary: '#92400e', secondary: '#b45309' },
+  canary: { name: 'الكناري', primary: '#eab308', secondary: '#facc15' },
 };
 
 export default function AdminPage() {
@@ -62,7 +69,7 @@ export default function AdminPage() {
 
   const [settingsFormData, setSettingsFormData] = useState({
     username: '',
-    theme: 'ocean' as 'ocean' | 'sunset' | 'forest' | 'royal' | 'rose',
+    theme: 'ocean' as 'ocean' | 'sunset' | 'forest' | 'royal' | 'rose' | 'midnight' | 'coral' | 'emerald' | 'lavender' | 'crimson' | 'coffee' | 'canary',
     logoUrl: '',
     backgroundUrl: '',
     welcomeMessage: '',
