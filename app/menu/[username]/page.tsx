@@ -343,7 +343,11 @@ export default function PublicMenuPage() {
               {selectedListId === 'discounts' ? (
                 // عرض قائمة العروض والخصومات
                 (() => {
-                  const discountedItems = items.filter(item => item.discountedPrice);
+                  // فلترة العناصر ذات الخصم من قوائم الأدمن الحالي فقط
+                  const adminListIds = lists.map(list => list.id);
+                  const discountedItems = items.filter(item =>
+                    item.discountedPrice && adminListIds.includes(item.listId)
+                  );
 
                   if (discountedItems.length === 0) {
                     return (
