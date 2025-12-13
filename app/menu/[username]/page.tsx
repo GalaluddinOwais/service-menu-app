@@ -24,6 +24,8 @@ interface MenuItem {
   id: string;
   name: string;
   price: number;
+  discountedPrice?: number;
+  imageUrl?: string;
   description?: string;
   listId: string;
 }
@@ -76,6 +78,7 @@ export default function PublicMenuPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMenuData();
@@ -270,7 +273,7 @@ export default function PublicMenuPage() {
                           {listItems.map((item, itemIdx) => (
                             <div
                               key={item.id}
-                              className="group bg-gradient-to-br from-gray-50 to-white p-5 rounded-xl border-2 border-gray-100 hover:border-transparent hover:shadow-xl transition-all duration-300 cursor-pointer"
+                              className="group bg-gradient-to-br from-gray-50 to-white p-5 rounded-xl border-2 border-gray-100 hover:border-transparent hover:shadow-xl transition-all duration-300"
                               style={{
                                 animation: `slideUp 0.5s ease-out ${itemIdx * 50}ms`
                               }}
@@ -291,14 +294,40 @@ export default function PublicMenuPage() {
                                       ))}
                                     </div>
                                   )}
+
+                                  {/* Item Image - clickable */}
+                                  {item.imageUrl && (
+                                    <div className="mt-3">
+                                      <img
+                                        src={item.imageUrl}
+                                        alt={item.name}
+                                        onClick={() => setSelectedImage(item.imageUrl!)}
+                                        className="w-full h-32 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                                      />
+                                    </div>
+                                  )}
                                 </div>
                                 <div
                                   className="text-right flex-shrink-0"
                                   style={{ color: theme.accent }}
                                 >
-                                  <div className="text-2xl font-black">
-                                 {Number(item.price).toFixed(2)} جـ  
-                                  </div>
+                                  {item.discountedPrice ? (
+                                    <>
+                                      <div className="text-sm text-gray-400 line-through">
+                                        {Number(item.price).toFixed(2)} جـ
+                                      </div>
+                                      <div className="text-2xl font-black">
+                                        {Number(item.discountedPrice).toFixed(2)} جـ
+                                      </div>
+                                      <div className="text-xs text-green-600 font-bold">
+                                        بعد الخصم
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="text-2xl font-black">
+                                      {Number(item.price).toFixed(2)} جـ
+                                    </div>
+                                  )}
                                 </div>
                               </div>
 
@@ -347,6 +376,31 @@ export default function PublicMenuPage() {
           </div>
         </div>
       </div>
+
+      {/* Image Popup */}
+      {selectedImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          onClick={() => setSelectedImage(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh]">
+            <button
+              onClick={() => setSelectedImage(null)}
+              className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors"
+            >
+              <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <img
+              src={selectedImage}
+              alt="عرض الصورة"
+              className="max-w-full max-h-[90vh] object-contain rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Custom animations */}
       <style jsx>{`

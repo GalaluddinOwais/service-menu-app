@@ -24,6 +24,8 @@ interface MenuItem {
   id: string;
   name: string;
   price: number;
+  discountedPrice?: number;
+  imageUrl?: string;
   description?: string;
   listId: string;
 }
@@ -53,6 +55,8 @@ export default function AdminPage() {
   const [itemFormData, setItemFormData] = useState({
     name: '',
     price: '',
+    discountedPrice: '',
+    imageUrl: '',
     description: '',
   });
 
@@ -239,7 +243,7 @@ export default function AdminPage() {
       setItems([...items, tempItem]);
     }
 
-    setItemFormData({ name: '', price: '', description: '' });
+    setItemFormData({ name: '', price: '', discountedPrice: '', imageUrl: '', description: '' });
     setEditingItem(null);
 
     // إرسال الطلب للسيرفر في الخلفية
@@ -266,6 +270,8 @@ export default function AdminPage() {
     setItemFormData({
       name: item.name,
       price: item.price.toString(),
+      discountedPrice: item.discountedPrice?.toString() || '',
+      imageUrl: item.imageUrl || '',
       description: item.description || '',
     });
   };
@@ -295,7 +301,7 @@ export default function AdminPage() {
 
   const handleCancelItem = () => {
     setEditingItem(null);
-    setItemFormData({ name: '', price: '', description: '' });
+    setItemFormData({ name: '', price: '', discountedPrice: '', imageUrl: '', description: '' });
   };
 
   const handleSettingsSubmit = async (e: React.FormEvent) => {
@@ -523,6 +529,33 @@ export default function AdminPage() {
                         />
                       </div>
                     </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          السعر بعد الخصم إن وجد
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={itemFormData.discountedPrice}
+                          onChange={(e) => setItemFormData({ ...itemFormData, discountedPrice: e.target.value })}
+                          placeholder="هل يوجد خصم؟ ضع السعر الجديد"
+                          className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          رابط صورة العنصر (اختياري)
+                        </label>
+                        <input
+                          type="url"
+                          value={itemFormData.imageUrl}
+                          onChange={(e) => setItemFormData({ ...itemFormData, imageUrl: e.target.value })}
+                          placeholder="https://..."
+                          className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         الوصف (اختياري)
@@ -699,7 +732,7 @@ export default function AdminPage() {
                   onChange={(e) => setSettingsFormData({ ...settingsFormData, welcomeMessage: e.target.value })}
                   rows={3}
                   className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
-                  placeholder="مثال: مطعم سمكاوي&#10;لأطيب الأسماك"
+                  placeholder = "أهلا وسهلا بكم. نحن متخصصون في تقديم أفضل أنواع الـ.."
                 />
                 <p className="text-xs text-gray-500 mt-1">اختياري: رسالة تظهر في أول الصفحة بعد الشعار - اتركه فارغاً ولن تظهر أية رسالة</p>
               </div>

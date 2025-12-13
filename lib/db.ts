@@ -22,6 +22,8 @@ export interface MenuItem {
   id: string;
   name: string;
   price: number;
+  discountedPrice?: number; // السعر بعد الخصم إن وجد
+  imageUrl?: string; // رابط صورة العنصر
   description?: string; // وصف العنصر (يدعم multi-line)
   listId: string;
 }
