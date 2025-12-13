@@ -270,74 +270,87 @@ export default function PublicMenuPage() {
                       {/* List Items */}
                       <div className="p-6">
                         <div className="grid md:grid-cols-2 gap-4">
-                          {listItems.map((item, itemIdx) => (
-                            <div
-                              key={item.id}
-                              className="group bg-gradient-to-br from-gray-50 to-white p-5 rounded-xl border-2 border-gray-100 hover:border-transparent hover:shadow-xl transition-all duration-300"
-                              style={{
-                                animation: `slideUp 0.5s ease-out ${itemIdx * 50}ms`
-                              }}
-                            >
-                              <div className="flex justify-between items-start gap-4">
-                                <div className="flex-1">
-                                  <h3 className="text-lg font-bold text-gray-800 group-hover:text-gray-900 transition-colors mb-1">
-                                    {item.name}
-                                  </h3>
+                          {listItems.map((item, itemIdx) => {
+                            const discountPercentage = item.discountedPrice
+                              ? Math.round(((item.price - item.discountedPrice) / item.price) * 100)
+                              : 0;
 
-                                  {/* Description - first line bold, rest normal */}
-                                  {item.description && (
-                                    <div className="text-sm text-gray-700 mt-2 leading-relaxed">
-                                      {item.description.split('\n').map((line, i) => (
-                                        <div key={i} className={i === 0 ? 'font-bold' : ''}>
-                                          {line}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-
-                                  {/* Item Image - clickable */}
-                                  {item.imageUrl && (
-                                    <div className="mt-3">
-                                      <img
-                                        src={item.imageUrl}
-                                        alt={item.name}
-                                        onClick={() => setSelectedImage(item.imageUrl!)}
-                                        className="w-full h-32 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-                                      />
-                                    </div>
-                                  )}
-                                </div>
-                                <div
-                                  className="text-right flex-shrink-0"
-                                  style={{ color: theme.accent }}
-                                >
-                                  {item.discountedPrice ? (
-                                    <>
-                                      <div className="text-sm text-gray-400 line-through">
-                                        {Number(item.price).toFixed(2)} جـ
-                                      </div>
-                                      <div className="text-2xl font-black">
-                                        {Number(item.discountedPrice).toFixed(2)} جـ
-                                      </div>
-                                      <div className="text-xs text-green-600 font-bold">
-                                        بعد الخصم
-                                      </div>
-                                    </>
-                                  ) : (
-                                    <div className="text-2xl font-black">
-                                      {Number(item.price).toFixed(2)} جـ
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Decorative element */}
+                            return (
                               <div
-                                className="h-1 w-0 group-hover:w-full transition-all duration-500 mt-3 rounded-full mx-auto"
-                                style={{ backgroundColor: theme.primary }}
-                              ></div>
-                            </div>
-                          ))}
+                                key={item.id}
+                                className="group relative bg-gradient-to-br from-gray-50 to-white p-5 rounded-xl border-2 border-gray-100 hover:border-transparent hover:shadow-xl transition-all duration-300"
+                                style={{
+                                  animation: `slideUp 0.5s ease-out ${itemIdx * 50}ms`
+                                }}
+                              >
+                                {/* Discount Badge */}
+                                {item.discountedPrice && (
+                                  <div className="absolute -top-2 -left-2 bg-yellow-400 text-yellow-900 w-14 h-14 rounded-full flex items-center justify-center font-black text-sm shadow-lg animate-pulse">
+                                    -{discountPercentage}%
+                                  </div>
+                                )}
+
+                                <div className="flex justify-between items-start gap-4">
+                                  <div className="flex-1">
+                                    <h3 className="text-lg font-bold text-gray-800 group-hover:text-gray-900 transition-colors mb-1">
+                                      {item.name}
+                                    </h3>
+
+                                    {/* Description - first line bold, rest normal */}
+                                    {item.description && (
+                                      <div className="text-sm text-gray-700 mt-2 leading-relaxed">
+                                        {item.description.split('\n').map((line, i) => (
+                                          <div key={i} className={i === 0 ? 'font-bold' : ''}>
+                                            {line}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-col items-end gap-2">
+                                    {/* Price Section */}
+                                    <div
+                                      className="text-right"
+                                      style={{ color: theme.accent }}
+                                    >
+                                      {item.discountedPrice ? (
+                                        <>
+                                          <div className="text-2xl font-black">
+                                            {Number(item.discountedPrice).toFixed(2)} جـ
+                                          </div>
+                                          <div className="text-xs text-gray-500 mt-1">
+                                            بدلاً من {Number(item.price).toFixed(2)} جـ
+                                          </div>
+                                        </>
+                                      ) : (
+                                        <div className="text-2xl font-black">
+                                          {Number(item.price).toFixed(2)} جـ
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Item Image - clickable */}
+                                    {item.imageUrl && (
+                                      <div className="mt-2">
+                                        <img
+                                          src={item.imageUrl}
+                                          alt={item.name}
+                                          onClick={() => setSelectedImage(item.imageUrl!)}
+                                          className="w-20 h-20 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity shadow-md"
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Decorative element */}
+                                <div
+                                  className="h-1 w-0 group-hover:w-full transition-all duration-500 mt-3 rounded-full mx-auto"
+                                  style={{ backgroundColor: theme.primary }}
+                                ></div>
+                              </div>
+                            );
+                          })}
                         </div>
 
                         {/* Contact Message */}
