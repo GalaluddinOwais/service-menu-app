@@ -285,10 +285,7 @@ export default function PublicMenuPage() {
                               >
                                 {/* Discount Badge */}
                                 {item.discountedPrice && (
-                                  <div
-                                    className="absolute -top-2 -left-2 bg-yellow-400 text-black w-11 h-11 rounded-full flex items-center justify-center font-black text-xs shadow-lg"
-                                    style={{ animation: 'pulse 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}
-                                  >
+                                  <div className="absolute -top-2 -left-2 bg-yellow-400 text-black w-11 h-11 rounded-full flex items-center justify-center font-black text-xs shadow-lg animate-pulse">
                                     -{discountPercentage}%
                                   </div>
                                 )}
@@ -310,10 +307,10 @@ export default function PublicMenuPage() {
                                       </div>
                                     )}
                                   </div>
-                                  <div className="flex flex-col items-end gap-2 w-1/2">
+                                  <div className="flex flex-col items-center gap-2 w-1/2">
                                     {/* Price Section */}
                                     <div
-                                      className="text-right w-full"
+                                      className="text-center w-full"
                                       style={{ color: theme.accent }}
                                     >
                                       {item.discountedPrice ? (
