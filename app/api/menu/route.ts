@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { name, price, description, listId } = body;
+    const { name, price, discountedPrice, imageUrl, description, listId } = body;
 
     if (!name || price === undefined || !listId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -42,7 +42,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Forbidden: You can only add items to your own lists' }, { status: 403 });
     }
 
-    const newItem = await createMenuItem({ name, price: Number(price), description, listId });
+    const newItem = await createMenuItem({
+      name,
+      price: Number(price),
+      discountedPrice: discountedPrice ? Number(discountedPrice) : undefined,
+      imageUrl: imageUrl || undefined,
+      description,
+      listId
+    });
     return NextResponse.json(newItem, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to create menu item' }, { status: 500 });

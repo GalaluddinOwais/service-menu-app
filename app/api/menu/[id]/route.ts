@@ -34,7 +34,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { name, price, description, listId } = body;
+    const { name, price, discountedPrice, imageUrl, description, listId } = body;
 
     // التحقق من الملكية
     const existingItem = await getMenuItem(id);
@@ -50,6 +50,12 @@ export async function PUT(
     const updates: any = {};
     if (name) updates.name = name;
     if (price !== undefined) updates.price = Number(price);
+    if (discountedPrice !== undefined) {
+      updates.discountedPrice = discountedPrice ? Number(discountedPrice) : undefined;
+    }
+    if (imageUrl !== undefined) {
+      updates.imageUrl = imageUrl || undefined;
+    }
     if (description !== undefined) updates.description = description;
     if (listId) {
       // إذا تم تغيير القائمة، تحقق من أن القائمة الجديدة تنتمي للـ admin الحالي

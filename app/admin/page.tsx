@@ -227,6 +227,8 @@ export default function AdminPage() {
               ...item,
               name: itemFormData.name,
               price: parseFloat(itemFormData.price),
+              discountedPrice: itemFormData.discountedPrice ? parseFloat(itemFormData.discountedPrice) : undefined,
+              imageUrl: itemFormData.imageUrl || undefined,
               description: itemFormData.description,
             }
           : item
@@ -237,6 +239,8 @@ export default function AdminPage() {
         id: 'temp-' + Date.now(),
         name: itemFormData.name,
         price: parseFloat(itemFormData.price),
+        discountedPrice: itemFormData.discountedPrice ? parseFloat(itemFormData.discountedPrice) : undefined,
+        imageUrl: itemFormData.imageUrl || undefined,
         description: itemFormData.description,
         listId: selectedList.id,
       };
