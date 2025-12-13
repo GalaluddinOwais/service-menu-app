@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import ImageUploader from '@/components/ImageUploader';
 
 interface Admin {
   id: string;
@@ -540,33 +541,25 @@ export default function AdminPage() {
                         />
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          السعر بعد الخصم إن وجد
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={itemFormData.discountedPrice}
-                          onChange={(e) => setItemFormData({ ...itemFormData, discountedPrice: e.target.value })}
-                          placeholder="هل يوجد خصم؟ ضع السعر الجديد"
-                          className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          رابط صورة (اختياري)
-                        </label>
-                        <input
-                          type="url"
-                          value={itemFormData.imageUrl}
-                          onChange={(e) => setItemFormData({ ...itemFormData, imageUrl: e.target.value })}
-                          placeholder="https://..."
-                          className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        السعر بعد الخصم إن وجد
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={itemFormData.discountedPrice}
+                        onChange={(e) => setItemFormData({ ...itemFormData, discountedPrice: e.target.value })}
+                        placeholder="هل يوجد خصم؟ ضع السعر الجديد"
+                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
                     </div>
+                    <ImageUploader
+                      currentImageUrl={itemFormData.imageUrl}
+                      onImageUploaded={(url) => setItemFormData({ ...itemFormData, imageUrl: url })}
+                      label="صورة العنصر (اختياري)"
+                      helperText="يمكنك رفع صورة من جهازك أو إدخال رابط صورة"
+                    />
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         الوصف (اختياري)
@@ -706,33 +699,19 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">
-                  رابط الشعار (Logo URL)
-                </label>
-                <input
-                  type="url"
-                  value={settingsFormData.logoUrl}
-                  onChange={(e) => setSettingsFormData({ ...settingsFormData, logoUrl: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
-                  placeholder="https://example.com/logo.png"
-                />
-                <p className="text-xs text-gray-500 mt-1">اختياري: رابط شعارك الذي سيظهر في القائمة العامة - اتركه فارغاً ولن يظهر أي شعار</p>
-              </div>
+              <ImageUploader
+                currentImageUrl={settingsFormData.logoUrl}
+                onImageUploaded={(url) => setSettingsFormData({ ...settingsFormData, logoUrl: url })}
+                label="رابط الشعار (Logo URL)"
+                helperText="اختياري: شعارك الذي سيظهر في القائمة العامة - اتركه فارغاً ولن يظهر أي شعار"
+              />
 
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">
-                  رابط الخلفية (Background URL)
-                </label>
-                <input
-                  type="url"
-                  value={settingsFormData.backgroundUrl}
-                  onChange={(e) => setSettingsFormData({ ...settingsFormData, backgroundUrl: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
-                  placeholder="https://example.com/background.jpg"
-                />
-                <p className="text-xs text-gray-500 mt-1">اختياري: رابط صورة خلفية لقائمتك - اتركه فارغاً وستظهر خلفية تلقائية بألوان السمة</p>
-              </div>
+              <ImageUploader
+                currentImageUrl={settingsFormData.backgroundUrl}
+                onImageUploaded={(url) => setSettingsFormData({ ...settingsFormData, backgroundUrl: url })}
+                label="رابط الخلفية (Background URL)"
+                helperText="اختياري: صورة خلفية لقائمتك - اتركه فارغاً وستظهر خلفية تلقائية بألوان السمة"
+              />
 
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">
