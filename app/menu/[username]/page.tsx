@@ -66,6 +66,55 @@ const THEMES = {
     gradient: 'from-pink-400 via-rose-500 to-pink-600',
     accent: '#db2777'
   },
+  midnight: {
+    name: 'منتصف الليل',
+    primary: '#1e293b',
+    secondary: '#475569',
+    gradient: 'from-slate-700 via-slate-800 to-slate-900',
+    accent: '#0f172a'
+  },
+  coral: {
+    name: 'المرجان',
+    primary: '#ff6b6b',
+    secondary: '#ff8787',
+    gradient: 'from-red-400 via-red-500 to-rose-600',
+    accent: '#fa5252'
+  },
+  emerald: {
+    name: 'الزمرد',
+    primary: '#2dd4bf',
+    secondary: '#5eead4',
+    gradient: 'from-teal-400 via-cyan-500 to-teal-600',
+    accent: '#14b8a6'
+  },
+  lavender: {
+    name: 'الخزامى',
+    primary: '#a78bfa',
+    secondary: '#c4b5fd',
+    gradient: 'from-violet-400 via-purple-500 to-indigo-600',
+    accent: '#8b5cf6'
+  },
+  crimson: {
+    name: 'القرمزي',
+    primary: '#dc2626',
+    secondary: '#ef4444',
+    gradient: 'from-red-500 via-red-600 to-red-700',
+    accent: '#b91c1c'
+  },
+  coffee: {
+    name: 'القهوة',
+    primary: '#92400e',
+    secondary: '#b45309',
+    gradient: 'from-amber-800 via-yellow-800 to-amber-900',
+    accent: '#78350f'
+  },
+  canary: {
+    name: 'الكناري',
+    primary: '#eab308',
+    secondary: '#facc15',
+    gradient: 'from-yellow-400 via-yellow-500 to-amber-500',
+    accent: '#ca8a04'
+  },
 };
 
 export default function PublicMenuPage() {
@@ -94,22 +143,28 @@ export default function PublicMenuPage() {
       return;
     }
 
-    let currentIndex = 0;
     const text = admin.welcomeMessage;
-    setDisplayedText('');
-    setIsTyping(true);
 
-    const interval = setInterval(() => {
-      if (currentIndex <= text.length) {
-        setDisplayedText(text.slice(0, currentIndex));
-        currentIndex++;
-      } else {
-        clearInterval(interval);
-        setIsTyping(false); // إخفاء الكيرسر بعد انتهاء الكتابة
-      }
-    }, 50); // سرعة الكتابة: 50ms لكل حرف
+    // تأخير بداية الكتابة 800ms
+    const startDelay = setTimeout(() => {
+      let currentIndex = 0;
+      setDisplayedText('');
+      setIsTyping(true);
 
-    return () => clearInterval(interval);
+      const interval = setInterval(() => {
+        if (currentIndex <= text.length) {
+          setDisplayedText(text.slice(0, currentIndex));
+          currentIndex++;
+        } else {
+          clearInterval(interval);
+          setIsTyping(false); // إخفاء الكيرسر بعد انتهاء الكتابة
+        }
+      }, 50); // سرعة الكتابة: 50ms لكل حرف
+
+      return () => clearInterval(interval);
+    }, 800);
+
+    return () => clearTimeout(startDelay);
   }, [admin?.welcomeMessage]);
 
   const fetchMenuData = async () => {
@@ -364,7 +419,7 @@ export default function PublicMenuPage() {
                                           ? Number(item.discountedPrice).toFixed(0)
                                           : Number(item.discountedPrice).toFixed(2)} جـ
                                       </div>
-                                      <div className="text-xs text-gray-500 mt-1">
+                                      <div className="text-xs mt-1 font-bold" style={{ color: theme.secondary }}>
                                         بدلاً من {Number(item.price) % 1 === 0
                                           ? Number(item.price).toFixed(0)
                                           : Number(item.price).toFixed(2)} جـ
@@ -485,7 +540,7 @@ export default function PublicMenuPage() {
                                               ? Number(item.discountedPrice).toFixed(0)
                                               : Number(item.discountedPrice).toFixed(2)} جـ
                                           </div>
-                                          <div className="text-xs text-gray-500 mt-1">
+                                          <div className="text-xs mt-1 font-bold" style={{ color: theme.secondary }}>
                                             بدلاً من {Number(item.price) % 1 === 0
                                               ? Number(item.price).toFixed(0)
                                               : Number(item.price).toFixed(2)} جـ

@@ -6,7 +6,7 @@ export interface Admin {
   password: string;
   logoUrl?: string; // رابط الشعار
   backgroundUrl?: string; // رابط الخلفية
-  theme: 'ocean' | 'sunset' | 'forest' | 'royal' | 'rose'; // السمة
+  theme: 'ocean' | 'sunset' | 'forest' | 'royal' | 'rose' | 'midnight' | 'coral' | 'emerald' | 'lavender' | 'crimson' | 'coffee' | 'canary'; // السمة
   welcomeMessage?: string; // رسالة ترحيبية تظهر بعد الشعار
   contactMessage?: string; // رسالة تواصل تظهر بعد كل قائمة
 }
@@ -41,6 +41,13 @@ export const THEMES = {
   forest: { primary: '#10b981', secondary: '#34d399', accent: '#059669' },
   royal: { primary: '#8b5cf6', secondary: '#a78bfa', accent: '#7c3aed' },
   rose: { primary: '#ec4899', secondary: '#f472b6', accent: '#db2777' },
+  midnight: { primary: '#1e293b', secondary: '#475569', accent: '#0f172a' },
+  coral: { primary: '#ff6b6b', secondary: '#ff8787', accent: '#fa5252' },
+  emerald: { primary: '#2dd4bf', secondary: '#5eead4', accent: '#14b8a6' },
+  lavender: { primary: '#a78bfa', secondary: '#c4b5fd', accent: '#8b5cf6' },
+  crimson: { primary: '#dc2626', secondary: '#ef4444', accent: '#b91c1c' },
+  coffee: { primary: '#92400e', secondary: '#b45309', accent: '#78350f' },
+  canary: { primary: '#eab308', secondary: '#facc15', accent: '#ca8a04' },
 };
 
 const KV_KEY = 'menu-database';
