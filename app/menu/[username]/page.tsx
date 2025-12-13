@@ -196,9 +196,11 @@ export default function PublicMenuPage() {
 
 
 
-          <p className="text-gray-700 text-2xl font-bold p-5 mt-6">
-            استكشف قوائمنا المميزة
-          </p>
+          <div className="inline-block bg-white/90 backdrop-blur-sm rounded-xl px-8 py-4 mt-6 shadow-lg">
+            <p className="text-gray-700 text-2xl font-bold">
+              استكشف قوائمنا المميزة
+            </p>
+          </div>
 
         </div>
 
@@ -285,7 +287,7 @@ export default function PublicMenuPage() {
                               >
                                 {/* Discount Badge */}
                                 {item.discountedPrice && (
-                                  <div className="absolute -top-2 -left-2 bg-yellow-400 text-black w-11 h-11 rounded-full flex items-center justify-center font-black text-xs shadow-lg animate-pulse">
+                                  <div className="absolute -top-2 -left-2 bg-yellow-400 text-black w-11 h-11 rounded-full flex items-center justify-center font-black text-xs shadow-lg animate-fast-pulse">
                                     -{discountPercentage}%
                                   </div>
                                 )}
@@ -455,6 +457,17 @@ export default function PublicMenuPage() {
             opacity: 1;
             transform: translateY(0);
           }
+        }
+        @keyframes fastPulse {
+          0%, 100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.3;
+          }
+        }
+        .animate-fast-pulse {
+          animation: fastPulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
         }
         .animate-slide-up {
           animation: slideUp 0.6s ease-out;
