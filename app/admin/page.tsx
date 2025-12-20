@@ -647,9 +647,7 @@ export default function AdminPage() {
                                           primary: THEMES[currentAdmin.theme].primary,
                                           secondary: THEMES[currentAdmin.theme].secondary,
                                         }}
-                                        onGenerate={() => {
-                                          alert('تم إنشاء الإعلان بنجاح!');
-                                        }}
+                                        onGenerate={() => {}}
                                       />
                                     )}
                                   </div>
