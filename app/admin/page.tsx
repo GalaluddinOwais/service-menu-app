@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ImageUploader from '@/components/ImageUploader';
+import AdGenerator from '@/components/AdGenerator';
+import { FONTS } from '@/lib/fonts';
 
 interface Admin {
   id: string;
@@ -71,6 +73,8 @@ export default function AdminPage() {
   const [settingsFormData, setSettingsFormData] = useState({
     username: '',
     theme: 'ocean' as 'ocean' | 'sunset' | 'forest' | 'royal' | 'rose' | 'midnight' | 'coral' | 'emerald' | 'lavender' | 'crimson' | 'coffee' | 'canary',
+    cardStyle: 'rounded' as 'rounded' | 'sharp' | 'bordered' | 'modern' | 'soft' | 'fancy',
+    fontFamily: 'baloo-bhaijaan' as 'cairo' | 'baloo-bhaijaan' | 'zain',
     logoUrl: '',
     backgroundUrl: '',
     welcomeMessage: '',
@@ -91,6 +95,8 @@ export default function AdminPage() {
     setSettingsFormData({
       username: admin.username || '',
       theme: admin.theme || 'ocean',
+      cardStyle: admin.cardStyle || 'rounded',
+      fontFamily: admin.fontFamily || 'baloo-bhaijaan',
       logoUrl: admin.logoUrl || '',
       backgroundUrl: admin.backgroundUrl || '',
       welcomeMessage: admin.welcomeMessage || '',
@@ -617,7 +623,7 @@ export default function AdminPage() {
                                  {Number(item.price).toFixed(2)} جـ  
                                 </td>
                                 <td className="px-4 py-3">
-                                  <div className="flex gap-2 justify-center">
+                                  <div className="flex gap-2 justify-center flex-wrap">
                                     <button
                                       onClick={() => handleEditItem(item)}
                                       className="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-sm transition"
@@ -630,6 +636,22 @@ export default function AdminPage() {
                                     >
                                       حذف
                                     </button>
+                                    {item.imageUrl && currentAdmin && (
+                                      <AdGenerator
+                                        itemName={item.name}
+                                        itemPrice={item.price}
+                                        discountedPrice={item.discountedPrice}
+                                        imageUrl={item.imageUrl}
+                                        contactMessage={currentAdmin.contactMessage || 'تواصل معنا الآن'}
+                                        themeColors={{
+                                          primary: THEMES[currentAdmin.theme].primary,
+                                          secondary: THEMES[currentAdmin.theme].secondary,
+                                        }}
+                                        onGenerate={() => {
+                                          alert('تم إنشاء الإعلان بنجاح!');
+                                        }}
+                                      />
+                                    )}
                                   </div>
                                 </td>
                               </tr>
@@ -697,6 +719,41 @@ export default function AdminPage() {
                   ></div>
                   <span className="text-sm text-gray-600">معاينة الألوان</span>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  شكل الكارد
+                </label>
+                <select
+                  value={settingsFormData.cardStyle || 'rounded'}
+                  onChange={(e) => setSettingsFormData({ ...settingsFormData, cardStyle: e.target.value as any })}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
+                >
+                  <option value="rounded">مستدير - حواف دائرية</option>
+                  <option value="sharp">حاد - حواف حادة مع إطار رمادي</option>
+                  <option value="bordered">بإطار - إطار سميك بلون السمة المختارة</option>
+                  <option value="modern">عصري - حواف دائرية بدون ظل</option>
+                  <option value="soft">ناعم - حواف دائرية جداً</option>
+                  <option value="fancy">مزخرف - إطار متقطع بلون السمة مع ظل مميز</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">شكل الكاردات للعناصر والرسائل</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  نوع الخط
+                </label>
+                <select
+                  value={settingsFormData.fontFamily || 'baloo-bhaijaan'}
+                  onChange={(e) => setSettingsFormData({ ...settingsFormData, fontFamily: e.target.value as any })}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
+                >
+                  <option value="cairo" className={FONTS.cairo}>هندسي قوي</option>
+                  <option value="baloo-bhaijaan" className={FONTS['baloo-bhaijaan']}>لطيف ودود</option>
+                  <option value="zain" className={FONTS.zain}>أنيق هادئ</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">نوع الخط المستخدم في القائمة</p>
               </div>
 
               <ImageUploader

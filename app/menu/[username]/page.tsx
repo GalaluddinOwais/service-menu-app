@@ -2,13 +2,16 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { FONTS, balooBhaijaanFont } from '@/lib/fonts';
 
 interface Admin {
   id: string;
   username: string;
   logoUrl?: string;
   backgroundUrl?: string;
-  theme: 'ocean' | 'sunset' | 'forest' | 'royal' | 'rose';
+  theme: 'ocean' | 'sunset' | 'forest' | 'royal' | 'rose' | 'midnight' | 'coral' | 'emerald' | 'lavender' | 'crimson' | 'coffee' | 'canary';
+  cardStyle?: 'rounded' | 'sharp' | 'bordered' | 'modern' | 'soft' | 'fancy';
+  fontFamily?: 'cairo' | 'baloo-bhaijaan' | 'zain';
   welcomeMessage?: string;
   contactMessage?: string;
 }
@@ -114,6 +117,45 @@ const THEMES = {
     secondary: '#facc15',
     gradient: 'from-yellow-400 via-yellow-500 to-amber-500',
     accent: '#ca8a04'
+  },
+};
+
+const CARD_STYLES = {
+  rounded: {
+    className: 'rounded-2xl',
+    shadow: 'shadow-lg hover:shadow-2xl',
+    border: '',
+    special: ''
+  },
+  sharp: {
+    className: 'rounded-none',
+    shadow: 'shadow-md hover:shadow-xl',
+    border: 'border-2 border-gray-200',
+    special: ''
+  },
+  bordered: {
+    className: 'rounded-xl',
+    shadow: 'shadow-lg hover:shadow-xl',
+    border: 'border-4',
+    special: 'theme-border'
+  },
+  modern: {
+    className: 'rounded-lg',
+    shadow: 'shadow-sm hover:shadow-lg',
+    border: '',
+    special: ''
+  },
+  soft: {
+    className: 'rounded-[3rem]',
+    shadow: 'shadow-md hover:shadow-xl',
+    border: '',
+    special: ''
+  },
+  fancy: {
+    className: 'rounded-[1.25rem]',
+    shadow: 'shadow-2xl hover:shadow-3xl',
+    border: 'border-2 border-dashed',
+    special: 'theme-border-dashed'
   },
 };
 
@@ -269,10 +311,14 @@ export default function PublicMenuPage() {
   }
 
   const theme = THEMES[admin.theme || 'ocean'];
+  const cardStyle = CARD_STYLES[admin.cardStyle || 'rounded'];
+
+  // Get font class
+  const fontClass = admin.fontFamily ? FONTS[admin.fontFamily] : balooBhaijaanFont.className;
 
   return (
     <div
-      className="min-h-screen relative overflow-hidden"
+      className={`min-h-screen relative overflow-hidden ${fontClass}`}
       dir="rtl"
       style={{
         background: admin.backgroundUrl
@@ -280,13 +326,6 @@ export default function PublicMenuPage() {
           : `linear-gradient(135deg, ${theme.primary}20, ${theme.secondary}30, ${theme.accent}10)`
       }}
     >
-      {/* Animated Background Pattern */}
-      <div className="absolute inset-0 opacity-10">
-        <div className={`absolute top-0 -right-40 w-80 h-80 bg-gradient-to-br ${theme.gradient} rounded-full mix-blend-multiply filter blur-3xl animate-blob`}></div>
-        <div className={`absolute top-0 -left-40 w-80 h-80 bg-gradient-to-br ${theme.gradient} rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-2000`}></div>
-        <div className={`absolute -bottom-40 left-20 w-80 h-80 bg-gradient-to-br ${theme.gradient} rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-4000`}></div>
-      </div>
-
       <div className="relative z-10 container mx-auto px-4 py-8 max-w-6xl">
         {/* Header */}
         <div className="text-center mb-12 animate-fade-in">
@@ -303,7 +342,13 @@ export default function PublicMenuPage() {
           )}
           {/* Welcome Message */}
           {admin.welcomeMessage && (
-            <div className="mt-8 bg-white/95 backdrop-blur-md p-7 rounded-2xl shadow-2xl max-w-3xl mx-auto" >
+            <div
+              className={`mt-8 bg-white/95 backdrop-blur-md p-7 ${cardStyle.className} ${cardStyle.shadow} ${cardStyle.border} max-w-3xl mx-auto`}
+              style={{
+                ...(cardStyle.special === 'theme-border' && { borderColor: theme.primary }),
+                ...(cardStyle.special === 'theme-border-dashed' && { borderColor: theme.primary })
+              }}
+            >
               <div className="text-gray-900 text-2xl whitespace-pre-line leading-relaxed font-semibold" >
                 {displayedText}
                 {isTyping && <span className="animate-pulse">|</span>}
@@ -313,8 +358,8 @@ export default function PublicMenuPage() {
 
 
 
-          <div className="inline-block bg-white/90 backdrop-blur-sm rounded-xl px-8 py-4 mt-6 shadow-lg">
-            <p className="text-gray-700 text-2xl font-bold">
+          <div className="w-screen relative left-1/2 right-1/2 -mx-[50vw] bg-white/90 backdrop-blur-sm px-8 py-4 mt-6 shadow-lg">
+            <p className="text-gray-700 text-2xl font-bold text-center">
               استكشف قوائمنا المميزة
             </p>
           </div>
@@ -418,25 +463,44 @@ export default function PublicMenuPage() {
                             return (
                               <div
                                 key={item.id}
-                                className="group relative bg-gradient-to-br from-gray-50 to-white p-5 rounded-xl border-2 border-gray-100 hover:border-transparent hover:shadow-xl transition-all duration-300"
+                                className={`group relative ${cardStyle.className} overflow-hidden ${cardStyle.shadow} ${cardStyle.border} transition-all duration-300 bg-white`}
                                 style={{
-                                  animation: `slideUp 0.5s ease-out ${itemIdx * 50}ms`
+                                  animation: `slideUp 0.5s ease-out ${itemIdx * 50}ms`,
+                                  ...(cardStyle.special === 'theme-border' && { borderColor: theme.primary }),
+                                  ...(cardStyle.special === 'theme-border-dashed' && { borderColor: theme.primary })
                                 }}
                               >
-                                {/* Discount Badge */}
-                                <div className="absolute -top-2 -left-2 bg-yellow-400 text-black w-11 h-11 rounded-full flex items-center justify-center font-black text-xs shadow-lg animate-fast-pulse">
-                                  -{discountPercentage}%
-                                </div>
+                                <div className="flex flex-row h-48">
+                                  {/* Discount Badge - Always visible */}
+                                  <div
+                                    className={`absolute ${item.imageUrl ? 'top-4 left-4 text-left' : 'left-0 top-2 w-1/2 text-center'} animate-pulse z-20`}
+                                    style={{
+                                      color: '#fff',
+                                      textShadow: '3px 3px 6px rgba(0,0,0,0.8)',
+                                      fontWeight: '900',
+                                      animationDuration: '1.5s'
+                                    }}
+                                  >
+                                    {item.imageUrl ? (
+                                      <>
+                                        <div className="text-3xl font-black">خصم</div>
+                                        <div className="text-4xl font-black">{discountPercentage}%</div>
+                                      </>
+                                    ) : (
+                                      <div className="text-3xl font-black whitespace-nowrap">خصم {discountPercentage}%</div>
+                                    )}
+                                  </div>
 
-                                <div className="flex justify-between items-start gap-4">
-                                  <div className="flex-1">
-                                    <h3 className="text-lg font-bold text-gray-800 group-hover:text-gray-900 transition-colors mb-1">
+                                  {/* Left Side - Content */}
+                                  <div className="flex-1 pr-5 pl-3 py-5 flex flex-col justify-center items-start text-right" dir="rtl">
+                                    {/* Item Name */}
+                                    <h3 className="text-lg font-bold text-gray-800 mb-2">
                                       {item.name}
                                     </h3>
 
-                                    {/* Description - first line bold, rest normal */}
+                                    {/* Description */}
                                     {item.description && (
-                                      <div className="text-sm text-gray-700 mt-2 leading-relaxed">
+                                      <div className="text-xs text-gray-700 leading-relaxed">
                                         {item.description.split('\n').map((line, i) => (
                                           <div key={i} className={i === 0 ? 'font-bold' : ''}>
                                             {line}
@@ -445,43 +509,48 @@ export default function PublicMenuPage() {
                                       </div>
                                     )}
                                   </div>
-                                  <div className="flex flex-col items-center gap-2 w-1/2">
-                                    {/* Price Section */}
-                                    <div
-                                      className="text-center w-full"
-                                      style={{ color: theme.accent }}
-                                    >
-                                      <div className="text-2xl font-black">
-                                        {Number(item.discountedPrice) % 1 === 0
-                                          ? Number(item.discountedPrice).toFixed(0)
-                                          : Number(item.discountedPrice).toFixed(2)} جـ
-                                      </div>
-                                      <div className="text-lg mt-1 font-bold" style={{ color: theme.primary }}>
-                                        بدلاً من {Number(item.price) % 1 === 0
-                                          ? Number(item.price).toFixed(0)
-                                          : Number(item.price).toFixed(2)} جـ
-                                      </div>
-                                    </div>
 
-                                    {/* Item Image - clickable */}
-                                    {item.imageUrl && (
-                                      <div className="mt-2 w-full h-32">
-                                        <img
-                                          src={item.imageUrl}
-                                          alt={item.name}
-                                          onClick={() => setSelectedImage(item.imageUrl!)}
-                                          className="w-full h-full object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity shadow-md"
-                                        />
-                                      </div>
+                                  {/* Right Side - Image or Placeholder */}
+                                  <div className="relative w-1/2">
+                                    {item.imageUrl ? (
+                                      <img
+                                        src={item.imageUrl}
+                                        alt={item.name}
+                                        onClick={() => setSelectedImage(item.imageUrl!)}
+                                        className="w-full h-full object-cover cursor-pointer"
+                                      />
+                                    ) : (
+                                      <div
+                                        className="w-full h-full"
+                                        style={{
+                                          background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`
+                                        }}
+                                      />
                                     )}
                                   </div>
-                                </div>
 
-                                {/* Decorative element */}
-                                <div
-                                  className="h-1 w-0 group-hover:w-full transition-all duration-500 mt-3 rounded-full mx-auto"
-                                  style={{ backgroundColor: theme.primary }}
-                                ></div>
+                                  {/* Center Circle - Price Badge (Absolute) */}
+                                  <div className={`absolute z-10 ${item.imageUrl ? 'left-2 bottom-2' : 'left-1/4 top-1/2 -translate-x-1/2 -translate-y-1/2'}`}>
+                                    <div
+                                      className="min-w-20 h-20 rounded-full flex flex-col items-center justify-center shadow-2xl border-4 border-white px-2"
+                                      style={{
+                                        background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`
+                                      }}
+                                    >
+                                      <div className="text-white text-base font-bold leading-none">جـــــ</div>
+                                      <div className="text-white text-3xl font-black whitespace-nowrap leading-none">
+                                        {Number(item.discountedPrice) % 1 === 0
+                                          ? Number(item.discountedPrice).toFixed(0)
+                                          : Number(item.discountedPrice).toFixed(2)}
+                                      </div>
+                                      <div className="text-white text-sm font-bold price-strikethrough opacity-80 whitespace-nowrap leading-none">
+                                        {Number(item.price) % 1 === 0
+                                          ? Number(item.price).toFixed(0)
+                                          : Number(item.price).toFixed(2)}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
                             );
                           })}
@@ -489,7 +558,14 @@ export default function PublicMenuPage() {
 
                         {/* Contact Message */}
                         {admin.contactMessage && (
-                          <div className="mt-6 bg-gradient-to-r from-blue-50 to-purple-50 p-5 rounded-xl border-2 border-blue-100">
+                          <div
+                            className={`mt-6 bg-gradient-to-r from-blue-50 to-purple-50 p-5 ${cardStyle.className} ${cardStyle.border} ${cardStyle.shadow}`}
+                            style={{
+                              ...(cardStyle.special === 'theme-border' && { borderColor: theme.primary }),
+                              ...(cardStyle.special === 'theme-border-dashed' && { borderColor: theme.primary }),
+                              ...(cardStyle.special !== 'theme-border' && cardStyle.special !== 'theme-border-dashed' && { borderWidth: '2px', borderColor: '#bfdbfe' })
+                            }}
+                          >
                             <div className="text-gray-800 text-center whitespace-pre-line leading-relaxed font-medium">
                               {renderContactMessage(admin.contactMessage)}
                             </div>
@@ -535,27 +611,46 @@ export default function PublicMenuPage() {
                             return (
                               <div
                                 key={item.id}
-                                className="group relative bg-gradient-to-br from-gray-50 to-white p-5 rounded-xl border-2 border-gray-100 hover:border-transparent hover:shadow-xl transition-all duration-300"
+                                className={`group relative ${cardStyle.className} overflow-hidden ${cardStyle.shadow} ${cardStyle.border} transition-all duration-300 bg-white`}
                                 style={{
-                                  animation: `slideUp 0.5s ease-out ${itemIdx * 50}ms`
+                                  animation: `slideUp 0.5s ease-out ${itemIdx * 50}ms`,
+                                  ...(cardStyle.special === 'theme-border' && { borderColor: theme.primary }),
+                                  ...(cardStyle.special === 'theme-border-dashed' && { borderColor: theme.primary })
                                 }}
                               >
-                                {/* Discount Badge */}
-                                {item.discountedPrice && (
-                                  <div className="absolute -top-2 -left-2 bg-yellow-400 text-black w-11 h-11 rounded-full flex items-center justify-center font-black text-xs shadow-lg animate-fast-pulse">
-                                    -{discountPercentage}%
-                                  </div>
-                                )}
+                                <div className="flex flex-row h-48">
+                                  {/* Discount Badge - On card, always visible if discount exists */}
+                                  {item.discountedPrice && (
+                                    <div
+                                      className={`absolute ${item.imageUrl ? 'top-4 left-4 text-left' : 'left-0 top-2 w-1/2 text-center'} animate-pulse z-20`}
+                                      style={{
+                                        color: '#fff',
+                                        textShadow: '3px 3px 6px rgba(0,0,0,0.8)',
+                                        fontWeight: '900',
+                                        animationDuration: '1.5s'
+                                      }}
+                                    >
+                                      {item.imageUrl ? (
+                                        <>
+                                          <div className="text-3xl font-black">خصم</div>
+                                          <div className="text-4xl font-black">{discountPercentage}%</div>
+                                        </>
+                                      ) : (
+                                        <div className="text-3xl font-black whitespace-nowrap">خصم {discountPercentage}%</div>
+                                      )}
+                                    </div>
+                                  )}
 
-                                <div className="flex justify-between items-start gap-4">
-                                  <div className="flex-1">
-                                    <h3 className="text-lg font-bold text-gray-800 group-hover:text-gray-900 transition-colors mb-1">
+                                  {/* Left Side - Content */}
+                                  <div className="flex-1 pr-5 pl-3 py-5 flex flex-col justify-center items-start text-right" dir="rtl">
+                                    {/* Item Name */}
+                                    <h3 className="text-lg font-bold text-gray-800 mb-2">
                                       {item.name}
                                     </h3>
 
-                                    {/* Description - first line bold, rest normal */}
+                                    {/* Description */}
                                     {item.description && (
-                                      <div className="text-sm text-gray-700 mt-2 leading-relaxed">
+                                      <div className="text-xs text-gray-700 leading-relaxed">
                                         {item.description.split('\n').map((line, i) => (
                                           <div key={i} className={i === 0 ? 'font-bold' : ''}>
                                             {line}
@@ -564,53 +659,65 @@ export default function PublicMenuPage() {
                                       </div>
                                     )}
                                   </div>
-                                  <div className="flex flex-col items-center gap-2 w-1/2">
-                                    {/* Price Section */}
-                                    <div
-                                      className="text-center w-full"
-                                      style={{ color: theme.accent }}
-                                    >
-                                      {item.discountedPrice ? (
-                                        <>
-                                          <div className="text-2xl font-black">
-                                            {Number(item.discountedPrice) % 1 === 0
-                                              ? Number(item.discountedPrice).toFixed(0)
-                                              : Number(item.discountedPrice).toFixed(2)} جـ
-                                          </div>
-                                          <div className="text-lg mt-1 font-bold" style={{ color: theme.primary }}>
-                                            بدلاً من {Number(item.price) % 1 === 0
-                                              ? Number(item.price).toFixed(0)
-                                              : Number(item.price).toFixed(2)} جـ
-                                          </div>
-                                        </>
-                                      ) : (
-                                        <div className="text-2xl font-black">
+
+                                  {/* Right Side - Image or Placeholder */}
+                                  <div className="relative w-1/2">
+                                    {item.imageUrl ? (
+                                      <img
+                                        src={item.imageUrl}
+                                        alt={item.name}
+                                        onClick={() => setSelectedImage(item.imageUrl!)}
+                                        className="w-full h-full object-cover cursor-pointer"
+                                      />
+                                    ) : (
+                                      <div
+                                        className="w-full h-full"
+                                        style={{
+                                          background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`
+                                        }}
+                                      />
+                                    )}
+                                  </div>
+
+                                  {/* Center Circle - Absolute positioned */}
+                                  <div className={`absolute z-10 ${item.imageUrl ? 'left-2 bottom-2' : 'left-1/4 top-1/2 -translate-x-1/2 -translate-y-1/2'}`}>
+                                    {item.discountedPrice ? (
+                                      <div
+                                        className="min-w-20 h-20 rounded-full flex flex-col items-center justify-center shadow-2xl border-4 border-white px-2"
+                                        style={{
+                                          background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`
+                                        }}
+                                      >
+                                        <div className="text-white text-base font-bold leading-none">جــــ</div>
+                                        <div className="text-white text-3xl font-black whitespace-nowrap leading-none">
+                                          {Number(item.discountedPrice) % 1 === 0
+                                            ? Number(item.discountedPrice).toFixed(0)
+                                            : Number(item.discountedPrice).toFixed(2)}
+                                        </div>
+                                        <div className="text-white text-sm font-bold price-strikethrough opacity-80 whitespace-nowrap leading-none">
                                           {Number(item.price) % 1 === 0
                                             ? Number(item.price).toFixed(0)
-                                            : Number(item.price).toFixed(2)} جـ
+                                            : Number(item.price).toFixed(2)}
                                         </div>
-                                      )}
-                                    </div>
-
-                                    {/* Item Image - clickable */}
-                                    {item.imageUrl && (
-                                      <div className="mt-2 w-full h-32">
-                                        <img
-                                          src={item.imageUrl}
-                                          alt={item.name}
-                                          onClick={() => setSelectedImage(item.imageUrl!)}
-                                          className="w-full h-full object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity shadow-md"
-                                        />
+                                      </div>
+                                    ) : (
+                                      <div
+                                        className="min-w-20 h-20 rounded-full flex flex-col items-center justify-center shadow-2xl border-4 border-white px-2"
+                                        style={{
+                                          background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`
+                                        }}
+                                      >
+                                        <div className="text-white text-base font-bold leading-none">جــــ</div>
+                                        <div className="text-white text-3xl font-black whitespace-nowrap leading-none">
+                                          {Number(item.price) % 1 === 0
+                                            ? Number(item.price).toFixed(0)
+                                            : Number(item.price).toFixed(2)}
+                                        </div>
+                                        <div className="text-white text-sm font-bold opacity-0 whitespace-nowrap leading-none">0</div>
                                       </div>
                                     )}
                                   </div>
                                 </div>
-
-                                {/* Decorative element */}
-                                <div
-                                  className="h-1 w-0 group-hover:w-full transition-all duration-500 mt-3 rounded-full mx-auto"
-                                  style={{ backgroundColor: theme.primary }}
-                                ></div>
                               </div>
                             );
                           })}
@@ -618,7 +725,14 @@ export default function PublicMenuPage() {
 
                         {/* Contact Message */}
                         {admin.contactMessage && (
-                          <div className="mt-6 bg-gradient-to-r from-blue-50 to-purple-50 p-5 rounded-xl border-2 border-blue-100">
+                          <div
+                            className={`mt-6 bg-gradient-to-r from-blue-50 to-purple-50 p-5 ${cardStyle.className} ${cardStyle.border} ${cardStyle.shadow}`}
+                            style={{
+                              ...(cardStyle.special === 'theme-border' && { borderColor: theme.primary }),
+                              ...(cardStyle.special === 'theme-border-dashed' && { borderColor: theme.primary }),
+                              ...(cardStyle.special !== 'theme-border' && cardStyle.special !== 'theme-border-dashed' && { borderWidth: '2px', borderColor: '#bfdbfe' })
+                            }}
+                          >
                             <div className="text-gray-800 text-center whitespace-pre-line leading-relaxed font-medium">
                               {renderContactMessage(admin.contactMessage)}
                             </div>
@@ -681,29 +795,6 @@ export default function PublicMenuPage() {
 
       {/* Custom animations */}
       <style jsx>{`
-        @keyframes blob {
-          0% {
-            transform: translate(0px, 0px) scale(1);
-          }
-          33% {
-            transform: translate(30px, -50px) scale(1.1);
-          }
-          66% {
-            transform: translate(-20px, 20px) scale(0.9);
-          }
-          100% {
-            transform: translate(0px, 0px) scale(1);
-          }
-        }
-        .animate-blob {
-          animation: blob 7s infinite;
-        }
-        .animation-delay-2000 {
-          animation-delay: 2s;
-        }
-        .animation-delay-4000 {
-          animation-delay: 4s;
-        }
         @keyframes slideUp {
           from {
             opacity: 0;
@@ -740,6 +831,28 @@ export default function PublicMenuPage() {
             opacity: 1;
             transform: translateY(0);
           }
+        }
+        @keyframes pulse {
+          0%, 100% {
+            opacity: 0;
+          }
+          30%, 70% {
+            opacity: 1;
+          }
+        }
+        .price-strikethrough {
+          position: relative;
+          display: inline-block;
+        }
+        .price-strikethrough::after {
+          content: '';
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: 50%;
+          transform: translateY(-50%) rotate(15deg);
+          height: 1.5px;
+          background-color: currentColor;
         }
       `}</style>
     </div>

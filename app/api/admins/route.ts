@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { username, password, logoUrl, backgroundUrl, theme } = body;
+    const { username, password, logoUrl, backgroundUrl, theme ,cardStyle} = body;
 
     if (!username || !password) {
       return NextResponse.json({ error: 'Username and password are required' }, { status: 400 });
@@ -43,6 +43,7 @@ export async function POST(request: Request) {
       logoUrl,
       backgroundUrl,
       theme: theme || 'ocean',
+      cardStyle: cardStyle || 'rounded'
     });
 
     // لا نرجع كلمة المرور

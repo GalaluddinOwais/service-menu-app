@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { balooBhaijaanFont } from '@/lib/fonts';
 
 export const metadata: Metadata = {
   title: "تطبيق القوائم الذكية - إنشاء قوائم طعام احترافية",
@@ -13,7 +14,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ar" dir="rtl">
-      <body className="bg-gray-50">{children}</body>
+      <body className={`bg-gray-50 ${balooBhaijaanFont.className}`}>{children}</body>
     </html>
   );
 }

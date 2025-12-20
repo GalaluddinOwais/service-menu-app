@@ -1,5 +1,22 @@
+/*
+ * DATABASE STORAGE - اختيار طريقة التخزين
+ *
+ * للتطوير المحلي (Local Development):
+ * - استخدم: import { promises as fs } from 'fs';
+ * - استخدم: const DB_FILE = path.join(process.cwd(), 'data', 'menu.json');
+ * - readDB/writeDB تقرأ وتكتب من/إلى ملف JSON
+ *
+ * للنشر على Vercel (Production):
+ * - غيّر: import { kv } from '@vercel/kv';
+ * - غيّر: const KV_KEY = 'menu-database';
+ * - readDB: const data = await kv.get<Database>(KV_KEY);
+ * - writeDB: await kv.set(KV_KEY, db);
+ */
+
 import { kv } from '@vercel/kv';
-// Vercel KV (Redis) Storage Integration - Ultra Fast!
+// import { promises as fs } from 'fs';
+// import path from 'path';
+// Vercel KV Storage - للنشر على Vercel
 export interface Admin {
   id: string;
   username: string; // اسم فريد
@@ -7,6 +24,8 @@ export interface Admin {
   logoUrl?: string; // رابط الشعار
   backgroundUrl?: string; // رابط الخلفية
   theme: 'ocean' | 'sunset' | 'forest' | 'royal' | 'rose' | 'midnight' | 'coral' | 'emerald' | 'lavender' | 'crimson' | 'coffee' | 'canary'; // السمة
+  cardStyle?: 'rounded' | 'sharp' | 'bordered' | 'modern' | 'soft' | 'fancy'; // شكل الكارد
+  fontFamily?: 'cairo' | 'baloo-bhaijaan' | 'zain'; // الخط
   welcomeMessage?: string; // رسالة ترحيبية تظهر بعد الشعار
   contactMessage?: string; // رسالة تواصل تظهر بعد كل قائمة
 }
@@ -50,27 +69,63 @@ export const THEMES = {
   canary: { primary: '#eab308', secondary: '#facc15', accent: '#ca8a04' },
 };
 
+// أشكال الكروت المتاحة
+export const CARD_STYLES = {
+  rounded: {
+    borderRadius: '1rem', // rounded-2xl
+    shadow: 'shadow-lg hover:shadow-2xl',
+    border: 'border-0',
+    special: ''
+  },
+  sharp: {
+    borderRadius: '0', // sharp corners
+    shadow: 'shadow-md hover:shadow-xl',
+    border: 'border-2 border-gray-200',
+    special: ''
+  },
+  bordered: {
+    borderRadius: '0.75rem', // rounded-xl
+    shadow: 'shadow-lg hover:shadow-xl',
+    border: 'border-4',
+    special: 'theme-border' // سيتم تطبيق لون السمة
+  },
+  modern: {
+    borderRadius: '0.5rem', // rounded-lg
+    shadow: 'shadow-sm hover:shadow-lg',
+    border: 'border-0',
+    special: ''
+  },
+  soft: {
+    borderRadius: '2rem', // أكثر دائرية
+    shadow: 'shadow-md hover:shadow-xl',
+    border: 'border-0',
+    special: ''
+  },
+  fancy: {
+    borderRadius: '1.25rem',
+    shadow: 'shadow-2xl hover:shadow-3xl',
+    border: 'border-2 border-dashed',
+    special: 'theme-border-dashed' // إطار متقطع بلون السمة
+  },
+};
+
 const KV_KEY = 'menu-database';
 
 async function readDB(): Promise<Database> {
   try {
-    // قراءة البيانات من Vercel KV (Redis) - سريع جداً!
     const data = await kv.get<Database>(KV_KEY);
-
-    if (data) {
-      return data;
+    if (!data) {
+      return { admins: [], lists: [], items: [] };
     }
+    return data;
   } catch (error) {
     console.error('Error reading from KV:', error);
+    return { admins: [], lists: [], items: [] };
   }
-
-  // إرجاع قاعدة بيانات فارغة إذا لم توجد بيانات
-  return { admins: [], lists: [], items: [] };
 }
 
 async function writeDB(db: Database): Promise<void> {
   try {
-    // كتابة البيانات إلى Vercel KV (Redis) - سريع جداً!
     await kv.set(KV_KEY, db);
   } catch (error) {
     console.error('Error writing to KV:', error);

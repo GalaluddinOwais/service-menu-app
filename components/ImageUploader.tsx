@@ -17,8 +17,6 @@ export default function ImageUploader({
   const [isUploading, setIsUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | undefined>(currentImageUrl);
   const [error, setError] = useState<string>('');
-  const [uploadMode, setUploadMode] = useState<'file' | 'url'>('file');
-  const [urlInput, setUrlInput] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Update preview when currentImageUrl changes (e.g., when editing an item)
@@ -83,27 +81,9 @@ export default function ImageUploader({
     }
   };
 
-  const handleUrlSubmit = () => {
-    if (!urlInput.trim()) {
-      setError('الرجاء إدخال رابط الصورة');
-      return;
-    }
-
-    // التحقق من صحة الرابط
-    try {
-      new URL(urlInput);
-      setPreviewUrl(urlInput);
-      onImageUploaded(urlInput);
-      setError('');
-    } catch {
-      setError('رابط غير صحيح');
-    }
-  };
-
   const handleRemoveImage = () => {
     setPreviewUrl(undefined);
     onImageUploaded('');
-    setUrlInput('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -111,54 +91,31 @@ export default function ImageUploader({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <label className="block text-sm font-medium text-gray-700">
-          {label}
-        </label>
+      <label className="block text-sm font-medium text-gray-700">
+        {label}
+      </label>
 
-        {/* Checkbox to toggle URL mode */}
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={uploadMode === 'url'}
-            onChange={(e) => setUploadMode(e.target.checked ? 'url' : 'file')}
-            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-          />
-          <span className="text-sm text-gray-600">استخدام رابط خارجي</span>
-        </label>
-      </div>
-
-      {uploadMode === 'url' ? (
-        /* URL Input Mode */
-        <div className="flex gap-2">
-          <input
-            type="url"
-            value={urlInput}
-            onChange={(e) => setUrlInput(e.target.value)}
-            placeholder="https://example.com/image.jpg"
-            className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+      {/* File Upload */}
+      <div className="flex gap-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileChange}
+          disabled={isUploading}
+          className="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50"
+        />
+        {previewUrl && (
           <button
             type="button"
-            onClick={handleUrlSubmit}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition"
+            onClick={handleRemoveImage}
+            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition whitespace-nowrap"
+            title="إزالة الصورة"
           >
-            تطبيق
+            إزالة
           </button>
-        </div>
-      ) : (
-        /* File Upload Mode */
-        <div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-            disabled={isUploading}
-            className="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50"
-          />
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Helper Text */}
       {helperText && (
@@ -182,22 +139,12 @@ export default function ImageUploader({
 
       {/* Image Preview */}
       {previewUrl && (
-        <div className="relative inline-block">
+        <div className="inline-block">
           <img
             src={previewUrl}
             alt="معاينة"
             className="w-32 h-32 rounded-lg border-2 border-gray-200 object-cover"
           />
-          <button
-            type="button"
-            onClick={handleRemoveImage}
-            className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full p-1.5 shadow-lg transition"
-            title="إزالة الصورة"
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
         </div>
       )}
     </div>

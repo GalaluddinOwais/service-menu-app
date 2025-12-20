@@ -58,7 +58,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { username, currentPassword, newPassword, logoUrl, backgroundUrl, theme, welcomeMessage, contactMessage } = body;
+    const { username, currentPassword, newPassword, logoUrl, backgroundUrl, theme, cardStyle, fontFamily, welcomeMessage, contactMessage } = body;
 
     // التحقق من كلمة المرور فقط إذا أراد تغيير كلمة المرور
     if (newPassword) {
@@ -71,12 +71,22 @@ export async function PUT(
       return NextResponse.json({ error: 'Invalid theme' }, { status: 400 });
     }
 
+    if (cardStyle && !['rounded', 'sharp', 'bordered', 'modern', 'soft', 'fancy'].includes(cardStyle)) {
+      return NextResponse.json({ error: 'Invalid card style' }, { status: 400 });
+    }
+
+    if (fontFamily && !['cairo', 'baloo-bhaijaan', 'zain'].includes(fontFamily)) {
+      return NextResponse.json({ error: 'Invalid font family' }, { status: 400 });
+    }
+
     const updates: any = {};
     if (username) updates.username = username;
     if (newPassword) updates.password = newPassword;
     if (logoUrl !== undefined) updates.logoUrl = logoUrl;
     if (backgroundUrl !== undefined) updates.backgroundUrl = backgroundUrl;
     if (theme) updates.theme = theme;
+    if (cardStyle !== undefined) updates.cardStyle = cardStyle;
+    if (fontFamily !== undefined) updates.fontFamily = fontFamily;
     if (welcomeMessage !== undefined) updates.welcomeMessage = welcomeMessage;
     if (contactMessage !== undefined) updates.contactMessage = contactMessage;
 
@@ -121,6 +131,8 @@ export async function PATCH(
     if (body.logoUrl !== undefined) updates.logoUrl = body.logoUrl;
     if (body.backgroundUrl !== undefined) updates.backgroundUrl = body.backgroundUrl;
     if (body.theme !== undefined) updates.theme = body.theme;
+    if (body.cardStyle !== undefined) updates.cardStyle = body.cardStyle;
+    if (body.fontFamily !== undefined) updates.fontFamily = body.fontFamily;
     if (body.welcomeMessage !== undefined) updates.welcomeMessage = body.welcomeMessage;
     if (body.contactMessage !== undefined) updates.contactMessage = body.contactMessage;
 
