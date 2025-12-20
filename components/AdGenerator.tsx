@@ -77,8 +77,9 @@ export default function AdGenerator({
       }
 
       // 3. كتل السعر (تحريك لليسار وللأسفل أكثر)
-      const contentAnchorY = mainHeight - 10; 
-      const mainStickerX = 220; // تم تحريكها لليسار (كانت 280)
+      const contentAnchorY = mainHeight - 10;
+      // إذا كان فيه خصم، الدائرة عند 220، لو مافيش خصم تروح شمال أكثر عند 150
+      const mainStickerX = discountedPrice ? 220 : 150;
       // إذا لم يكن هناك خصم، نزل الدائرة للأسفل شوية
       const mainStickerY = discountedPrice ? contentAnchorY - 60 : contentAnchorY + 40;
       const mainRadius = 135;
