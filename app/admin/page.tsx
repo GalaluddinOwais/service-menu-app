@@ -222,6 +222,11 @@ export default function AdminPage() {
   // Auto-refresh لطلبات التوصيل كل 5 دقائق
   useEffect(() => {
     if (!currentAdmin || activeTab !== 'orders') return;
+    // لا تعمل auto-refresh إذا كانت طلبات التوصيل غير مفعلة
+    if (!currentAdmin.isAcceptingOrders && !currentAdmin.isAcceptingOrdersViaWhatsapp) return;
+
+    // تحديث فوري عند فتح التاب
+    refreshOrders();
 
     const interval = setInterval(() => {
       refreshOrders();
@@ -233,6 +238,9 @@ export default function AdminPage() {
   // Auto-refresh لطلبات الطاولات كل دقيقة
   useEffect(() => {
     if (!currentAdmin || activeTab !== 'tableOrders') return;
+
+    // تحديث فوري عند فتح التاب
+    refreshTableOrders();
 
     const interval = setInterval(() => {
       refreshTableOrders();
@@ -534,7 +542,7 @@ export default function AdminPage() {
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-2 mt-6 border-b">
+          <div className="flex flex-wrap gap-2 mt-6 border-b">
             <button
               onClick={() => setActiveTab('lists')}
               className={`px-6 py-3 font-bold transition-colors ${
@@ -555,18 +563,16 @@ export default function AdminPage() {
             >
               طلبات التوصيل
             </button>
-            {currentAdmin?.isAcceptingTableOrders && (
-              <button
-                onClick={() => setActiveTab('tableOrders')}
-                className={`px-6 py-3 font-bold transition-colors ${
-                  activeTab === 'tableOrders'
-                    ? 'border-b-2 border-purple-600 text-purple-600'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                طلبات الطاولات
-              </button>
-            )}
+            <button
+              onClick={() => setActiveTab('tableOrders')}
+              className={`px-6 py-3 font-bold transition-colors ${
+                activeTab === 'tableOrders'
+                  ? 'border-b-2 border-purple-600 text-purple-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              طلبات الطاولات
+            </button>
             <button
               onClick={() => setActiveTab('delivery')}
               className={`px-6 py-3 font-bold transition-colors ${
@@ -847,34 +853,46 @@ export default function AdminPage() {
           <div className="bg-white p-8 rounded-lg shadow-md">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-gray-800">الطلبات</h2>
-              <button
-                onClick={refreshOrders}
-                disabled={isRefreshingOrders}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="تحديث الطلبات"
-              >
-                <svg
-                  className={`w-5 h-5 ${isRefreshingOrders ? 'animate-spin' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
-                {isRefreshingOrders ? 'جاري التحديث...' : 'تحديث'}
-              </button>
+              {(currentAdmin?.isAcceptingOrders || currentAdmin?.isAcceptingOrdersViaWhatsapp) && (
+                <div className="flex flex-col items-end gap-1">
+                  <button
+                    onClick={refreshOrders}
+                    disabled={isRefreshingOrders}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="تحديث الطلبات"
+                  >
+                    <svg
+                      className={`w-5 h-5 ${isRefreshingOrders ? 'animate-spin' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                      />
+                    </svg>
+                    {isRefreshingOrders ? 'جاري التحديث...' : 'تحديث'}
+                  </button>
+                  <span className="text-xs text-gray-500">تحديث تلقائي كل 5 دقائق</span>
+                </div>
+              )}
             </div>
             {orders.length === 0 ? (
               <div className="text-center py-12">
                 <svg className="mx-auto h-16 w-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                 </svg>
-                <p className="text-gray-500 text-lg">لا توجد طلبات بعد</p>
+                <p className="text-gray-500 text-lg">
+                  {currentAdmin?.isAcceptingOrders || currentAdmin?.isAcceptingOrdersViaWhatsapp
+                    ? 'لا توجد طلبات بعد'
+                    : 'طلبات التوصيل غير مفعلة'}
+                </p>
+                {!currentAdmin?.isAcceptingOrders && !currentAdmin?.isAcceptingOrdersViaWhatsapp && (
+                  <p className="text-gray-400 text-sm mt-2">يمكنك تفعيل الطلبات من تبويب "إعدادات الطلبات"</p>
+                )}
               </div>
             ) : (
               <div className="space-y-4">
@@ -1264,35 +1282,48 @@ export default function AdminPage() {
         )}
 
         {/* Table Orders Tab */}
-        {activeTab === 'tableOrders' && currentAdmin?.isAcceptingTableOrders && (
+        {activeTab === 'tableOrders' && (
           <div className="bg-white p-8 rounded-lg shadow-md">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-gray-800">طلبات الطاولات</h2>
-              <button
-                onClick={refreshTableOrders}
-                disabled={isRefreshingTableOrders}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="تحديث طلبات الطاولات"
-              >
-                <svg
-                  className={`w-5 h-5 ${isRefreshingTableOrders ? 'animate-spin' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
-                {isRefreshingTableOrders ? 'جاري التحديث...' : 'تحديث'}
-              </button>
+              {currentAdmin?.isAcceptingTableOrders && (
+                <div className="flex flex-col items-end gap-1">
+                  <button
+                    onClick={refreshTableOrders}
+                    disabled={isRefreshingTableOrders}
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="تحديث طلبات الطاولات"
+                  >
+                    <svg
+                      className={`w-5 h-5 ${isRefreshingTableOrders ? 'animate-spin' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                      />
+                    </svg>
+                    {isRefreshingTableOrders ? 'جاري التحديث...' : 'تحديث'}
+                  </button>
+                  <span className="text-xs text-gray-500">تحديث تلقائي كل دقيقة</span>
+                </div>
+              )}
             </div>
 
             {/* Display tables with their orders */}
-            {currentAdmin.tablesCount && currentAdmin.tablesCount > 0 ? (
+            {!currentAdmin?.isAcceptingTableOrders ? (
+              <div className="text-center py-12">
+                <svg className="mx-auto h-16 w-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-gray-500 text-lg">طلبات الطاولة غير مفعلة</p>
+                <p className="text-gray-400 text-sm mt-2">يمكنك تفعيل طلبات الطاولة من تبويب "إعدادات الطلبات"</p>
+              </div>
+            ) : currentAdmin.tablesCount && currentAdmin.tablesCount > 0 ? (
               <div className="space-y-6">
                 {Array.from({ length: currentAdmin.tablesCount }, (_, i) => i + 1).map(tableNum => {
                   const tableUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/menu/${currentAdmin.username}?table=${tableNum}`;
@@ -1422,7 +1453,7 @@ export default function AdminPage() {
             ) : (
               <div className="text-center py-12 text-gray-500">
                 <p className="text-lg mb-2">لم يتم إضافة أي طاولات بعد</p>
-                <p className="text-sm">قم بتفعيل طلبات الطاولة وإضافة عدد الطاولات من تبويب "إعدادات الطلبات"</p>
+                <p className="text-sm">أضف طاولة أو اكثر من خلال "إعدادات الطلبات"</p>
               </div>
             )}
           </div>

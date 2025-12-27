@@ -420,78 +420,92 @@ export default function CartPopup({ themeColors, cardStyle, contactMessage, what
           {/* Customer Form */}
           <div className="fixed inset-0 z-[61] flex items-center justify-center p-4">
             <div
-              className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md p-8"
+              className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden"
               onClick={(e) => e.stopPropagation()}
               dir="rtl"
             >
               {/* Header */}
               <div
-                className="p-6 mb-6 rounded-3xl"
+                className="p-6 flex justify-between items-center rounded-t-[2.5rem]"
                 style={{
                   background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
                 }}
               >
-                <h2 className="text-2xl font-bold text-white text-center">إدخال بيانات العميل</h2>
+                <h2 className="text-2xl font-bold text-white">ادخل معلومات التواصل معك</h2>
+                <button
+                  onClick={() => {
+                    setShowCustomerForm(false);
+                    setCustomerName('');
+                    setCustomerPhone('');
+                  }}
+                  className="text-white hover:text-gray-200 transition-colors"
+                  title="إغلاق"
+                >
+                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
 
               {/* Form Fields */}
-              <div className="space-y-4 mb-6">
-                {/* Name Input */}
-                <div>
-                  <label className="block text-gray-700 font-bold mb-2">الاسم</label>
-                  <input
-                    type="text"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    placeholder="أدخل اسمك"
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 focus:outline-none transition-colors text-gray-800"
-                    onFocus={(e) => {
-                      e.target.style.borderColor = themeColors.primary;
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '#d1d5db';
-                    }}
-                  />
+              <div className="p-8">
+                <div className="space-y-4 mb-6">
+                  {/* Name Input */}
+                  <div>
+                    <label className="block text-gray-700 font-bold mb-2">الاسم</label>
+                    <input
+                      type="text"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder="أدخل اسمك"
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 focus:outline-none transition-colors text-gray-800"
+                      onFocus={(e) => {
+                        e.target.style.borderColor = themeColors.primary;
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.borderColor = '#d1d5db';
+                      }}
+                    />
+                  </div>
+
+                  {/* Phone Input */}
+                  <div>
+                    <label className="block text-gray-700 font-bold mb-2">رقم الهاتف</label>
+                    <input
+                      type="tel"
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      placeholder="أدخل رقم الهاتف"
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 focus:outline-none transition-colors text-gray-800"
+                      onFocus={(e) => {
+                        e.target.style.borderColor = themeColors.primary;
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.borderColor = '#d1d5db';
+                      }}
+                    />
+                  </div>
                 </div>
 
-                {/* Phone Input */}
-                <div>
-                  <label className="block text-gray-700 font-bold mb-2">رقم الهاتف</label>
-                  <input
-                    type="tel"
-                    value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
-                    placeholder="أدخل رقم الهاتف"
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 focus:outline-none transition-colors text-gray-800"
-                    onFocus={(e) => {
-                      e.target.style.borderColor = themeColors.primary;
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '#d1d5db';
-                    }}
-                  />
-                </div>
+                {/* Send Order Button */}
+                <button
+                  onClick={async () => {
+                    if (!customerName.trim() || !customerPhone.trim()) {
+                      return;
+                    }
+                    await saveOrder('website', customerName, customerPhone);
+                    setCustomerName('');
+                    setCustomerPhone('');
+                  }}
+                  disabled={isLoading || !customerName.trim() || !customerPhone.trim()}
+                  className="w-full py-4 text-white font-bold rounded-2xl transition-all transform hover:scale-105 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
+                  style={{
+                    background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
+                  }}
+                >
+                  {isLoading ? '. . .' : 'إرسال الطلب'}
+                </button>
               </div>
-
-              {/* Send Order Button */}
-              <button
-                onClick={async () => {
-                  if (!customerName.trim() || !customerPhone.trim()) {
-                    alert('الرجاء إدخال الاسم ورقم الهاتف');
-                    return;
-                  }
-                  await saveOrder('website', customerName, customerPhone);
-                  setCustomerName('');
-                  setCustomerPhone('');
-                }}
-                disabled={isLoading}
-                className="w-full py-4 text-white font-bold rounded-2xl transition-all transform hover:scale-105 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
-                style={{
-                  background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
-                }}
-              >
-                {isLoading ? '. . .' : 'إرسال الطلب'}
-              </button>
             </div>
           </div>
         </>
