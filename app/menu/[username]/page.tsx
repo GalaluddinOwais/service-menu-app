@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { FONTS, balooBhaijaanFont } from '@/lib/fonts';
+import { CartProvider, useCart } from '@/contexts/CartContext';
+import CartPopup from '@/components/CartPopup';
 
 interface Admin {
   id: string;
@@ -14,6 +16,11 @@ interface Admin {
   fontFamily?: 'cairo' | 'baloo-bhaijaan' | 'zain';
   welcomeMessage?: string;
   contactMessage?: string;
+  whatsappNumber?: string;
+  isAcceptingOrders?: boolean;
+  isAcceptingOrdersViaWhatsapp?: boolean;
+  isAcceptingTableOrders?: boolean;
+  tablesCount?: number;
 }
 
 interface MenuList {
@@ -159,9 +166,10 @@ const CARD_STYLES = {
   },
 };
 
-export default function PublicMenuPage() {
+function MenuContent({ tableNumberFromParent }: { tableNumberFromParent?: number | null }) {
   const params = useParams();
   const username = params.username as string;
+  const { cart, addToCart, updateQuantity, removeFromCart, setIsCartOpen } = useCart();
 
   const [admin, setAdmin] = useState<Admin | null>(null);
   const [lists, setLists] = useState<MenuList[]>([]);
@@ -172,6 +180,9 @@ export default function PublicMenuPage() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [displayedText, setDisplayedText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+
+  // استخدام tableNumber من parent
+  const tableNumber = tableNumberFromParent;
 
   useEffect(() => {
     fetchMenuData();
@@ -318,7 +329,7 @@ export default function PublicMenuPage() {
 
   return (
     <div
-      className={`min-h-screen relative overflow-hidden ${fontClass}`}
+      className={`min-h-screen ${fontClass}`}
       dir="rtl"
       style={{
         background: admin.backgroundUrl
@@ -326,7 +337,7 @@ export default function PublicMenuPage() {
           : `linear-gradient(135deg, ${theme.primary}20, ${theme.secondary}30, ${theme.accent}10)`
       }}
     >
-      <div className="relative z-10 container mx-auto px-4 py-8 max-w-6xl">
+      <div className="z-10 container mx-auto px-4 py-8 max-w-6xl">
         {/* Header */}
         <div className="text-center mb-12 animate-fade-in">
           {admin.logoUrl && (
@@ -550,6 +561,72 @@ export default function PublicMenuPage() {
                                       </div>
                                     </div>
                                   </div>
+
+                                  {/* Add to Cart Control */}
+                                  {(() => {
+                                    const cartItem = cart.find(ci => ci.id === item.id);
+                                    const quantity = cartItem?.quantity || 0;
+
+                                    return (
+                                      <div
+                                        className="absolute bottom-2 right-2 h-7 text-white rounded-full flex items-center shadow-lg z-20"
+                                        style={{
+                                          background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`
+                                        }}
+                                      >
+                                        {quantity > 0 ? (
+                                          <>
+                                            {/* Increase Button */}
+                                            <button
+                                              onClick={() => updateQuantity(item.id, quantity + 1)}
+                                              className="w-7 h-7 flex items-center justify-center hover:opacity-80 transition-opacity"
+                                            >
+                                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" />
+                                              </svg>
+                                            </button>
+
+                                            {/* Quantity Display */}
+                                            <div className="px-2 text-sm font-bold min-w-[1.5rem] text-center">
+                                              {quantity}
+                                            </div>
+
+                                            {/* Decrease Button */}
+                                            <button
+                                              onClick={() => {
+                                                if (quantity === 1) {
+                                                  removeFromCart(item.id);
+                                                } else {
+                                                  updateQuantity(item.id, quantity - 1);
+                                                }
+                                              }}
+                                              className="w-7 h-7 flex items-center justify-center hover:opacity-80 transition-opacity"
+                                            >
+                                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M20 12H4" />
+                                              </svg>
+                                            </button>
+                                          </>
+                                        ) : (
+                                          <button
+                                            onClick={() => addToCart({
+                                              id: item.id,
+                                              name: item.name,
+                                              price: item.price,
+                                              discountedPrice: item.discountedPrice,
+                                              imageUrl: item.imageUrl,
+                                            })}
+                                            className="w-7 h-7 flex items-center justify-center hover:opacity-80 transition-opacity"
+                                            title="إضافة للسلة"
+                                          >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" />
+                                            </svg>
+                                          </button>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                               </div>
                             );
@@ -717,6 +794,72 @@ export default function PublicMenuPage() {
                                       </div>
                                     )}
                                   </div>
+
+                                  {/* Add to Cart Control */}
+                                  {(() => {
+                                    const cartItem = cart.find(ci => ci.id === item.id);
+                                    const quantity = cartItem?.quantity || 0;
+
+                                    return (
+                                      <div
+                                        className="absolute bottom-2 right-2 h-7 text-white rounded-full flex items-center shadow-lg z-20"
+                                        style={{
+                                          background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`
+                                        }}
+                                      >
+                                        {quantity > 0 ? (
+                                          <>
+                                            {/* Increase Button */}
+                                            <button
+                                              onClick={() => updateQuantity(item.id, quantity + 1)}
+                                              className="w-7 h-7 flex items-center justify-center hover:opacity-80 transition-opacity"
+                                            >
+                                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" />
+                                              </svg>
+                                            </button>
+
+                                            {/* Quantity Display */}
+                                            <div className="px-2 text-sm font-bold min-w-[1.5rem] text-center">
+                                              {quantity}
+                                            </div>
+
+                                            {/* Decrease Button */}
+                                            <button
+                                              onClick={() => {
+                                                if (quantity === 1) {
+                                                  removeFromCart(item.id);
+                                                } else {
+                                                  updateQuantity(item.id, quantity - 1);
+                                                }
+                                              }}
+                                              className="w-7 h-7 flex items-center justify-center hover:opacity-80 transition-opacity"
+                                            >
+                                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M20 12H4" />
+                                              </svg>
+                                            </button>
+                                          </>
+                                        ) : (
+                                          <button
+                                            onClick={() => addToCart({
+                                              id: item.id,
+                                              name: item.name,
+                                              price: item.price,
+                                              discountedPrice: item.discountedPrice,
+                                              imageUrl: item.imageUrl,
+                                            })}
+                                            className="w-7 h-7 flex items-center justify-center hover:opacity-80 transition-opacity"
+                                            title="إضافة للسلة"
+                                          >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" />
+                                            </svg>
+                                          </button>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                               </div>
                             );
@@ -793,6 +936,41 @@ export default function PublicMenuPage() {
         </div>
       )}
 
+      {/* Cart Popup */}
+      <CartPopup
+        themeColors={{
+          primary: theme.primary,
+          secondary: theme.secondary,
+        }}
+        cardStyle={cardStyle}
+        contactMessage={admin.contactMessage}
+        whatsappNumber={admin.whatsappNumber}
+        isAcceptingOrders={admin.isAcceptingOrders}
+        isAcceptingOrdersViaWhatsapp={admin.isAcceptingOrdersViaWhatsapp}
+        isAcceptingTableOrders={admin.isAcceptingTableOrders}
+        tableNumber={tableNumber}
+        adminId={admin.id}
+      />
+
+      {/* Floating Cart Button - Bottom Left */}
+      <button
+        onClick={() => setIsCartOpen(true)}
+        className="fixed bottom-6 left-6 w-16 h-16 text-white rounded-full shadow-2xl flex flex-col items-center justify-center z-[45] transition-all transform hover:scale-110"
+        style={{
+          background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`
+        }}
+        title="عرض السلة"
+      >
+        <svg className="w-7 h-7 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+        </svg>
+        {cart.length > 0 && (
+          <div className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-xs font-bold">
+            {cart.reduce((total, item) => total + item.quantity, 0)}
+          </div>
+        )}
+      </button>
+
       {/* Custom animations */}
       <style jsx>{`
         @keyframes slideUp {
@@ -847,8 +1025,8 @@ export default function PublicMenuPage() {
         .price-strikethrough::after {
           content: '';
           position: absolute;
-          left: 0;
-          right: 0;
+          left: -10%;
+          right: -10%;
           top: 50%;
           transform: translateY(-50%) rotate(15deg);
           height: 1.5px;
@@ -856,5 +1034,29 @@ export default function PublicMenuPage() {
         }
       `}</style>
     </div>
+  );
+}
+
+export default function PublicMenuPage() {
+  const [tableNumber, setTableNumber] = useState<number | null>(null);
+
+  useEffect(() => {
+    // فحص إذا كان هناك معامل table في URL
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const table = urlParams.get('table');
+      if (table) {
+        const tableNum = parseInt(table);
+        if (!isNaN(tableNum) && tableNum > 0) {
+          setTableNumber(tableNum);
+        }
+      }
+    }
+  }, []);
+
+  return (
+    <CartProvider tableNumber={tableNumber}>
+      <MenuContent tableNumberFromParent={tableNumber} />
+    </CartProvider>
   );
 }

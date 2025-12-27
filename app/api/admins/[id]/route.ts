@@ -58,7 +58,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { username, currentPassword, newPassword, logoUrl, backgroundUrl, theme, cardStyle, fontFamily, welcomeMessage, contactMessage } = body;
+    const { username, currentPassword, newPassword, logoUrl, backgroundUrl, theme, cardStyle, fontFamily, welcomeMessage, contactMessage, whatsappNumber, isAcceptingOrders, isAcceptingOrdersViaWhatsapp, isAcceptingTableOrders, tablesCount } = body;
 
     // التحقق من كلمة المرور فقط إذا أراد تغيير كلمة المرور
     if (newPassword) {
@@ -89,6 +89,11 @@ export async function PUT(
     if (fontFamily !== undefined) updates.fontFamily = fontFamily;
     if (welcomeMessage !== undefined) updates.welcomeMessage = welcomeMessage;
     if (contactMessage !== undefined) updates.contactMessage = contactMessage;
+    if (whatsappNumber !== undefined) updates.whatsappNumber = whatsappNumber;
+    if (isAcceptingOrders !== undefined) updates.isAcceptingOrders = isAcceptingOrders;
+    if (isAcceptingOrdersViaWhatsapp !== undefined) updates.isAcceptingOrdersViaWhatsapp = isAcceptingOrdersViaWhatsapp;
+    if (isAcceptingTableOrders !== undefined) updates.isAcceptingTableOrders = isAcceptingTableOrders;
+    if (tablesCount !== undefined) updates.tablesCount = tablesCount;
 
     const updatedAdmin = await updateAdmin(id, updates);
 
@@ -135,6 +140,11 @@ export async function PATCH(
     if (body.fontFamily !== undefined) updates.fontFamily = body.fontFamily;
     if (body.welcomeMessage !== undefined) updates.welcomeMessage = body.welcomeMessage;
     if (body.contactMessage !== undefined) updates.contactMessage = body.contactMessage;
+    if (body.whatsappNumber !== undefined) updates.whatsappNumber = body.whatsappNumber;
+    if (body.isAcceptingOrders !== undefined) updates.isAcceptingOrders = body.isAcceptingOrders;
+    if (body.isAcceptingOrdersViaWhatsapp !== undefined) updates.isAcceptingOrdersViaWhatsapp = body.isAcceptingOrdersViaWhatsapp;
+    if (body.isAcceptingTableOrders !== undefined) updates.isAcceptingTableOrders = body.isAcceptingTableOrders;
+    if (body.tablesCount !== undefined) updates.tablesCount = body.tablesCount;
 
     const updatedAdmin = await updateAdmin(id, updates);
 

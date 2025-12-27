@@ -14,6 +14,11 @@ interface Admin {
   theme: 'ocean' | 'sunset' | 'forest' | 'royal' | 'rose' | 'midnight' | 'coral' | 'emerald' | 'lavender' | 'crimson' | 'coffee' | 'canary';
   welcomeMessage?: string;
   contactMessage?: string;
+  whatsappNumber?: string;
+  isAcceptingOrders?: boolean;
+  isAcceptingOrdersViaWhatsapp?: boolean;
+  isAcceptingTableOrders?: boolean;
+  tablesCount?: number;
 }
 
 interface MenuList {
@@ -31,6 +36,26 @@ interface MenuItem {
   imageUrl?: string;
   description?: string;
   listId: string;
+}
+
+interface OrderItem {
+  name: string;
+  quantity: number;
+  price: number;
+  discountedPrice?: number;
+  imageUrl?: string;
+}
+
+interface Order {
+  id: string;
+  adminId: string;
+  orderType: 'website' | 'whatsapp';
+  items: OrderItem[];
+  totalPrice: number;
+  totalDiscount: number;
+  customerName?: string;
+  customerPhone?: string;
+  createdAt: string;
 }
 
 const THEMES = {
@@ -53,10 +78,12 @@ export default function AdminPage() {
   const [currentAdmin, setCurrentAdmin] = useState<Admin | null>(null);
   const [lists, setLists] = useState<MenuList[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [tableOrders, setTableOrders] = useState<any[]>([]);
   const [selectedList, setSelectedList] = useState<MenuList | null>(null);
   const [editingList, setEditingList] = useState<MenuList | null>(null);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
-  const [activeTab, setActiveTab] = useState<'lists' | 'settings'>('lists');
+  const [activeTab, setActiveTab] = useState<'lists' | 'settings' | 'delivery' | 'orders' | 'tableOrders'>('lists');
 
   const [listFormData, setListFormData] = useState({
     name: '',
@@ -83,6 +110,17 @@ export default function AdminPage() {
     newPassword: '',
   });
 
+  const [deliveryFormData, setDeliveryFormData] = useState({
+    whatsappNumber: '',
+    isAcceptingOrders: false,
+    isAcceptingOrdersViaWhatsapp: false,
+    isAcceptingTableOrders: false,
+    tablesCount: 0,
+  });
+
+  const [isRefreshingOrders, setIsRefreshingOrders] = useState(false);
+  const [isRefreshingTableOrders, setIsRefreshingTableOrders] = useState(false);
+
   useEffect(() => {
     const adminData = localStorage.getItem('admin_data');
     if (!adminData) {
@@ -103,6 +141,13 @@ export default function AdminPage() {
       contactMessage: admin.contactMessage || '',
       currentPassword: '',
       newPassword: '',
+    });
+    setDeliveryFormData({
+      whatsappNumber: admin.whatsappNumber || '',
+      isAcceptingOrders: admin.isAcceptingOrders || false,
+      isAcceptingOrdersViaWhatsapp: admin.isAcceptingOrdersViaWhatsapp || false,
+      isAcceptingTableOrders: admin.isAcceptingTableOrders || false,
+      tablesCount: admin.tablesCount || 0,
     });
     fetchData(admin.id);
   }, [router]);
@@ -132,7 +177,69 @@ export default function AdminPage() {
     const menuRes = await fetch('/api/menu');
     const menuData = await menuRes.json();
     setItems(Array.isArray(menuData.items) ? menuData.items : []);
+
+    // جلب الطلبات الخاصة بالأدمن
+    const ordersRes = await fetch(`/api/orders?adminId=${adminId}`);
+    const ordersData = await ordersRes.json();
+    setOrders(Array.isArray(ordersData) ? ordersData : []);
+
+    // جلب طلبات الطاولات الخاصة بالأدمن
+    const tableOrdersRes = await fetch(`/api/table-orders?adminId=${adminId}`);
+    const tableOrdersData = await tableOrdersRes.json();
+    setTableOrders(Array.isArray(tableOrdersData) ? tableOrdersData : []);
   };
+
+  // دالة لتحديث طلبات التوصيل فقط
+  const refreshOrders = async () => {
+    if (!currentAdmin) return;
+    setIsRefreshingOrders(true);
+    try {
+      const ordersRes = await fetch(`/api/orders?adminId=${currentAdmin.id}`);
+      const ordersData = await ordersRes.json();
+      setOrders(Array.isArray(ordersData) ? ordersData : []);
+    } catch (error) {
+      console.error('Error refreshing orders:', error);
+    } finally {
+      setIsRefreshingOrders(false);
+    }
+  };
+
+  // دالة لتحديث طلبات الطاولات فقط
+  const refreshTableOrders = async () => {
+    if (!currentAdmin) return;
+    setIsRefreshingTableOrders(true);
+    try {
+      const tableOrdersRes = await fetch(`/api/table-orders?adminId=${currentAdmin.id}`);
+      const tableOrdersData = await tableOrdersRes.json();
+      setTableOrders(Array.isArray(tableOrdersData) ? tableOrdersData : []);
+    } catch (error) {
+      console.error('Error refreshing table orders:', error);
+    } finally {
+      setIsRefreshingTableOrders(false);
+    }
+  };
+
+  // Auto-refresh لطلبات التوصيل كل 5 دقائق
+  useEffect(() => {
+    if (!currentAdmin || activeTab !== 'orders') return;
+
+    const interval = setInterval(() => {
+      refreshOrders();
+    }, 5 * 60 * 1000); // 5 دقائق
+
+    return () => clearInterval(interval);
+  }, [currentAdmin, activeTab]);
+
+  // Auto-refresh لطلبات الطاولات كل دقيقة
+  useEffect(() => {
+    if (!currentAdmin || activeTab !== 'tableOrders') return;
+
+    const interval = setInterval(() => {
+      refreshTableOrders();
+    }, 60 * 1000); // دقيقة واحدة
+
+    return () => clearInterval(interval);
+  }, [currentAdmin, activeTab]);
 
   const handleListSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -352,6 +459,35 @@ export default function AdminPage() {
     }
   };
 
+  const handleDeliverySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentAdmin) return;
+
+    // التحقق من أن رقم الواتساب موجود إذا كان الطلب عبر الواتساب مفعل
+    if (deliveryFormData.isAcceptingOrdersViaWhatsapp && !deliveryFormData.whatsappNumber.trim()) {
+      alert('يجب إدخال رقم الواتساب لتفعيل الطلب عبر واتساب');
+      return;
+    }
+
+    const res = await fetch(`/api/admins/${currentAdmin.id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(deliveryFormData),
+    });
+
+    if (res.ok) {
+      const updatedAdmin = await res.json();
+      const newAdminData = { ...currentAdmin, ...updatedAdmin };
+      setCurrentAdmin(newAdminData);
+      localStorage.setItem('admin_data', JSON.stringify(newAdminData));
+
+      alert('تم حفظ إعدادات التوصيل بنجاح!');
+    } else {
+      const error = await res.json();
+      alert(`فشل حفظ الإعدادات: ${error.error || 'خطأ غير معروف'}`);
+    }
+  };
+
   const getListItems = (listId: string) => {
     return items.filter(item => item.listId === listId);
   };
@@ -410,6 +546,38 @@ export default function AdminPage() {
               إدارة القوائم
             </button>
             <button
+              onClick={() => setActiveTab('orders')}
+              className={`px-6 py-3 font-bold transition-colors ${
+                activeTab === 'orders'
+                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              طلبات التوصيل
+            </button>
+            {currentAdmin?.isAcceptingTableOrders && (
+              <button
+                onClick={() => setActiveTab('tableOrders')}
+                className={`px-6 py-3 font-bold transition-colors ${
+                  activeTab === 'tableOrders'
+                    ? 'border-b-2 border-purple-600 text-purple-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                طلبات الطاولات
+              </button>
+            )}
+            <button
+              onClick={() => setActiveTab('delivery')}
+              className={`px-6 py-3 font-bold transition-colors ${
+                activeTab === 'delivery'
+                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              إعدادات الطلبات
+            </button>
+            <button
               onClick={() => setActiveTab('settings')}
               className={`px-6 py-3 font-bold transition-colors ${
                 activeTab === 'settings'
@@ -423,7 +591,7 @@ export default function AdminPage() {
         </div>
 
         {/* Content */}
-        {activeTab === 'lists' ? (
+        {activeTab === 'lists' && (
           <div className="grid md:grid-cols-3 gap-6">
             {/* قسم إدارة القوائم */}
             <div className="bg-white p-6 rounded-lg shadow-md">
@@ -673,7 +841,259 @@ export default function AdminPage() {
               )}
             </div>
           </div>
-        ) : (
+        )}
+
+        {activeTab === 'orders' && (
+          <div className="bg-white p-8 rounded-lg shadow-md">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">الطلبات</h2>
+              <button
+                onClick={refreshOrders}
+                disabled={isRefreshingOrders}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="تحديث الطلبات"
+              >
+                <svg
+                  className={`w-5 h-5 ${isRefreshingOrders ? 'animate-spin' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+                {isRefreshingOrders ? 'جاري التحديث...' : 'تحديث'}
+              </button>
+            </div>
+            {orders.length === 0 ? (
+              <div className="text-center py-12">
+                <svg className="mx-auto h-16 w-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                </svg>
+                <p className="text-gray-500 text-lg">لا توجد طلبات بعد</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map((order) => (
+                  <div key={order.id} className="border-2 border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <div className="flex items-center gap-3">
+                          <h3 className="text-lg font-bold text-gray-800">طلب #{order.id.replace('order_', '')}</h3>
+                          {order.orderType === 'whatsapp' ? (
+                            <span className="px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">
+                              واتساب
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="text-sm text-gray-500 mt-1">
+                          {new Date(order.createdAt).toLocaleString('ar-EG', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                        {order.orderType === 'website' && order.customerName && order.customerPhone && (
+                          <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                            <div className="flex items-center gap-2 mb-1">
+                              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                              </svg>
+                              <span className="text-sm font-bold text-gray-800">{order.customerName}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                              </svg>
+                              <span className="text-sm font-bold text-gray-800">{order.customerPhone}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-left">
+                        <p className="text-2xl font-black text-blue-600">{order.totalPrice} جـ</p>
+                        {order.totalDiscount > 0 && (
+                          <p className="text-sm text-green-600 font-bold">وفر {order.totalDiscount} جـ</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="border-t-2 border-gray-100 pt-4">
+                      <h4 className="font-bold text-gray-700 mb-3">العناصر:</h4>
+                      <div className="space-y-2">
+                        {order.items.map((item, idx) => (
+                          <div key={idx} className="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
+                            <div className="flex items-center gap-3">
+                              {item.imageUrl && (
+                                <img src={item.imageUrl} alt={item.name} className="w-12 h-12 object-cover rounded-lg" />
+                              )}
+                              <div>
+                                <p className="font-bold text-gray-800">{item.name}</p>
+                                <p className="text-sm text-gray-500">الكمية: {item.quantity}</p>
+                              </div>
+                            </div>
+                            <div className="text-left">
+                              <p className="font-bold text-gray-800">
+                                {(item.discountedPrice || item.price) * item.quantity} جـ
+                              </p>
+                              {item.discountedPrice && item.discountedPrice < item.price && (
+                                <p className="text-xs text-gray-500 line-through">
+                                  {item.price * item.quantity} جـ
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'delivery' && (
+          <div className="bg-white p-8 rounded-lg shadow-md max-w-2xl mx-auto">
+            <h2 className="text-2xl font-bold mb-6 text-gray-800">إعدادات طلبات التوصيل</h2>
+            <form onSubmit={handleDeliverySubmit} className="space-y-6">
+              <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={deliveryFormData.isAcceptingOrders}
+                    onChange={(e) => setDeliveryFormData({ ...deliveryFormData, isAcceptingOrders: e.target.checked })}
+                    className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-base font-bold text-gray-800">تفعيل الطلب عبر الموقع</span>
+                    <p className="text-xs text-gray-600 mt-1">عند التفعيل، سيظهر زر "اطلب الآن عبر الموقع" في السلة</p>
+                  </div>
+                </label>
+              </div>
+
+              <div className="border-t-2 border-gray-200 pt-6">
+                <h3 className="text-lg font-bold text-gray-800 mb-4">إعدادات الواتساب</h3>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    رقم الواتساب
+                  </label>
+                  <input
+                    type="tel"
+                    value={deliveryFormData.whatsappNumber}
+                    onChange={(e) => setDeliveryFormData({ ...deliveryFormData, whatsappNumber: e.target.value })}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
+                    placeholder="مثال: 201234567890"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">مطلوب لتفعيل الطلب عبر واتساب (مع كود الدولة بدون +)</p>
+                </div>
+
+                <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4 mt-4">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={deliveryFormData.isAcceptingOrdersViaWhatsapp}
+                      onChange={(e) => {
+                        if (e.target.checked && !deliveryFormData.whatsappNumber.trim()) {
+                          alert('يجب إدخال رقم الواتساب أولاً');
+                          return;
+                        }
+                        setDeliveryFormData({ ...deliveryFormData, isAcceptingOrdersViaWhatsapp: e.target.checked });
+                      }}
+                      className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                      disabled={!deliveryFormData.whatsappNumber.trim()}
+                    />
+                    <div className="flex-1">
+                      <span className="text-base font-bold text-gray-800">تفعيل الطلب عبر واتساب</span>
+                      <p className="text-xs text-gray-600 mt-1">
+                        {deliveryFormData.whatsappNumber.trim()
+                          ? 'عند التفعيل، سيظهر زر "اطلب من خلال واتساب" في السلة'
+                          : 'يجب إدخال رقم الواتساب أولاً لتفعيل هذا الخيار'}
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div className="border-t-2 border-gray-200 pt-6">
+                <h3 className="text-lg font-bold text-gray-800 mb-4">إعدادات طلبات الطاولة</h3>
+
+                <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={deliveryFormData.isAcceptingTableOrders}
+                      onChange={(e) => setDeliveryFormData({ ...deliveryFormData, isAcceptingTableOrders: e.target.checked })}
+                      className="w-5 h-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-base font-bold text-gray-800">تفعيل طلبات الطاولة</span>
+                      <p className="text-xs text-gray-600 mt-1">للمطاعم - يمكن للعملاء الطلب من الطاولة مباشرة</p>
+                    </div>
+                  </label>
+                </div>
+
+                {deliveryFormData.isAcceptingTableOrders && (
+                  <div className="mt-4">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      عدد الطاولات
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setDeliveryFormData({
+                          ...deliveryFormData,
+                          tablesCount: Math.max(0, deliveryFormData.tablesCount - 1)
+                        })}
+                        className="w-10 h-10 bg-red-500 hover:bg-red-600 text-white rounded-lg font-bold text-xl transition-colors"
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        value={deliveryFormData.tablesCount}
+                        onChange={(e) => setDeliveryFormData({
+                          ...deliveryFormData,
+                          tablesCount: Math.max(0, parseInt(e.target.value) || 0)
+                        })}
+                        min="0"
+                        className="w-24 px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-purple-500 transition-colors text-center font-bold text-lg"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setDeliveryFormData({
+                          ...deliveryFormData,
+                          tablesCount: deliveryFormData.tablesCount + 1
+                        })}
+                        className="w-10 h-10 bg-green-500 hover:bg-green-600 text-white rounded-lg font-bold text-xl transition-colors"
+                      >
+                        +
+                      </button>
+                      <span className="text-sm text-gray-600">طاولة</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">سيتم إنشاء رابط خاص و QR كود لكل طاولة</p>
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white py-3 px-4 rounded-lg font-bold text-lg transition-all duration-200 transform hover:scale-[1.02] shadow-lg"
+              >
+                حفظ
+              </button>
+            </form>
+          </div>
+        )}
+
+        {activeTab === 'settings' && (
           <div className="bg-white p-8 rounded-lg shadow-md max-w-2xl mx-auto">
             <h2 className="text-2xl font-bold mb-6 text-gray-800">إعدادات الحساب</h2>
             <form onSubmit={handleSettingsSubmit} className="space-y-6">
@@ -840,6 +1260,171 @@ export default function AdminPage() {
                 حفظ الإعدادات
               </button>
             </form>
+          </div>
+        )}
+
+        {/* Table Orders Tab */}
+        {activeTab === 'tableOrders' && currentAdmin?.isAcceptingTableOrders && (
+          <div className="bg-white p-8 rounded-lg shadow-md">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">طلبات الطاولات</h2>
+              <button
+                onClick={refreshTableOrders}
+                disabled={isRefreshingTableOrders}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="تحديث طلبات الطاولات"
+              >
+                <svg
+                  className={`w-5 h-5 ${isRefreshingTableOrders ? 'animate-spin' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+                {isRefreshingTableOrders ? 'جاري التحديث...' : 'تحديث'}
+              </button>
+            </div>
+
+            {/* Display tables with their orders */}
+            {currentAdmin.tablesCount && currentAdmin.tablesCount > 0 ? (
+              <div className="space-y-6">
+                {Array.from({ length: currentAdmin.tablesCount }, (_, i) => i + 1).map(tableNum => {
+                  const tableUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/menu/${currentAdmin.username}?table=${tableNum}`;
+                  const tableOrdersForTable = tableOrders.filter(order => order.tableNumber === tableNum);
+
+                  return (
+                    <div key={tableNum} className="border-2 border-purple-200 rounded-xl p-6 bg-purple-50">
+                      {/* Table Header */}
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex-1">
+                          <h3 className="text-xl font-bold text-purple-800 mb-2">طاولة رقم {tableNum}</h3>
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-gray-600 font-medium">رابط الطاولة:</span>
+                              <a
+                                href={tableUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:text-blue-800 underline text-sm break-all"
+                              >
+                                {tableUrl}
+                              </a>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(tableUrl);
+                                  alert('تم نسخ الرابط!');
+                                }}
+                                className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-colors"
+                              >
+                                نسخ
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* QR Code */}
+                        <div className="text-center">
+                          <div className="w-32 h-32 bg-white border-2 border-purple-300 rounded-lg p-2">
+                            <img
+                              src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(tableUrl)}`}
+                              alt={`QR Code للطاولة ${tableNum}`}
+                              className="w-full h-full object-contain"
+                            />
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">QR كود</p>
+                        </div>
+                      </div>
+
+                      {/* Orders for this table */}
+                      <div className="mt-4">
+                        <h4 className="font-bold text-gray-700 mb-3">
+                          الطلبات الواردة ({tableOrdersForTable.length})
+                        </h4>
+                        {tableOrdersForTable.length === 0 ? (
+                          <p className="text-gray-500 text-center py-4">لا توجد طلبات لهذه الطاولة بعد</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {tableOrdersForTable
+                              .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                              .map((order) => (
+                              <div key={order.id} className="bg-white border-2 border-gray-200 rounded-lg p-4">
+                                <div className="flex justify-between items-start mb-2">
+                                  <div>
+                                    <h5 className="font-bold text-gray-800">طلب #{order.id.replace('table_order_', '')}</h5>
+                                    <p className="text-xs text-gray-500">
+                                      {new Date(order.createdAt).toLocaleString('ar-EG', {
+                                        year: 'numeric',
+                                        month: 'long',
+                                        day: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })}
+                                    </p>
+                                  </div>
+                                  <div className="text-left">
+                                    <p className="text-xl font-black text-purple-600">{order.totalPrice} جـ</p>
+                                    {order.totalDiscount > 0 && (
+                                      <p className="text-xs text-green-600 font-bold">وفر {order.totalDiscount} جـ</p>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="border-t pt-2 mt-2">
+                                  <p className="text-sm font-bold text-gray-700 mb-1">العناصر:</p>
+                                  <ul className="text-sm text-gray-600 space-y-1">
+                                    {order.items.map((item: any, idx: number) => (
+                                      <li key={idx} className="flex justify-between">
+                                        <span>• {item.name} × {item.quantity}</span>
+                                        <span className="font-bold">{item.price} جـ</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+
+                                <button
+                                  onClick={async () => {
+                                    if (confirm('هل أنت متأكد من حذف هذا الطلب؟')) {
+                                      const token = localStorage.getItem('session_token');
+                                      const res = await fetch(`/api/table-orders/${order.id}`, {
+                                        method: 'DELETE',
+                                        headers: {
+                                          'Authorization': `Bearer ${token}`,
+                                        },
+                                      });
+
+                                      if (res.ok) {
+                                        setTableOrders(tableOrders.filter(o => o.id !== order.id));
+                                        alert('تم حذف الطلب بنجاح!');
+                                      } else {
+                                        alert('فشل حذف الطلب');
+                                      }
+                                    }
+                                  }}
+                                  className="mt-3 w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg font-bold text-sm transition-colors"
+                                >
+                                  حذف الطلب
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-500">
+                <p className="text-lg mb-2">لم يتم إضافة أي طاولات بعد</p>
+                <p className="text-sm">قم بتفعيل طلبات الطاولة وإضافة عدد الطاولات من تبويب "إعدادات الطلبات"</p>
+              </div>
+            )}
           </div>
         )}
       </div>

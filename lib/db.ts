@@ -28,6 +28,11 @@ export interface Admin {
   fontFamily?: 'cairo' | 'baloo-bhaijaan' | 'zain'; // الخط
   welcomeMessage?: string; // رسالة ترحيبية تظهر بعد الشعار
   contactMessage?: string; // رسالة تواصل تظهر بعد كل قائمة
+  whatsappNumber?: string; // رقم الواتساب
+  isAcceptingOrders?: boolean; // تفعيل الطلب من الموقع
+  isAcceptingOrdersViaWhatsapp?: boolean; // تفعيل الطلب عبر واتساب
+  isAcceptingTableOrders?: boolean; // تفعيل طلبات الطاولة
+  tablesCount?: number; // عدد الطاولات المتاحة
 }
 
 export interface MenuList {
@@ -47,10 +52,42 @@ export interface MenuItem {
   listId: string;
 }
 
+export interface OrderItem {
+  name: string;
+  quantity: number;
+  price: number;
+  discountedPrice?: number;
+  imageUrl?: string;
+}
+
+export interface Order {
+  id: string;
+  adminId: string;
+  orderType: 'website' | 'whatsapp';
+  items: OrderItem[];
+  totalPrice: number;
+  totalDiscount: number;
+  customerName?: string; // اسم العميل (للطلبات من الموقع)
+  customerPhone?: string; // رقم العميل (للطلبات من الموقع)
+  createdAt: string;
+}
+
+export interface TableOrder {
+  id: string;
+  adminId: string;
+  tableNumber: number; // رقم الطاولة
+  items: OrderItem[];
+  totalPrice: number;
+  totalDiscount: number;
+  createdAt: string;
+}
+
 interface Database {
   admins: Admin[];
   lists: MenuList[];
   items: MenuItem[];
+  orders: Order[];
+  tableOrders: TableOrder[];
 }
 
 // السمات المتاحة
@@ -115,12 +152,16 @@ async function readDB(): Promise<Database> {
   try {
     const data = await kv.get<Database>(KV_KEY);
     if (!data) {
-      return { admins: [], lists: [], items: [] };
+      return { admins: [], lists: [], items: [], orders: [], tableOrders: [] };
+    }
+    // للتوافق مع البيانات القديمة التي لا تحتوي على tableOrders
+    if (!data.tableOrders) {
+      data.tableOrders = [];
     }
     return data;
   } catch (error) {
     console.error('Error reading from KV:', error);
-    return { admins: [], lists: [], items: [] };
+    return { admins: [], lists: [], items: [], orders: [], tableOrders: [] };
   }
 }
 
@@ -276,6 +317,85 @@ export async function deleteAdmin(id: string): Promise<boolean> {
   const adminLists = db.lists.filter(list => list.adminId === id).map(l => l.id);
   db.lists = db.lists.filter(list => list.adminId !== id);
   db.items = db.items.filter(item => !adminLists.includes(item.listId));
+  await writeDB(db);
+  return true;
+}
+
+// دوال إدارة الطلبات
+export async function getOrders(adminId?: string): Promise<Order[]> {
+  const db = await readDB();
+  if (adminId) {
+    return db.orders.filter(order => order.adminId === adminId);
+  }
+  return db.orders;
+}
+
+export async function getOrder(id: string): Promise<Order | null> {
+  const db = await readDB();
+  return db.orders.find(order => order.id === id) || null;
+}
+
+export async function createOrder(order: Omit<Order, 'id' | 'createdAt'>): Promise<Order> {
+  const db = await readDB();
+  const newOrder: Order = {
+    ...order,
+    id: `order_${Date.now()}`,
+    createdAt: new Date().toISOString(),
+  };
+  db.orders.push(newOrder);
+  await writeDB(db);
+  return newOrder;
+}
+
+export async function deleteOrder(id: string): Promise<boolean> {
+  const db = await readDB();
+  const filteredOrders = db.orders.filter(order => order.id !== id);
+  if (filteredOrders.length === db.orders.length) return false;
+
+  db.orders = filteredOrders;
+  await writeDB(db);
+  return true;
+}
+
+// دوال إدارة طلبات الطاولة
+export async function getTableOrders(adminId?: string, tableNumber?: number): Promise<TableOrder[]> {
+  const db = await readDB();
+  let orders = db.tableOrders;
+
+  if (adminId) {
+    orders = orders.filter(order => order.adminId === adminId);
+  }
+
+  if (tableNumber !== undefined) {
+    orders = orders.filter(order => order.tableNumber === tableNumber);
+  }
+
+  return orders;
+}
+
+export async function getTableOrder(id: string): Promise<TableOrder | null> {
+  const db = await readDB();
+  return db.tableOrders.find(order => order.id === id) || null;
+}
+
+export async function createTableOrder(order: Omit<TableOrder, 'id' | 'createdAt'>): Promise<TableOrder> {
+  const db = await readDB();
+  const newOrder: TableOrder = {
+    ...order,
+    id: `table_order_${Date.now()}`,
+    createdAt: new Date().toISOString(),
+  };
+  db.tableOrders.push(newOrder);
+  await writeDB(db);
+  return newOrder;
+}
+
+export async function deleteTableOrder(id: string): Promise<boolean> {
+  const db = await readDB();
+  const filteredOrders = db.tableOrders.filter(order => order.id !== id);
+  if (filteredOrders.length === db.tableOrders.length) return false;
+
+  db.tableOrders = filteredOrders;
   await writeDB(db);
   return true;
 }
