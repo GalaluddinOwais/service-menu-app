@@ -312,7 +312,7 @@ function MenuContent({ tableNumberFromParent }: { tableNumberFromParent?: number
           <p className="text-gray-600 mb-6">تأكد من صحة الرابط وحاول مرة أخرى</p>
           <Link
             href="/"
-            className="inline-block bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-6 py-3 rounded-lg font-bold transition-all transform hover:scale-105"
+            className="inline-block bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-6 py-3 rounded font-bold transition-all transform hover:scale-105"
           >
             العودة للصفحة الرئيسية
           </Link>
@@ -586,10 +586,25 @@ function MenuContent({ tableNumberFromParent }: { tableNumberFromParent?: number
                                               </svg>
                                             </button>
 
-                                            {/* Quantity Display */}
-                                            <div className="px-2 text-sm font-bold min-w-[1.5rem] text-center">
-                                              {quantity}
-                                            </div>
+                                            {/* Quantity Input */}
+                                            <input
+                                              type="number"
+                                              value={quantity}
+                                              onChange={(e) => {
+                                                const newQuantity = parseInt(e.target.value) || 0;
+                                                if (newQuantity > 0) {
+                                                  updateQuantity(item.id, newQuantity);
+                                                } else if (newQuantity === 0) {
+                                                  removeFromCart(item.id);
+                                                }
+                                              }}
+                                              min="1"
+                                              className="text-sm font-bold w-8 text-center text-gray-900 border border-white/30 outline-none appearance-none rounded bg-white"
+                                              style={{
+                                                MozAppearance: 'textfield',
+                                                WebkitAppearance: 'none',
+                                              }}
+                                            />
 
                                             {/* Decrease Button */}
                                             <button
@@ -819,10 +834,25 @@ function MenuContent({ tableNumberFromParent }: { tableNumberFromParent?: number
                                               </svg>
                                             </button>
 
-                                            {/* Quantity Display */}
-                                            <div className="px-2 text-sm font-bold min-w-[1.5rem] text-center">
-                                              {quantity}
-                                            </div>
+                                            {/* Quantity Input */}
+                                            <input
+                                              type="number"
+                                              value={quantity}
+                                              onChange={(e) => {
+                                                const newQuantity = parseInt(e.target.value) || 0;
+                                                if (newQuantity > 0) {
+                                                  updateQuantity(item.id, newQuantity);
+                                                } else if (newQuantity === 0) {
+                                                  removeFromCart(item.id);
+                                                }
+                                              }}
+                                              min="1"
+                                              className="text-sm font-bold w-8 text-center text-gray-900 border border-white/30 outline-none appearance-none rounded bg-white"
+                                              style={{
+                                                MozAppearance: 'textfield',
+                                                WebkitAppearance: 'none',
+                                              }}
+                                            />
 
                                             {/* Decrease Button */}
                                             <button
@@ -1010,6 +1040,14 @@ function MenuContent({ tableNumberFromParent }: { tableNumberFromParent?: number
             transform: translateY(0);
           }
         }
+        input[type='number']::-webkit-inner-spin-button,
+        input[type='number']::-webkit-outer-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        input[type='number'] {
+          -moz-appearance: textfield;
+        }
         @keyframes pulse {
           0%, 100% {
             opacity: 0;
@@ -1038,6 +1076,8 @@ function MenuContent({ tableNumberFromParent }: { tableNumberFromParent?: number
 }
 
 export default function PublicMenuPage() {
+  const params = useParams();
+  const username = params.username as string;
   const [tableNumber, setTableNumber] = useState<number | null>(null);
 
   useEffect(() => {
@@ -1055,7 +1095,7 @@ export default function PublicMenuPage() {
   }, []);
 
   return (
-    <CartProvider tableNumber={tableNumber}>
+    <CartProvider tableNumber={tableNumber} adminUsername={username}>
       <MenuContent tableNumberFromParent={tableNumber} />
     </CartProvider>
   );

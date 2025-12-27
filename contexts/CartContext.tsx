@@ -24,12 +24,12 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
-export function CartProvider({ children, tableNumber }: { children: ReactNode; tableNumber?: number | null }) {
+export function CartProvider({ children, tableNumber, adminUsername }: { children: ReactNode; tableNumber?: number | null; adminUsername: string }) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
   // تحديد مفتاح localStorage حسب نوع الصفحة
-  const CART_STORAGE_KEY = tableNumber ? `menu_cart_table_${tableNumber}` : 'menu_cart';
+  const CART_STORAGE_KEY = tableNumber ? `menu_cart_table_${tableNumber}_${adminUsername}` : `menu_cart_${adminUsername}`;
 
   // تحميل السلة من localStorage عند بدء التطبيق أو تغيير رقم الطاولة
   useEffect(() => {

@@ -145,10 +145,25 @@ export default function CartItemCard({ item, themeColors, cardStyle, imageUrl }:
                 </svg>
               </button>
 
-              {/* Quantity Display */}
-              <div className="px-2 text-sm font-bold min-w-[1.5rem] text-center">
-                {quantity}
-              </div>
+              {/* Quantity Input */}
+              <input
+                type="number"
+                value={quantity}
+                onChange={(e) => {
+                  const newQuantity = parseInt(e.target.value) || 0;
+                  if (newQuantity > 0) {
+                    updateQuantity(item.id, newQuantity);
+                  } else if (newQuantity === 0) {
+                    removeFromCart(item.id);
+                  }
+                }}
+                min="1"
+                className="text-sm font-bold w-8 text-center text-gray-900 border border-white/30 outline-none appearance-none rounded"
+                style={{
+                  MozAppearance: 'textfield',
+                  WebkitAppearance: 'none',
+                }}
+              />
 
               {/* Decrease Button */}
               <button
@@ -184,6 +199,14 @@ export default function CartItemCard({ item, themeColors, cardStyle, imageUrl }:
           transform: translateY(-50%) rotate(15deg);
           height: 1.5px;
           background-color: currentColor;
+        }
+        input[type='number']::-webkit-inner-spin-button,
+        input[type='number']::-webkit-outer-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        input[type='number'] {
+          -moz-appearance: textfield;
         }
       `}</style>
     </div>

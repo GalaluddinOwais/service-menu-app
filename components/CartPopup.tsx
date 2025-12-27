@@ -209,7 +209,7 @@ export default function CartPopup({ themeColors, cardStyle, contactMessage, what
             >
               {/* Header */}
               <div
-                className="p-6 flex justify-between items-center rounded-t-[2.5rem]"
+                className="flex-shrink-0 p-6 flex justify-between items-center rounded-t-[2.5rem]"
                 style={{
                   background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
                 }}
@@ -244,7 +244,7 @@ export default function CartPopup({ themeColors, cardStyle, contactMessage, what
               </div>
 
               {/* Cart Items - Fixed Height with Scroll */}
-              <div className="flex-1 overflow-y-auto p-6">
+              <div className="overflow-y-auto p-6 scrollbar-custom" style={{ maxHeight: 'calc(85vh - 300px)' }}>
                 {cart.length === 0 ? (
                   <div className="text-center py-12">
                     <svg className="w-20 h-20 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -269,7 +269,7 @@ export default function CartPopup({ themeColors, cardStyle, contactMessage, what
 
               {/* Footer - Fixed */}
               {cart.length > 0 && (
-                <div className="border-t-2 border-gray-200 p-6 bg-gray-50 rounded-b-[2.5rem]">
+                <div className="flex-shrink-0 border-t-2 border-gray-200 p-6 bg-gray-50 rounded-b-[2.5rem]">
                   <div className="flex flex-col md:flex-row gap-4 md:items-center">
                     {/* Price Summary */}
                     <div className="flex-1 bg-white border-2 border-gray-200 rounded-2xl p-4 flex items-center">
@@ -600,6 +600,31 @@ export default function CartPopup({ themeColors, cardStyle, contactMessage, what
           transform: translateY(-50%) rotate(15deg);
           height: 1.5px;
           background-color: currentColor;
+        }
+        .scrollbar-custom {
+          overflow-y: auto !important;
+        }
+        .scrollbar-custom::-webkit-scrollbar {
+          width: 8px !important;
+        }
+        .scrollbar-custom::-webkit-scrollbar-track {
+          background: #f1f1f1 !important;
+          border-radius: 10px !important;
+        }
+        .scrollbar-custom::-webkit-scrollbar-thumb {
+          background: linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary}) !important;
+          border-radius: 10px !important;
+        }
+        .scrollbar-custom::-webkit-scrollbar-thumb:hover {
+          opacity: 0.8 !important;
+        }
+        input[type='number']::-webkit-inner-spin-button,
+        input[type='number']::-webkit-outer-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        input[type='number'] {
+          -moz-appearance: textfield;
         }
       `}</style>
     </>
