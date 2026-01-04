@@ -70,6 +70,7 @@ export interface Order {
   customerName?: string; // اسم العميل (للطلبات من الموقع)
   customerPhone?: string; // رقم العميل (للطلبات من الموقع)
   createdAt: string;
+  status?: 'pending' | 'read' | 'delivering' | 'delivered'; // حالة الطلب
 }
 
 export interface TableOrder {
@@ -345,6 +346,26 @@ export async function createOrder(order: Omit<Order, 'id' | 'createdAt'>): Promi
   db.orders.push(newOrder);
   await writeDB(db);
   return newOrder;
+}
+
+export async function updateOrderStatus(id: string, status: 'pending' | 'read' | 'delivering' | 'delivered'): Promise<Order | null> {
+  try {
+    const db = await readDB();
+    const index = db.orders.findIndex(order => order.id === id);
+    if (index === -1) {
+      console.log('Order not found in updateOrderStatus:', id);
+      return null;
+    }
+
+    console.log('Updating order:', id, 'to status:', status);
+    db.orders[index] = { ...db.orders[index], status };
+    await writeDB(db);
+    console.log('Order updated successfully');
+    return db.orders[index];
+  } catch (error) {
+    console.error('Error in updateOrderStatus:', error);
+    throw error;
+  }
 }
 
 export async function deleteOrder(id: string): Promise<boolean> {

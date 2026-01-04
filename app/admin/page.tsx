@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ImageUploader from '@/components/ImageUploader';
@@ -56,6 +56,7 @@ interface Order {
   customerName?: string;
   customerPhone?: string;
   createdAt: string;
+  status?: 'pending' | 'read' | 'delivering' | 'delivered';
 }
 
 const THEMES = {
@@ -120,6 +121,16 @@ export default function AdminPage() {
 
   const [isRefreshingOrders, setIsRefreshingOrders] = useState(false);
   const [isRefreshingTableOrders, setIsRefreshingTableOrders] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
+  const [updatingOrderStatus, setUpdatingOrderStatus] = useState<{ orderId: string; status: string } | null>(null);
+
+  // Filtering and pagination state
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'read' | 'delivering' | 'delivered'>('all');
+  const [orderTypeFilter, setOrderTypeFilter] = useState<'all' | 'website' | 'whatsapp'>('all');
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ordersPerPage = 10;
 
   useEffect(() => {
     const adminData = localStorage.getItem('admin_data');
@@ -496,9 +507,82 @@ export default function AdminPage() {
     }
   };
 
+  const handleStatusUpdate = async (orderId: string, newStatus: 'pending' | 'read' | 'delivering' | 'delivered') => {
+    try {
+      setUpdatingOrderStatus({ orderId, status: newStatus });
+      const res = await fetch(`/api/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (res.ok) {
+        // Update local state
+        setOrders(prevOrders =>
+          prevOrders.map(order =>
+            order.id === orderId ? { ...order, status: newStatus } : order
+          )
+        );
+      } else {
+        alert('فشل تحديث حالة الطلب');
+      }
+    } catch (error) {
+      alert('حدث خطأ أثناء تحديث الحالة');
+    } finally {
+      setUpdatingOrderStatus(null);
+    }
+  };
+
   const getListItems = (listId: string) => {
     return items.filter(item => item.listId === listId);
   };
+
+  // Filter and paginate orders
+  const getFilteredOrders = () => {
+    let filtered = [...orders];
+
+    // Filter by status
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(order => (order.status || 'pending') === statusFilter);
+    }
+
+    // Filter by order type
+    if (orderTypeFilter !== 'all') {
+      filtered = filtered.filter(order => order.orderType === orderTypeFilter);
+    }
+
+    // Filter by date
+    if (dateFilter !== 'all') {
+      const now = new Date();
+      filtered = filtered.filter(order => {
+        const orderDate = new Date(order.createdAt);
+        if (dateFilter === 'today') {
+          return orderDate.toDateString() === now.toDateString();
+        } else if (dateFilter === 'week') {
+          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          return orderDate >= weekAgo;
+        } else if (dateFilter === 'month') {
+          const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          return orderDate >= monthAgo;
+        }
+        return true;
+      });
+    }
+
+    // Sort by date (newest first)
+    filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    return filtered;
+  };
+
+  const getPaginatedOrders = () => {
+    const filtered = getFilteredOrders();
+    const startIndex = (currentPage - 1) * ordersPerPage;
+    const endIndex = startIndex + ordersPerPage;
+    return filtered.slice(startIndex, endIndex);
+  };
+
+  const totalPages = Math.ceil(getFilteredOrders().length / ordersPerPage);
 
   if (!currentAdmin) {
     return (
@@ -737,6 +821,7 @@ export default function AdminPage() {
                     <ImageUploader
                       currentImageUrl={itemFormData.imageUrl}
                       onImageUploaded={(url) => setItemFormData({ ...itemFormData, imageUrl: url })}
+                      onUploadStateChange={setIsUploadingImage}
                       label="صورة العنصر (اختياري)"
                       helperText="يمكنك رفع صورة من جهازك أو إدخال رابط صورة"
                     />
@@ -755,9 +840,10 @@ export default function AdminPage() {
                     <div className="flex gap-2">
                       <button
                         type="submit"
-                        className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg font-semibold transition"
+                        disabled={isUploadingImage}
+                        className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {editingItem ? 'تحديث العنصر' : 'إضافة العنصر'}
+                        {isUploadingImage ? 'جاري رفع الصورة...' : editingItem ? 'تحديث العنصر' : 'إضافة العنصر'}
                       </button>
                       {editingItem && (
                         <button
@@ -880,6 +966,135 @@ export default function AdminPage() {
                 </div>
               )}
             </div>
+
+            {/* Filters */}
+            {orders.length > 0 && (
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Status Filter */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">الحالة</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        onClick={() => { setStatusFilter('all'); setCurrentPage(1); }}
+                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${
+                          statusFilter === 'all' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        الكل
+                      </button>
+                      <button
+                        onClick={() => { setStatusFilter('pending'); setCurrentPage(1); }}
+                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${
+                          statusFilter === 'pending' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        جديد
+                      </button>
+                      <button
+                        onClick={() => { setStatusFilter('read'); setCurrentPage(1); }}
+                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${
+                          statusFilter === 'read' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        مقروء
+                      </button>
+                      <button
+                        onClick={() => { setStatusFilter('delivering'); setCurrentPage(1); }}
+                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${
+                          statusFilter === 'delivering' ? 'bg-teal-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        قيد التوصيل
+                      </button>
+                      <button
+                        onClick={() => { setStatusFilter('delivered'); setCurrentPage(1); }}
+                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${
+                          statusFilter === 'delivered' ? 'bg-green-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        تم التوصيل
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Order Type Filter */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">طريقة الطلب</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        onClick={() => { setOrderTypeFilter('all'); setCurrentPage(1); }}
+                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${
+                          orderTypeFilter === 'all' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        الكل
+                      </button>
+                      <button
+                        onClick={() => { setOrderTypeFilter('website'); setCurrentPage(1); }}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition flex items-center gap-1.5 ${
+                          orderTypeFilter === 'website' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => { setOrderTypeFilter('whatsapp'); setCurrentPage(1); }}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition flex items-center gap-1.5 ${
+                          orderTypeFilter === 'whatsapp' ? 'bg-green-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Date Filter */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">التاريخ</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        onClick={() => { setDateFilter('all'); setCurrentPage(1); }}
+                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${
+                          dateFilter === 'all' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        الكل
+                      </button>
+                      <button
+                        onClick={() => { setDateFilter('today'); setCurrentPage(1); }}
+                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${
+                          dateFilter === 'today' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        اليوم
+                      </button>
+                      <button
+                        onClick={() => { setDateFilter('week'); setCurrentPage(1); }}
+                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${
+                          dateFilter === 'week' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        أسبوع
+                      </button>
+                      <button
+                        onClick={() => { setDateFilter('month'); setCurrentPage(1); }}
+                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${
+                          dateFilter === 'month' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        شهر
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {orders.length === 0 ? (
               <div className="text-center py-12">
                 <svg className="mx-auto h-16 w-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -894,84 +1109,241 @@ export default function AdminPage() {
                   <p className="text-gray-400 text-sm mt-2">يمكنك تفعيل الطلبات من تبويب "إعدادات الطلبات"</p>
                 )}
               </div>
+            ) : getFilteredOrders().length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-gray-500 text-lg">لا توجد طلبات تطابق الفلاتر المحددة</p>
+              </div>
             ) : (
               <div className="space-y-4">
-                {orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map((order) => (
-                  <div key={order.id} className="border-2 border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <div className="flex items-center gap-3">
-                          <h3 className="text-lg font-bold text-gray-800">طلب #{order.id.replace('order_', '')}</h3>
-                          {order.orderType === 'whatsapp' ? (
-                            <span className="px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">
-                              واتساب
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="text-sm text-gray-500 mt-1">
-                          {new Date(order.createdAt).toLocaleString('ar-EG', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </p>
-                        {order.orderType === 'website' && order.customerName && order.customerPhone && (
-                          <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
-                            <div className="flex items-center gap-2 mb-1">
-                              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                              </svg>
-                              <span className="text-sm font-bold text-gray-800">{order.customerName}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                              </svg>
-                              <span className="text-sm font-bold text-gray-800">{order.customerPhone}</span>
-                            </div>
-                          </div>
+                {getPaginatedOrders().map((order) => {
+                  const orderDate = new Date(order.createdAt);
+                  const dateStr = orderDate.toLocaleDateString('ar-EG', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit'
+                  });
+                  const timeStr = orderDate.toLocaleTimeString('ar-EG', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: true
+                  });
+                  const isExpanded = expandedOrders.has(order.id);
+                  const toggleExpand = () => {
+                    const newExpanded = new Set(expandedOrders);
+                    if (isExpanded) {
+                      newExpanded.delete(order.id);
+                    } else {
+                      newExpanded.add(order.id);
+                    }
+                    setExpandedOrders(newExpanded);
+                  };
+
+                  return (
+                  <div key={order.id} className="border-2 border-gray-200 rounded-xl p-4 hover:shadow-lg transition-shadow">
+                    {/* Responsive Grid Layout: Custom 2-column on small screens, custom columns on larger screens */}
+                    <div className="grid grid-cols-2 md:grid-cols-[auto_1fr_auto_150px] gap-3 md:gap-4">
+                      {/* Date/Time and Order ID - Row 1, Col 1 on small screens */}
+                      <div className="flex flex-col justify-center">
+                        <p className="text-xs text-gray-500">{dateStr} • {timeStr}</p>
+                        <h3 className="text-lg font-bold text-gray-800">#{order.id.replace('order_', '')}</h3>
+                      </div>
+
+                      {/* Price - Row 1, Col 2 on small screens */}
+                      <div className="flex flex-col justify-center items-end md:order-4 w-full max-w-full">
+                        <p className="text-2xl font-black text-blue-600 whitespace-nowrap">{order.totalPrice} جـ</p>
+                        {order.totalDiscount > 0 && (
+                          <p className="text-sm text-green-600 font-bold whitespace-nowrap">وفر {order.totalDiscount} جـ</p>
                         )}
                       </div>
-                      <div className="text-left">
-                        <p className="text-2xl font-black text-blue-600">{order.totalPrice} جـ</p>
-                        {order.totalDiscount > 0 && (
-                          <p className="text-sm text-green-600 font-bold">وفر {order.totalDiscount} جـ</p>
-                        )}
+
+                      {/* Customer Info - Row 2, Full Width on small screens */}
+                      <div className="col-span-2 md:col-span-1 md:order-2 flex items-center justify-start">
+                        <div className="flex flex-wrap items-center justify-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 w-full max-w-full">
+                          {order.orderType === 'whatsapp' ? (
+                            <>
+                              <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+                              </svg>
+                              <span className="text-sm font-bold text-gray-800 break-words">واتساب</span>
+                            </>
+                          ) : order.customerName && order.customerPhone ? (
+                            <>
+                              <svg className="w-5 h-5 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                              </svg>
+                              <span className="text-sm font-bold text-gray-800 break-words">{order.customerName}</span>
+                              <span className="text-gray-400">•</span>
+                              <span className="text-sm font-bold text-gray-800 break-words">{order.customerPhone}</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                              </svg>
+                              <span className="text-sm text-gray-500 break-words">عميل</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Expand/Collapse Button - Row 3, Full Width on small screens */}
+                      <div className="col-span-2 md:col-span-1 md:order-3 flex items-center justify-center">
+                        <button
+                          onClick={toggleExpand}
+                          className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold transition flex items-center gap-2 whitespace-nowrap w-full md:w-auto justify-center"
+                        >
+                          <svg
+                            className={`w-5 h-5 ${isExpanded ? 'rotate-180' : ''}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                          <span>العناصر ({order.items.length})</span>
+                        </button>
                       </div>
                     </div>
 
-                    <div className="border-t-2 border-gray-100 pt-4">
-                      <h4 className="font-bold text-gray-700 mb-3">العناصر:</h4>
-                      <div className="space-y-2">
-                        {order.items.map((item, idx) => (
-                          <div key={idx} className="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
-                            <div className="flex items-center gap-3">
-                              {item.imageUrl && (
-                                <img src={item.imageUrl} alt={item.name} className="w-12 h-12 object-cover rounded-lg" />
-                              )}
-                              <div>
-                                <p className="font-bold text-gray-800">{item.name}</p>
-                                <p className="text-sm text-gray-500">الكمية: {item.quantity}</p>
+                    {/* Collapsible Items Section */}
+                    <div>
+
+                      <div
+                        className="overflow-hidden transition-all duration-300 ease-in-out"
+                        style={{
+                          maxHeight: isExpanded ? '1000px' : '0',
+                          opacity: isExpanded ? 1 : 0
+                        }}
+                      >
+                        <div className="space-y-2 mt-3">
+                          {order.items.map((item, idx) => (
+                            <div key={idx} className="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
+                              <div className="flex items-center gap-3">
+                                {item.imageUrl && (
+                                  <img src={item.imageUrl} alt={item.name} className="w-12 h-12 object-cover rounded-lg" />
+                                )}
+                                <div>
+                                  <p className="font-bold text-gray-800">{item.name}</p>
+                                  <p className="text-sm text-gray-500">الكمية: {item.quantity}</p>
+                                </div>
+                              </div>
+                              <div className="text-left">
+                                <p className="font-bold text-gray-800">
+                                  {(item.discountedPrice || item.price) * item.quantity} جـ
+                                </p>
+                                {item.discountedPrice && item.discountedPrice < item.price && (
+                                  <p className="text-xs text-gray-500 line-through">
+                                    {item.price * item.quantity} جـ
+                                  </p>
+                                )}
                               </div>
                             </div>
-                            <div className="text-left">
-                              <p className="font-bold text-gray-800">
-                                {(item.discountedPrice || item.price) * item.quantity} جـ
-                              </p>
-                              {item.discountedPrice && item.discountedPrice < item.price && (
-                                <p className="text-xs text-gray-500 line-through">
-                                  {item.price * item.quantity} جـ
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Order Status Buttons */}
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <div className="flex items-center gap-1.5">
+                        <div className="flex flex-wrap gap-1.5">
+                          <button
+                            onClick={() => handleStatusUpdate(order.id, 'pending')}
+                            disabled={updatingOrderStatus?.orderId === order.id}
+                            className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                              (order.status || 'pending') === 'pending'
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'pending'
+                                ? 'bg-blue-100 text-gray-700'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                            title="جديد"
+                          >
+                            جديد
+                          </button>
+                          <button
+                            onClick={() => handleStatusUpdate(order.id, 'read')}
+                            disabled={updatingOrderStatus?.orderId === order.id}
+                            className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                              order.status === 'read'
+                                ? 'bg-blue-500 text-white shadow-md'
+                                : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'read'
+                                ? 'bg-blue-100 text-gray-700'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                            title="مقروء"
+                          >
+                            مقروء
+                          </button>
+                          <button
+                            onClick={() => handleStatusUpdate(order.id, 'delivering')}
+                            disabled={updatingOrderStatus?.orderId === order.id}
+                            className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                              order.status === 'delivering'
+                                ? 'bg-teal-500 text-white shadow-md'
+                                : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'delivering'
+                                ? 'bg-teal-100 text-gray-700'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                            title="قيد التوصيل"
+                          >
+                            قيد التوصيل
+                          </button>
+                          <button
+                            onClick={() => handleStatusUpdate(order.id, 'delivered')}
+                            disabled={updatingOrderStatus?.orderId === order.id}
+                            className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                              order.status === 'delivered'
+                                ? 'bg-green-500 text-white shadow-md'
+                                : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'delivered'
+                                ? 'bg-green-100 text-gray-700'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                            title="تم"
+                          >
+                            تم
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="mt-6 flex justify-center items-center gap-2">
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      السابق
+                    </button>
+                    <div className="flex gap-1">
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page)}
+                          className={`px-3 py-2 rounded-lg font-semibold transition ${
+                            currentPage === page
+                              ? 'bg-blue-500 text-white'
+                              : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
+                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      التالي
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1195,6 +1567,7 @@ export default function AdminPage() {
               <ImageUploader
                 currentImageUrl={settingsFormData.logoUrl}
                 onImageUploaded={(url) => setSettingsFormData({ ...settingsFormData, logoUrl: url })}
+                onUploadStateChange={setIsUploadingImage}
                 label="صورة الشعار"
                 helperText="اختياري: شعارك الذي سيظهر في القائمة العامة - اتركه فارغاً ولن يظهر أي شعار"
               />
@@ -1202,6 +1575,7 @@ export default function AdminPage() {
               <ImageUploader
                 currentImageUrl={settingsFormData.backgroundUrl}
                 onImageUploaded={(url) => setSettingsFormData({ ...settingsFormData, backgroundUrl: url })}
+                onUploadStateChange={setIsUploadingImage}
                 label="صورة الخلفية"
                 helperText="اختياري: صورة خلفية لقائمتك - اتركه فارغاً وستظهر خلفية تلقائية بألوان السمة"
               />
@@ -1273,9 +1647,10 @@ export default function AdminPage() {
 
               <button
                 type="submit"
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white py-3 px-4 rounded-lg font-bold text-lg transition-all duration-200 transform hover:scale-[1.02] shadow-lg"
+                disabled={isUploadingImage}
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white py-3 px-4 rounded-lg font-bold text-lg transition-all duration-200 transform hover:scale-[1.02] shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                حفظ الإعدادات
+                {isUploadingImage ? 'جاري رفع الصورة...' : 'حفظ الإعدادات'}
               </button>
             </form>
           </div>

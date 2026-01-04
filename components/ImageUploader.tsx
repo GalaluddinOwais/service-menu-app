@@ -6,6 +6,7 @@ interface ImageUploaderProps {
   onImageUploaded: (url: string) => void;
   label: string;
   helperText?: string;
+  onUploadStateChange?: (isUploading: boolean) => void;
 }
 
 export default function ImageUploader({
@@ -13,6 +14,7 @@ export default function ImageUploader({
   onImageUploaded,
   label,
   helperText,
+  onUploadStateChange,
 }: ImageUploaderProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | undefined>(currentImageUrl);
@@ -22,7 +24,69 @@ export default function ImageUploader({
   // Update preview when currentImageUrl changes (e.g., when editing an item)
   useEffect(() => {
     setPreviewUrl(currentImageUrl);
+    // Reset file input when switching between items
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   }, [currentImageUrl]);
+
+  // دالة لضغط وتصغير الصورة
+  const compressImage = (file: File): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          // تحديد الحد الأقصى للأبعاد
+          const MAX_WIDTH = 1200;
+          const MAX_HEIGHT = 1200;
+          let width = img.width;
+          let height = img.height;
+
+          // حساب الأبعاد الجديدة مع الحفاظ على النسبة
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height = (height * MAX_WIDTH) / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width = (width * MAX_HEIGHT) / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          // إنشاء canvas لتصغير الصورة
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          // تحويل إلى WebP بجودة مضغوطة
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, '.webp'), {
+                  type: 'image/webp',
+                  lastModified: Date.now(),
+                });
+                resolve(compressedFile);
+              } else {
+                reject(new Error('فشل ضغط الصورة'));
+              }
+            },
+            'image/webp',
+            0.85 // جودة 85%
+          );
+        };
+        img.onerror = () => reject(new Error('فشل تحميل الصورة'));
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => reject(new Error('فشل قراءة الملف'));
+      reader.readAsDataURL(file);
+    });
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -34,26 +98,30 @@ export default function ImageUploader({
       return;
     }
 
-    // التحقق من حجم الملف (5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setError('حجم الملف كبير جداً. الحد الأقصى 5MB');
+    // التحقق من حجم الملف (10MB قبل الضغط)
+    if (file.size > 10 * 1024 * 1024) {
+      setError('حجم الملف كبير جداً. الحد الأقصى 10MB');
       return;
     }
 
     setError('');
     setIsUploading(true);
+    onUploadStateChange?.(true);
 
     try {
+      // ضغط الصورة
+      const compressedFile = await compressImage(file);
+
       // إنشاء معاينة محلية
       const reader = new FileReader();
       reader.onloadend = () => {
         setPreviewUrl(reader.result as string);
       };
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(compressedFile);
 
-      // رفع الملف
+      // رفع الملف المضغوط
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', compressedFile);
 
       const token = localStorage.getItem('session_token');
       const response = await fetch('/api/upload', {
@@ -78,6 +146,7 @@ export default function ImageUploader({
       setPreviewUrl(currentImageUrl);
     } finally {
       setIsUploading(false);
+      onUploadStateChange?.(false);
     }
   };
 
@@ -105,7 +174,7 @@ export default function ImageUploader({
           disabled={isUploading}
           className="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50"
         />
-        {previewUrl && (
+        {previewUrl && !isUploading && (
           <button
             type="button"
             onClick={handleRemoveImage}
