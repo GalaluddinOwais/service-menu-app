@@ -4,7 +4,7 @@ import { verifySessionToken } from '@/lib/auth';
 
 export async function PATCH(
   request: NextRequest,
-  context: { params: Promise<{ orderId: string }> | { orderId: string } }
+  context: { params: Promise<{ orderId: string }> }
 ) {
   try {
     // Verify authentication
@@ -27,9 +27,8 @@ export async function PATCH(
       return NextResponse.json({ error: 'حالة غير صالحة' }, { status: 400 });
     }
 
-    // Handle both Promise and non-Promise params for compatibility
-    const params = context.params instanceof Promise ? await context.params : context.params;
-    const { orderId } = params;
+    // Await params as required by Next.js 15
+    const { orderId } = await context.params;
 
     console.log('Updating order status:', { orderId, newStatus: status, adminId: payload.adminId });
 
