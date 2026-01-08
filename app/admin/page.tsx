@@ -123,7 +123,11 @@ export default function AdminPage() {
   const [isRefreshingTableOrders, setIsRefreshingTableOrders] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
+  const [expandedTableOrders, setExpandedTableOrders] = useState<Set<string>>(new Set());
   const [updatingOrderStatus, setUpdatingOrderStatus] = useState<{ orderId: string; status: string } | null>(null);
+  const [updatingTableOrderStatus, setUpdatingTableOrderStatus] = useState<{ orderId: string; status: string } | null>(null);
+  const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
+  const [deletingTableOrderId, setDeletingTableOrderId] = useState<string | null>(null);
 
   // Filtering and pagination state
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'read' | 'delivering' | 'delivered'>('all');
@@ -530,6 +534,37 @@ export default function AdminPage() {
       alert('حدث خطأ أثناء تحديث الحالة');
     } finally {
       setUpdatingOrderStatus(null);
+    }
+  };
+
+  const handleTableOrderStatusUpdate = async (orderId: string, newStatus: 'pending' | 'preparing' | 'completed') => {
+    try {
+      setUpdatingTableOrderStatus({ orderId, status: newStatus });
+      const token = localStorage.getItem('session_token');
+      const res = await fetch(`/api/table-orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (res.ok) {
+        // Update local state
+        setTableOrders(prevOrders =>
+          prevOrders.map(order =>
+            order.id === orderId ? { ...order, status: newStatus } : order
+          )
+        );
+      } else {
+        const data = await res.json();
+        alert('فشل تحديث حالة الطلب: ' + (data.error || 'خطأ غير معروف'));
+      }
+    } catch (error) {
+      alert('حدث خطأ أثناء تحديث الحالة');
+    } finally {
+      setUpdatingTableOrderStatus(null);
     }
   };
 
@@ -1223,8 +1258,7 @@ export default function AdminPage() {
                                   <img src={item.imageUrl} alt={item.name} className="w-12 h-12 object-cover rounded-lg" />
                                 )}
                                 <div>
-                                  <p className="font-bold text-gray-800">{item.name}</p>
-                                  <p className="text-sm text-gray-500">الكمية: {item.quantity}</p>
+                                  <p className="font-bold text-gray-800">{item.name} x{item.quantity}</p>
                                 </div>
                               </div>
                               <div className="text-left">
@@ -1245,66 +1279,90 @@ export default function AdminPage() {
 
                     {/* Order Status Buttons */}
                     <div className="mt-3 pt-3 border-t border-gray-200">
-                      <div className="flex items-center gap-1.5">
-                        <div className="flex flex-wrap gap-1.5">
-                          <button
-                            onClick={() => handleStatusUpdate(order.id, 'pending')}
-                            disabled={updatingOrderStatus?.orderId === order.id}
-                            className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                              (order.status || 'pending') === 'pending'
-                                ? 'bg-blue-600 text-white shadow-md'
-                                : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'pending'
-                                ? 'bg-blue-100 text-gray-700'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                            title="جديد"
-                          >
-                            جديد
-                          </button>
-                          <button
-                            onClick={() => handleStatusUpdate(order.id, 'read')}
-                            disabled={updatingOrderStatus?.orderId === order.id}
-                            className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                              order.status === 'read'
-                                ? 'bg-blue-500 text-white shadow-md'
-                                : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'read'
-                                ? 'bg-blue-100 text-gray-700'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                            title="مقروء"
-                          >
-                            مقروء
-                          </button>
-                          <button
-                            onClick={() => handleStatusUpdate(order.id, 'delivering')}
-                            disabled={updatingOrderStatus?.orderId === order.id}
-                            className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                              order.status === 'delivering'
-                                ? 'bg-teal-500 text-white shadow-md'
-                                : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'delivering'
-                                ? 'bg-teal-100 text-gray-700'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                            title="قيد التوصيل"
-                          >
-                            قيد التوصيل
-                          </button>
-                          <button
-                            onClick={() => handleStatusUpdate(order.id, 'delivered')}
-                            disabled={updatingOrderStatus?.orderId === order.id}
-                            className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                              order.status === 'delivered'
-                                ? 'bg-green-500 text-white shadow-md'
-                                : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'delivered'
-                                ? 'bg-green-100 text-gray-700'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                            title="تم"
-                          >
-                            تم
-                          </button>
-                        </div>
+                      <div className="flex flex-wrap gap-1 mb-3">
+                        <button
+                          onClick={() => handleStatusUpdate(order.id, 'pending')}
+                          disabled={updatingOrderStatus?.orderId === order.id}
+                          className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                            (order.status || 'pending') === 'pending'
+                              ? 'bg-blue-600 text-white shadow-md'
+                              : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'pending'
+                              ? 'bg-blue-100 text-gray-700'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                          title="جديد"
+                        >
+                          جديد
+                        </button>
+                        <button
+                          onClick={() => handleStatusUpdate(order.id, 'read')}
+                          disabled={updatingOrderStatus?.orderId === order.id}
+                          className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                            order.status === 'read'
+                              ? 'bg-blue-500 text-white shadow-md'
+                              : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'read'
+                              ? 'bg-blue-100 text-gray-700'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                          title="مقروء"
+                        >
+                          مقروء
+                        </button>
+                        <button
+                          onClick={() => handleStatusUpdate(order.id, 'delivering')}
+                          disabled={updatingOrderStatus?.orderId === order.id}
+                          className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                            order.status === 'delivering'
+                              ? 'bg-teal-500 text-white shadow-md'
+                              : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'delivering'
+                              ? 'bg-teal-100 text-gray-700'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                          title="قيد التوصيل"
+                        >
+                          قيد التوصيل
+                        </button>
+                        <button
+                          onClick={() => handleStatusUpdate(order.id, 'delivered')}
+                          disabled={updatingOrderStatus?.orderId === order.id}
+                          className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                            order.status === 'delivered'
+                              ? 'bg-green-500 text-white shadow-md'
+                              : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'delivered'
+                              ? 'bg-green-100 text-gray-700'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                          title="تم"
+                        >
+                          تم
+                        </button>
                       </div>
+
+                      <button
+                        onClick={async () => {
+                          setDeletingOrderId(order.id);
+                          const token = localStorage.getItem('session_token');
+                          const res = await fetch(`/api/orders/${order.id}`, {
+                            method: 'DELETE',
+                            headers: {
+                              'Authorization': `Bearer ${token}`,
+                            },
+                          });
+
+                          if (res.ok) {
+                            setOrders(orders.filter(o => o.id !== order.id));
+                          }
+                          setDeletingOrderId(null);
+                        }}
+                        disabled={deletingOrderId === order.id}
+                        className={`w-full px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                          deletingOrderId === order.id
+                            ? 'bg-red-100 text-gray-700 cursor-not-allowed'
+                            : 'bg-red-500 hover:bg-red-600 text-white'
+                        }`}
+                      >
+                        مسح
+                      </button>
                     </div>
                   </div>
                   );
@@ -1705,37 +1763,34 @@ export default function AdminPage() {
                   const tableOrdersForTable = tableOrders.filter(order => order.tableNumber === tableNum);
 
                   return (
-                    <div key={tableNum} className="border-2 border-purple-200 rounded-xl p-6 bg-purple-50">
+                    <div key={tableNum} className="border-2 border-purple-200 rounded-xl px-2 py-4 bg-purple-50">
                       {/* Table Header */}
-                      <div className="flex justify-between items-start mb-4">
+                      <div className="flex flex-row justify-between items-start mb-4 gap-4">
                         <div className="flex-1">
-                          <h3 className="text-xl font-bold text-purple-800 mb-2">طاولة رقم {tableNum}</h3>
-                          <div className="flex flex-col gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-600 font-medium">رابط الطاولة:</span>
-                              <a
-                                href={tableUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-600 hover:text-blue-800 underline text-sm break-all"
-                              >
-                                {tableUrl}
-                              </a>
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText(tableUrl);
-                                  alert('تم نسخ الرابط!');
-                                }}
-                                className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-colors"
-                              >
-                                نسخ
-                              </button>
-                            </div>
+                          <h3 className="text-xl font-bold text-purple-800 mb-3">طاولة رقم {tableNum}</h3>
+                          <div className="flex flex-col sm:flex-row gap-2 items-start">
+                            <a
+                              href={tableUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-auto px-2 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-bold transition-colors whitespace-nowrap text-center"
+                            >
+                              عرض الصفحة
+                            </a>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(tableUrl);
+                                alert('تم نسخ الرابط!');
+                              }}
+                              className="w-auto px-2 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg text-sm font-bold transition-colors whitespace-nowrap"
+                            >
+                              نسخ الرابط
+                            </button>
                           </div>
                         </div>
 
                         {/* QR Code */}
-                        <div className="text-center">
+                        <div className="flex-shrink-0">
                           <div className="w-32 h-32 bg-white border-2 border-purple-300 rounded-lg p-2">
                             <img
                               src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(tableUrl)}`}
@@ -1743,13 +1798,12 @@ export default function AdminPage() {
                               className="w-full h-full object-contain"
                             />
                           </div>
-                          <p className="text-xs text-gray-500 mt-1">QR كود</p>
                         </div>
                       </div>
 
                       {/* Orders for this table */}
-                      <div className="mt-4">
-                        <h4 className="font-bold text-gray-700 mb-3">
+                      <div className="mt-3">
+                        <h4 className="font-bold text-gray-700 mb-2">
                           الطلبات الواردة ({tableOrdersForTable.length})
                         </h4>
                         {tableOrdersForTable.length === 0 ? (
@@ -1758,66 +1812,167 @@ export default function AdminPage() {
                           <div className="space-y-3">
                             {tableOrdersForTable
                               .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                              .map((order) => (
-                              <div key={order.id} className="bg-white border-2 border-gray-200 rounded-lg p-4">
-                                <div className="flex justify-between items-start mb-2">
+                              .map((order) => {
+                                const orderDate = new Date(order.createdAt);
+                                const dateStr = orderDate.toLocaleDateString('ar-EG', {
+                                  year: 'numeric',
+                                  month: '2-digit',
+                                  day: '2-digit'
+                                });
+                                const timeStr = orderDate.toLocaleTimeString('ar-EG', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: true
+                                });
+                                const isExpanded = expandedTableOrders.has(order.id);
+                                const toggleExpand = () => {
+                                  const newExpanded = new Set(expandedTableOrders);
+                                  if (isExpanded) {
+                                    newExpanded.delete(order.id);
+                                  } else {
+                                    newExpanded.add(order.id);
+                                  }
+                                  setExpandedTableOrders(newExpanded);
+                                };
+
+                                return (
+                              <div key={order.id} className="bg-white border-2 border-gray-200 rounded-lg p-3">
+                                <div className="flex justify-between items-start mb-3">
                                   <div>
-                                    <h5 className="font-bold text-gray-800">طلب #{order.id.replace('table_order_', '')}</h5>
-                                    <p className="text-xs text-gray-500">
-                                      {new Date(order.createdAt).toLocaleString('ar-EG', {
-                                        year: 'numeric',
-                                        month: 'long',
-                                        day: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit'
-                                      })}
-                                    </p>
+                                    <p className="text-sm text-gray-500">{dateStr} • {timeStr}</p>
+                                    <h5 className="text-lg font-bold text-gray-800">#{order.id.replace('table_order_', '')}</h5>
                                   </div>
                                   <div className="text-left">
-                                    <p className="text-xl font-black text-purple-600">{order.totalPrice} جـ</p>
+                                    <p className="text-2xl font-black text-purple-600">{order.totalPrice} جـ</p>
                                     {order.totalDiscount > 0 && (
-                                      <p className="text-xs text-green-600 font-bold">وفر {order.totalDiscount} جـ</p>
+                                      <p className="text-sm text-green-600 font-bold">وفر {order.totalDiscount} جـ</p>
                                     )}
                                   </div>
                                 </div>
 
-                                <div className="border-t pt-2 mt-2">
-                                  <p className="text-sm font-bold text-gray-700 mb-1">العناصر:</p>
-                                  <ul className="text-sm text-gray-600 space-y-1">
-                                    {order.items.map((item: any, idx: number) => (
-                                      <li key={idx} className="flex justify-between">
-                                        <span>• {item.name} × {item.quantity}</span>
-                                        <span className="font-bold">{item.price} جـ</span>
-                                      </li>
-                                    ))}
-                                  </ul>
+                                {/* Expand/Collapse Button */}
+                                <div className="mb-3">
+                                  <button
+                                    onClick={toggleExpand}
+                                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold transition flex items-center gap-2 whitespace-nowrap w-full md:w-auto justify-center"
+                                  >
+                                    <svg
+                                      className={`w-5 h-5 ${isExpanded ? 'rotate-180' : ''}`}
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                    <span>العناصر ({order.items.length})</span>
+                                  </button>
+                                </div>
+
+                                {/* Collapsible Items Section */}
+                                <div>
+                                  <div
+                                    className="overflow-hidden transition-all duration-300 ease-in-out"
+                                    style={{
+                                      maxHeight: isExpanded ? '1000px' : '0',
+                                      opacity: isExpanded ? 1 : 0
+                                    }}
+                                  >
+                                    <div className="space-y-2 mb-3">
+                                      {order.items.map((item: any, idx: number) => (
+                                        <div key={idx} className="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
+                                          <div className="flex items-center gap-3">
+                                            {item.imageUrl && (
+                                              <img src={item.imageUrl} alt={item.name} className="w-12 h-12 object-cover rounded-lg" />
+                                            )}
+                                            <div>
+                                              <p className="font-bold text-gray-800">{item.name} x{item.quantity}</p>
+                                            </div>
+                                          </div>
+                                          <div className="text-left">
+                                            <p className="font-bold text-gray-800">{item.price * item.quantity} جـ</p>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Order Status Buttons */}
+                                <div className="mt-3 pt-3 border-t border-gray-200">
+                                  <div className="flex flex-wrap gap-1 mb-3">
+                                    <button
+                                      onClick={() => handleTableOrderStatusUpdate(order.id, 'pending')}
+                                      disabled={updatingTableOrderStatus?.orderId === order.id}
+                                      className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                                        (order.status || 'pending') === 'pending'
+                                          ? 'bg-purple-600 text-white shadow-md'
+                                          : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'pending'
+                                          ? 'bg-purple-100 text-gray-700'
+                                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                      }`}
+                                      title="جديد"
+                                    >
+                                      جديد
+                                    </button>
+                                    <button
+                                      onClick={() => handleTableOrderStatusUpdate(order.id, 'preparing')}
+                                      disabled={updatingTableOrderStatus?.orderId === order.id}
+                                      className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                                        order.status === 'preparing'
+                                          ? 'bg-fuchsia-600 text-white shadow-md'
+                                          : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'preparing'
+                                          ? 'bg-purple-100 text-gray-700'
+                                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                      }`}
+                                      title="جاري التحضير"
+                                    >
+                                      جاري التحضير
+                                    </button>
+                                    <button
+                                      onClick={() => handleTableOrderStatusUpdate(order.id, 'completed')}
+                                      disabled={updatingTableOrderStatus?.orderId === order.id}
+                                      className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                                        order.status === 'completed'
+                                          ? 'bg-rose-500 text-white shadow-md'
+                                          : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'completed'
+                                          ? 'bg-purple-100 text-gray-700'
+                                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                      }`}
+                                      title="تم"
+                                    >
+                                      تم
+                                    </button>
+                                  </div>
                                 </div>
 
                                 <button
                                   onClick={async () => {
-                                    if (confirm('هل أنت متأكد من حذف هذا الطلب؟')) {
-                                      const token = localStorage.getItem('session_token');
-                                      const res = await fetch(`/api/table-orders/${order.id}`, {
-                                        method: 'DELETE',
-                                        headers: {
-                                          'Authorization': `Bearer ${token}`,
-                                        },
-                                      });
+                                    setDeletingTableOrderId(order.id);
+                                    const token = localStorage.getItem('session_token');
+                                    const res = await fetch(`/api/table-orders/${order.id}`, {
+                                      method: 'DELETE',
+                                      headers: {
+                                        'Authorization': `Bearer ${token}`,
+                                      },
+                                    });
 
-                                      if (res.ok) {
-                                        setTableOrders(tableOrders.filter(o => o.id !== order.id));
-                                        alert('تم حذف الطلب بنجاح!');
-                                      } else {
-                                        alert('فشل حذف الطلب');
-                                      }
+                                    if (res.ok) {
+                                      setTableOrders(tableOrders.filter(o => o.id !== order.id));
                                     }
+                                    setDeletingTableOrderId(null);
                                   }}
-                                  className="mt-3 w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg font-bold text-sm transition-colors"
+                                  disabled={deletingTableOrderId === order.id}
+                                  className={`mt-3 w-full px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                                    deletingTableOrderId === order.id
+                                      ? 'bg-red-100 text-gray-700 cursor-not-allowed'
+                                      : 'bg-red-500 hover:bg-red-600 text-white'
+                                  }`}
                                 >
-                                  حذف الطلب
+                                  مسح
                                 </button>
                               </div>
-                            ))}
+                                );
+                              })}
                           </div>
                         )}
                       </div>
