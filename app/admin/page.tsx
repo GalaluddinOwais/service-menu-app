@@ -537,7 +537,7 @@ export default function AdminPage() {
     }
   };
 
-  const handleTableOrderStatusUpdate = async (orderId: string, newStatus: 'pending' | 'preparing' | 'completed') => {
+  const handleTableOrderStatusUpdate = async (orderId: string, newStatus: 'pending' | 'read' | 'served' | 'completed') => {
     try {
       setUpdatingTableOrderStatus({ orderId, status: newStatus });
       const token = localStorage.getItem('session_token');
@@ -1258,15 +1258,16 @@ export default function AdminPage() {
                                   <img src={item.imageUrl} alt={item.name} className="w-12 h-12 object-cover rounded-lg" />
                                 )}
                                 <div>
-                                  <p className="font-bold text-gray-800">{item.name} x{item.quantity}</p>
+                                  <p className="font-bold text-gray-800">{item.quantity} {item.name}</p>
                                 </div>
                               </div>
+                              <div className="border-r-2 border-gray-300 mx-2 self-stretch"></div>
                               <div className="text-left">
-                                <p className="font-bold text-gray-800">
+                                <p className="font-bold text-gray-800 whitespace-nowrap">
                                   {(item.discountedPrice || item.price) * item.quantity} جـ
                                 </p>
                                 {item.discountedPrice && item.discountedPrice < item.price && (
-                                  <p className="text-xs text-gray-500 line-through">
+                                  <p className="text-xs text-gray-500 line-through whitespace-nowrap">
                                     {item.price * item.quantity} جـ
                                   </p>
                                 )}
@@ -1837,35 +1838,38 @@ export default function AdminPage() {
 
                                 return (
                               <div key={order.id} className="bg-white border-2 border-gray-200 rounded-lg p-3">
-                                <div className="flex justify-between items-start mb-3">
-                                  <div>
-                                    <p className="text-sm text-gray-500">{dateStr} • {timeStr}</p>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+                                  {/* Date & Order ID - Row 1, Left */}
+                                  <div className="col-span-1 md:col-span-1">
+                                    <p className="text-sm text-gray-500 whitespace-nowrap">{dateStr} • {timeStr}</p>
                                     <h5 className="text-lg font-bold text-gray-800">#{order.id.replace('table_order_', '')}</h5>
                                   </div>
-                                  <div className="text-left">
+
+                                  {/* Price & Discount - Row 1, Right on mobile, Far right on desktop */}
+                                  <div className="col-span-1 md:col-span-1 md:order-3 text-left">
                                     <p className="text-2xl font-black text-purple-600">{order.totalPrice} جـ</p>
                                     {order.totalDiscount > 0 && (
                                       <p className="text-sm text-green-600 font-bold">وفر {order.totalDiscount} جـ</p>
                                     )}
                                   </div>
-                                </div>
 
-                                {/* Expand/Collapse Button */}
-                                <div className="mb-3">
-                                  <button
-                                    onClick={toggleExpand}
-                                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold transition flex items-center gap-2 whitespace-nowrap w-full md:w-auto justify-center"
-                                  >
-                                    <svg
-                                      className={`w-5 h-5 ${isExpanded ? 'rotate-180' : ''}`}
-                                      fill="none"
-                                      stroke="currentColor"
-                                      viewBox="0 0 24 24"
+                                  {/* Expand/Collapse Button - Row 2 on mobile, Center on desktop */}
+                                  <div className="col-span-2 md:col-span-1 md:order-2 flex items-center justify-center">
+                                    <button
+                                      onClick={toggleExpand}
+                                      className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold transition flex items-center gap-2 whitespace-nowrap w-full md:w-auto justify-center"
                                     >
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                    <span>العناصر ({order.items.length})</span>
-                                  </button>
+                                      <svg
+                                        className={`w-5 h-5 ${isExpanded ? 'rotate-180' : ''}`}
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                      >
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                      </svg>
+                                      <span>العناصر ({order.items.length})</span>
+                                    </button>
+                                  </div>
                                 </div>
 
                                 {/* Collapsible Items Section */}
@@ -1885,11 +1889,19 @@ export default function AdminPage() {
                                               <img src={item.imageUrl} alt={item.name} className="w-12 h-12 object-cover rounded-lg" />
                                             )}
                                             <div>
-                                              <p className="font-bold text-gray-800">{item.name} x{item.quantity}</p>
+                                              <p className="font-bold text-gray-800">{item.quantity} {item.name}</p>
                                             </div>
                                           </div>
+                                          <div className="border-r-2 border-gray-300 mx-2 self-stretch"></div>
                                           <div className="text-left">
-                                            <p className="font-bold text-gray-800">{item.price * item.quantity} جـ</p>
+                                            <p className="font-bold text-gray-800 whitespace-nowrap">
+                                              {(item.discountedPrice || item.price) * item.quantity} جـ
+                                            </p>
+                                            {item.discountedPrice && item.discountedPrice < item.price && (
+                                              <p className="text-xs text-gray-500 line-through whitespace-nowrap">
+                                                {item.price * item.quantity} جـ
+                                              </p>
+                                            )}
                                           </div>
                                         </div>
                                       ))}
@@ -1915,25 +1927,39 @@ export default function AdminPage() {
                                       جديد
                                     </button>
                                     <button
-                                      onClick={() => handleTableOrderStatusUpdate(order.id, 'preparing')}
+                                      onClick={() => handleTableOrderStatusUpdate(order.id, 'read')}
                                       disabled={updatingTableOrderStatus?.orderId === order.id}
                                       className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                                        order.status === 'preparing'
-                                          ? 'bg-fuchsia-600 text-white shadow-md'
-                                          : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'preparing'
+                                        order.status === 'read'
+                                          ? 'bg-blue-600 text-white shadow-md'
+                                          : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'read'
                                           ? 'bg-purple-100 text-gray-700'
                                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                       }`}
-                                      title="جاري التحضير"
+                                      title="مقروء"
                                     >
-                                      جاري التحضير
+                                      مقروء
+                                    </button>
+                                    <button
+                                      onClick={() => handleTableOrderStatusUpdate(order.id, 'served')}
+                                      disabled={updatingTableOrderStatus?.orderId === order.id}
+                                      className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                                        order.status === 'served'
+                                          ? 'bg-fuchsia-600 text-white shadow-md'
+                                          : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'served'
+                                          ? 'bg-purple-100 text-gray-700'
+                                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                      }`}
+                                      title="تم التقديم"
+                                    >
+                                      تم التقديم
                                     </button>
                                     <button
                                       onClick={() => handleTableOrderStatusUpdate(order.id, 'completed')}
                                       disabled={updatingTableOrderStatus?.orderId === order.id}
                                       className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
                                         order.status === 'completed'
-                                          ? 'bg-rose-500 text-white shadow-md'
+                                          ? 'bg-rose-600 text-white shadow-md'
                                           : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'completed'
                                           ? 'bg-purple-100 text-gray-700'
                                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'

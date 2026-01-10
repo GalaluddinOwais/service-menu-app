@@ -22,7 +22,7 @@ export async function PATCH(
     const { status } = await request.json();
 
     // Validate status
-    const validStatuses = ['pending', 'preparing', 'completed'];
+    const validStatuses = ['pending', 'read', 'served', 'completed'];
     if (!validStatuses.includes(status)) {
       return NextResponse.json({ error: 'حالة غير صالحة' }, { status: 400 });
     }

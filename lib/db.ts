@@ -81,7 +81,7 @@ export interface TableOrder {
   totalPrice: number;
   totalDiscount: number;
   createdAt: string;
-  status?: 'pending' | 'preparing' | 'completed'; // حالة الطلب
+  status?: 'pending' | 'read' | 'served' | 'completed'; // حالة الطلب
 }
 
 interface Database {
@@ -424,7 +424,7 @@ export async function deleteTableOrder(id: string): Promise<boolean> {
 
 export async function updateTableOrderStatus(
   id: string,
-  status: 'pending' | 'preparing' | 'completed'
+  status: 'pending' | 'read' | 'served' | 'completed'
 ): Promise<TableOrder | null> {
   const db = await readDB();
   const order = db.tableOrders.find(o => o.id === id);
