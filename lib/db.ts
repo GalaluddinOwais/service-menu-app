@@ -324,12 +324,66 @@ export async function deleteAdmin(id: string): Promise<boolean> {
 }
 
 // دوال إدارة الطلبات
-export async function getOrders(adminId?: string): Promise<Order[]> {
-  const db = await readDB();
-  if (adminId) {
-    return db.orders.filter(order => order.adminId === adminId);
+export async function getOrders(
+  adminId?: string,
+  options?: {
+    page?: number;
+    limit?: number;
+    status?: 'all' | 'pending' | 'read' | 'delivering' | 'delivered';
+    orderType?: 'all' | 'website' | 'whatsapp';
+    dateFilter?: 'all' | 'today' | 'week' | 'month';
   }
-  return db.orders;
+): Promise<{ orders: Order[]; total: number }> {
+  const db = await readDB();
+
+  // Filter by adminId
+  let filtered = adminId
+    ? db.orders.filter(order => order.adminId === adminId)
+    : db.orders;
+
+  // Apply status filter
+  if (options?.status && options.status !== 'all') {
+    filtered = filtered.filter(order => (order.status || 'pending') === options.status);
+  }
+
+  // Apply orderType filter
+  if (options?.orderType && options.orderType !== 'all') {
+    filtered = filtered.filter(order => order.orderType === options.orderType);
+  }
+
+  // Apply date filter
+  if (options?.dateFilter && options.dateFilter !== 'all') {
+    const now = new Date();
+    const filterDate = new Date();
+
+    if (options.dateFilter === 'today') {
+      filterDate.setHours(0, 0, 0, 0);
+    } else if (options.dateFilter === 'week') {
+      filterDate.setDate(now.getDate() - 7);
+    } else if (options.dateFilter === 'month') {
+      filterDate.setDate(now.getDate() - 30);
+    }
+
+    filtered = filtered.filter(order => {
+      const orderDate = new Date(order.createdAt);
+      return orderDate >= filterDate;
+    });
+  }
+
+  // Count total filtered orders
+  const total = filtered.length;
+
+  // Sort by createdAt descending (newest first)
+  filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  // Apply pagination if provided
+  if (options?.page && options?.limit) {
+    const startIndex = (options.page - 1) * options.limit;
+    const endIndex = startIndex + options.limit;
+    filtered = filtered.slice(startIndex, endIndex);
+  }
+
+  return { orders: filtered, total };
 }
 
 export async function getOrder(id: string): Promise<Order | null> {
@@ -343,6 +397,7 @@ export async function createOrder(order: Omit<Order, 'id' | 'createdAt'>): Promi
     ...order,
     id: `order_${Date.now()}`,
     createdAt: new Date().toISOString(),
+    status: order.status || 'pending', // Default status is 'pending'
   };
   db.orders.push(newOrder);
   await writeDB(db);
@@ -406,6 +461,7 @@ export async function createTableOrder(order: Omit<TableOrder, 'id' | 'createdAt
     ...order,
     id: `table_order_${Date.now()}`,
     createdAt: new Date().toISOString(),
+    status: order.status || 'pending', // Default status is 'pending'
   };
   db.tableOrders.push(newOrder);
   await writeDB(db);

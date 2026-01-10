@@ -135,6 +135,8 @@ export default function AdminPage() {
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const ordersPerPage = 10;
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
     const adminData = localStorage.getItem('admin_data');
@@ -167,6 +169,13 @@ export default function AdminPage() {
     fetchData(admin.id);
   }, [router]);
 
+  // Refetch orders when filters or page changes
+  useEffect(() => {
+    if (currentAdmin) {
+      refreshOrders();
+    }
+  }, [currentPage, statusFilter, orderTypeFilter, dateFilter]);
+
   const handleLogout = () => {
     localStorage.removeItem('admin_data');
     localStorage.removeItem('session_token');
@@ -193,10 +202,20 @@ export default function AdminPage() {
     const menuData = await menuRes.json();
     setItems(Array.isArray(menuData.items) ? menuData.items : []);
 
-    // جلب الطلبات الخاصة بالأدمن
-    const ordersRes = await fetch(`/api/orders?adminId=${adminId}`);
+    // جلب الطلبات الخاصة بالأدمن مع الفلترة والصفحات
+    const params = new URLSearchParams({
+      adminId,
+      page: currentPage.toString(),
+      limit: ordersPerPage.toString(),
+      status: statusFilter,
+      orderType: orderTypeFilter,
+      dateFilter: dateFilter
+    });
+    const ordersRes = await fetch(`/api/orders?${params}`);
     const ordersData = await ordersRes.json();
-    setOrders(Array.isArray(ordersData) ? ordersData : []);
+    setOrders(Array.isArray(ordersData.orders) ? ordersData.orders : []);
+    setTotalOrders(ordersData.total || 0);
+    setTotalPages(ordersData.totalPages || 1);
 
     // جلب طلبات الطاولات الخاصة بالأدمن
     const tableOrdersRes = await fetch(`/api/table-orders?adminId=${adminId}`);
@@ -209,9 +228,19 @@ export default function AdminPage() {
     if (!currentAdmin) return;
     setIsRefreshingOrders(true);
     try {
-      const ordersRes = await fetch(`/api/orders?adminId=${currentAdmin.id}`);
+      const params = new URLSearchParams({
+        adminId: currentAdmin.id,
+        page: currentPage.toString(),
+        limit: ordersPerPage.toString(),
+        status: statusFilter,
+        orderType: orderTypeFilter,
+        dateFilter: dateFilter
+      });
+      const ordersRes = await fetch(`/api/orders?${params}`);
       const ordersData = await ordersRes.json();
-      setOrders(Array.isArray(ordersData) ? ordersData : []);
+      setOrders(Array.isArray(ordersData.orders) ? ordersData.orders : []);
+      setTotalOrders(ordersData.total || 0);
+      setTotalPages(ordersData.totalPages || 1);
     } catch (error) {
       console.error('Error refreshing orders:', error);
     } finally {
@@ -521,12 +550,17 @@ export default function AdminPage() {
       });
 
       if (res.ok) {
-        // Update local state
-        setOrders(prevOrders =>
-          prevOrders.map(order =>
-            order.id === orderId ? { ...order, status: newStatus } : order
-          )
-        );
+        // If status filter is active, refetch to update the list
+        if (statusFilter !== 'all') {
+          await refreshOrders();
+        } else {
+          // Update local state only if no filter is active
+          setOrders(prevOrders =>
+            prevOrders.map(order =>
+              order.id === orderId ? { ...order, status: newStatus } : order
+            )
+          );
+        }
       } else {
         alert('فشل تحديث حالة الطلب');
       }
@@ -572,52 +606,6 @@ export default function AdminPage() {
     return items.filter(item => item.listId === listId);
   };
 
-  // Filter and paginate orders
-  const getFilteredOrders = () => {
-    let filtered = [...orders];
-
-    // Filter by status
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(order => (order.status || 'pending') === statusFilter);
-    }
-
-    // Filter by order type
-    if (orderTypeFilter !== 'all') {
-      filtered = filtered.filter(order => order.orderType === orderTypeFilter);
-    }
-
-    // Filter by date
-    if (dateFilter !== 'all') {
-      const now = new Date();
-      filtered = filtered.filter(order => {
-        const orderDate = new Date(order.createdAt);
-        if (dateFilter === 'today') {
-          return orderDate.toDateString() === now.toDateString();
-        } else if (dateFilter === 'week') {
-          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          return orderDate >= weekAgo;
-        } else if (dateFilter === 'month') {
-          const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          return orderDate >= monthAgo;
-        }
-        return true;
-      });
-    }
-
-    // Sort by date (newest first)
-    filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-    return filtered;
-  };
-
-  const getPaginatedOrders = () => {
-    const filtered = getFilteredOrders();
-    const startIndex = (currentPage - 1) * ordersPerPage;
-    const endIndex = startIndex + ordersPerPage;
-    return filtered.slice(startIndex, endIndex);
-  };
-
-  const totalPages = Math.ceil(getFilteredOrders().length / ordersPerPage);
 
   if (!currentAdmin) {
     return (
@@ -1003,7 +991,7 @@ export default function AdminPage() {
             </div>
 
             {/* Filters */}
-            {orders.length > 0 && (
+            {(totalOrders > 0 || statusFilter !== 'all' || orderTypeFilter !== 'all' || dateFilter !== 'all') && (
               <div className="mb-6 p-4 bg-gray-50 rounded-lg">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* Status Filter */}
@@ -1132,25 +1120,27 @@ export default function AdminPage() {
 
             {orders.length === 0 ? (
               <div className="text-center py-12">
-                <svg className="mx-auto h-16 w-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                </svg>
-                <p className="text-gray-500 text-lg">
-                  {currentAdmin?.isAcceptingOrders || currentAdmin?.isAcceptingOrdersViaWhatsapp
-                    ? 'لا توجد طلبات بعد'
-                    : 'طلبات التوصيل غير مفعلة'}
-                </p>
-                {!currentAdmin?.isAcceptingOrders && !currentAdmin?.isAcceptingOrdersViaWhatsapp && (
-                  <p className="text-gray-400 text-sm mt-2">يمكنك تفعيل الطلبات من تبويب "إعدادات الطلبات"</p>
+                {totalOrders === 0 && statusFilter === 'all' && orderTypeFilter === 'all' && dateFilter === 'all' ? (
+                  <>
+                    <svg className="mx-auto h-16 w-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                    </svg>
+                    <p className="text-gray-500 text-lg">
+                      {currentAdmin?.isAcceptingOrders || currentAdmin?.isAcceptingOrdersViaWhatsapp
+                        ? 'لا توجد طلبات بعد'
+                        : 'طلبات التوصيل غير مفعلة'}
+                    </p>
+                    {!currentAdmin?.isAcceptingOrders && !currentAdmin?.isAcceptingOrdersViaWhatsapp && (
+                      <p className="text-gray-400 text-sm mt-2">يمكنك تفعيل الطلبات من تبويب "إعدادات الطلبات"</p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-gray-500 text-lg">لا توجد طلبات تطابق الفلاتر المحددة</p>
                 )}
-              </div>
-            ) : getFilteredOrders().length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-gray-500 text-lg">لا توجد طلبات تطابق الفلاتر المحددة</p>
               </div>
             ) : (
               <div className="space-y-4">
-                {getPaginatedOrders().map((order) => {
+                {orders.map((order) => {
                   const orderDate = new Date(order.createdAt);
                   const dateStr = orderDate.toLocaleDateString('ar-EG', {
                     year: 'numeric',

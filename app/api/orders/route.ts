@@ -46,8 +46,34 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const adminId = searchParams.get('adminId');
 
-    const orders = await getOrders(adminId || undefined);
-    return NextResponse.json(orders);
+    if (!adminId) {
+      return NextResponse.json({ error: 'Missing adminId' }, { status: 400 });
+    }
+
+    // Extract pagination and filter parameters
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const limit = parseInt(searchParams.get('limit') || '10', 10);
+    const status = (searchParams.get('status') || 'all') as 'all' | 'pending' | 'read' | 'delivering' | 'delivered';
+    const orderType = (searchParams.get('orderType') || 'all') as 'all' | 'website' | 'whatsapp';
+    const dateFilter = (searchParams.get('dateFilter') || 'all') as 'all' | 'today' | 'week' | 'month';
+
+    // Call updated database function with pagination options
+    const { orders, total } = await getOrders(adminId, {
+      page,
+      limit,
+      status,
+      orderType,
+      dateFilter
+    });
+
+    // Return paginated response
+    return NextResponse.json({
+      orders,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    });
   } catch (error) {
     console.error('Error fetching orders:', error);
     return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 });
