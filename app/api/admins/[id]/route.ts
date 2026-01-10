@@ -62,8 +62,11 @@ export async function PUT(
 
     // التحقق من كلمة المرور فقط إذا أراد تغيير كلمة المرور
     if (newPassword) {
-      if (!currentPassword || currentPassword !== existingAdmin.password) {
-        return NextResponse.json({ error: 'Current password is required to change password' }, { status: 401 });
+      if (!currentPassword) {
+        return NextResponse.json({ error: 'كلمة المرور الحالية مطلوبة لتغيير كلمة المرور' }, { status: 400 });
+      }
+      if (currentPassword !== existingAdmin.password) {
+        return NextResponse.json({ error: 'كلمة المرور الحالية غير صحيحة' }, { status: 401 });
       }
     }
 

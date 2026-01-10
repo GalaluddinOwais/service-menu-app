@@ -485,10 +485,50 @@ export default function AdminPage() {
     e.preventDefault();
     if (!currentAdmin) return;
 
+    // إرسال الإعدادات فقط بدون كلمة المرور
+    const { currentPassword, newPassword, ...otherData } = settingsFormData;
+
     const res = await fetch(`/api/admins/${currentAdmin.id}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
-      body: JSON.stringify(settingsFormData),
+      body: JSON.stringify(otherData),
+    });
+
+    if (res.ok) {
+      const updatedAdmin = await res.json();
+      const newAdminData = { ...currentAdmin, ...updatedAdmin };
+      setCurrentAdmin(newAdminData);
+      localStorage.setItem('admin_data', JSON.stringify(newAdminData));
+
+      alert('تم حفظ الإعدادات بنجاح!');
+    } else {
+      const error = await res.json();
+      alert(`فشل حفظ الإعدادات: ${error.error || 'خطأ غير معروف'}`);
+    }
+  };
+
+  const handlePasswordChange = async () => {
+    if (!currentAdmin) return;
+
+    // التحقق من إدخال كلمة المرور الجديدة
+    if (!settingsFormData.newPassword) {
+      alert('يرجى إدخال كلمة المرور الجديدة');
+      return;
+    }
+
+    if (!settingsFormData.currentPassword) {
+      alert('يرجى إدخال كلمة المرور الحالية');
+      return;
+    }
+
+    // إرسال طلب PATCH لتغيير كلمة المرور فقط
+    const res = await fetch(`/api/admins/${currentAdmin.id}/password`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        currentPassword: settingsFormData.currentPassword,
+        newPassword: settingsFormData.newPassword,
+      }),
     });
 
     if (res.ok) {
@@ -504,10 +544,10 @@ export default function AdminPage() {
         newPassword: '',
       });
 
-      alert('تم حفظ الإعدادات بنجاح!');
+      alert('تم تغيير كلمة المرور بنجاح!');
     } else {
       const error = await res.json();
-      alert(`فشل حفظ الإعدادات: ${error.error || 'خطأ غير معروف'}`);
+      alert(`فشل تغيير كلمة المرور: ${error.error || 'خطأ غير معروف'}`);
     }
   };
 
@@ -1244,8 +1284,8 @@ export default function AdminPage() {
                       >
                         <div className="space-y-2 mt-3">
                           {order.items.map((item, idx) => (
-                            <div key={idx} className="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
-                              <div className="flex items-center gap-3">
+                            <div key={idx} className="flex items-center bg-gray-50 p-3 rounded-lg">
+                              <div className="flex items-center gap-3 flex-1">
                                 {item.imageUrl && (
                                   <img src={item.imageUrl} alt={item.name} className="w-12 h-12 object-cover rounded-lg" />
                                 )}
@@ -1253,8 +1293,8 @@ export default function AdminPage() {
                                   <p className="font-bold text-gray-800">{item.quantity} {item.name}</p>
                                 </div>
                               </div>
-                              <div className="border-r-2 border-gray-300 mx-2 self-stretch"></div>
-                              <div className="text-left">
+                              <div className="border-r-2 border-gray-300 mx-3 self-stretch"></div>
+                              <div className="text-left flex-shrink-0">
                                 <p className="font-bold text-gray-800 whitespace-nowrap">
                                   {(item.discountedPrice || item.price) * item.quantity} جـ
                                 </p>
@@ -1659,8 +1699,16 @@ export default function AdminPage() {
                 <p className="text-xs text-gray-500 mt-1">اختياري: رسالة تظهر بعد كل قائمة - اتركه فارغاً ولن تظهر أية رسالة</p>
               </div>
 
+              <button
+                type="submit"
+                disabled={isUploadingImage}
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white py-3 px-4 rounded-lg font-bold text-lg transition-all duration-200 transform hover:scale-[1.02] shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isUploadingImage ? 'جاري رفع الصورة...' : 'حفظ الإعدادات'}
+              </button>
+
               <div className="border-t-2 border-gray-200 pt-6">
-                <h3 className="text-lg font-bold text-gray-800 mb-4">تغيير كلمة المرور (اختياري)</h3>
+                <h3 className="text-lg font-bold text-gray-800 mb-4">تغيير كلمة المرور</h3>
 
                 <div className="space-y-4">
                   <div>
@@ -1672,9 +1720,8 @@ export default function AdminPage() {
                       value={settingsFormData.newPassword}
                       onChange={(e) => setSettingsFormData({ ...settingsFormData, newPassword: e.target.value })}
                       className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
-                      placeholder="اتركه فارغاً إذا لم ترد تغيير كلمة المرور"
+                      placeholder="أدخل كلمة المرور الجديدة"
                     />
-                    <p className="text-xs text-gray-500 mt-1">اختياري: اتركه فارغاً للاحتفاظ بكلمة المرور الحالية</p>
                   </div>
 
                   {settingsFormData.newPassword && (
@@ -1697,11 +1744,12 @@ export default function AdminPage() {
               </div>
 
               <button
-                type="submit"
+                type="button"
+                onClick={handlePasswordChange}
                 disabled={isUploadingImage}
                 className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white py-3 px-4 rounded-lg font-bold text-lg transition-all duration-200 transform hover:scale-[1.02] shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isUploadingImage ? 'جاري رفع الصورة...' : 'حفظ الإعدادات'}
+                {isUploadingImage ? 'جاري رفع الصورة...' : 'تغيير كلمة المرور'}
               </button>
             </form>
           </div>
@@ -1875,8 +1923,8 @@ export default function AdminPage() {
                                   >
                                     <div className="space-y-2 mb-3">
                                       {order.items.map((item: any, idx: number) => (
-                                        <div key={idx} className="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
-                                          <div className="flex items-center gap-3">
+                                        <div key={idx} className="flex items-center bg-gray-50 p-3 rounded-lg">
+                                          <div className="flex items-center gap-3 flex-1">
                                             {item.imageUrl && (
                                               <img src={item.imageUrl} alt={item.name} className="w-12 h-12 object-cover rounded-lg" />
                                             )}
@@ -1884,8 +1932,8 @@ export default function AdminPage() {
                                               <p className="font-bold text-gray-800">{item.quantity} {item.name}</p>
                                             </div>
                                           </div>
-                                          <div className="border-r-2 border-gray-300 mx-2 self-stretch"></div>
-                                          <div className="text-left">
+                                          <div className="border-r-2 border-gray-300 mx-3 self-stretch"></div>
+                                          <div className="text-left flex-shrink-0">
                                             <p className="font-bold text-gray-800 whitespace-nowrap">
                                               {(item.discountedPrice || item.price) * item.quantity} جـ
                                             </p>
@@ -1911,7 +1959,7 @@ export default function AdminPage() {
                                         (order.status || 'pending') === 'pending'
                                           ? 'bg-purple-600 text-white shadow-md'
                                           : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'pending'
-                                          ? 'bg-purple-100 text-gray-700'
+                                          ? 'bg-purple-200 text-gray-700'
                                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                       }`}
                                       title="جديد"
@@ -1923,9 +1971,9 @@ export default function AdminPage() {
                                       disabled={updatingTableOrderStatus?.orderId === order.id}
                                       className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
                                         order.status === 'read'
-                                          ? 'bg-blue-600 text-white shadow-md'
+                                          ? 'bg-fuchsia-600 text-white shadow-md'
                                           : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'read'
-                                          ? 'bg-purple-100 text-gray-700'
+                                          ? 'bg-fuchsia-200 text-gray-700'
                                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                       }`}
                                       title="مقروء"
@@ -1937,9 +1985,9 @@ export default function AdminPage() {
                                       disabled={updatingTableOrderStatus?.orderId === order.id}
                                       className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
                                         order.status === 'served'
-                                          ? 'bg-fuchsia-600 text-white shadow-md'
+                                          ? 'bg-pink-600 text-white shadow-md'
                                           : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'served'
-                                          ? 'bg-purple-100 text-gray-700'
+                                          ? 'bg-pink-200 text-gray-700'
                                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                       }`}
                                       title="تم التقديم"
@@ -1953,7 +2001,7 @@ export default function AdminPage() {
                                         order.status === 'completed'
                                           ? 'bg-rose-600 text-white shadow-md'
                                           : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'completed'
-                                          ? 'bg-purple-100 text-gray-700'
+                                          ? 'bg-rose-200 text-gray-700'
                                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                       }`}
                                       title="تم"
