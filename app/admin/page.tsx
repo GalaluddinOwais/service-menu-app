@@ -1118,7 +1118,7 @@ export default function AdminPage() {
               </div>
             )}
 
-            {orders.length === 0 ? (
+            {orders.length === 0 && (
               <div className="text-center py-12">
                 {totalOrders === 0 && statusFilter === 'all' && orderTypeFilter === 'all' && dateFilter === 'all' ? (
                   <>
@@ -1138,7 +1138,9 @@ export default function AdminPage() {
                   <p className="text-gray-500 text-lg">لا توجد طلبات تطابق الفلاتر المحددة</p>
                 )}
               </div>
-            ) : (
+            )}
+
+            {orders.length > 0 && (
               <div className="space-y-4">
                 {orders.map((order) => {
                   const orderDate = new Date(order.createdAt);
@@ -1358,41 +1360,41 @@ export default function AdminPage() {
                   </div>
                   );
                 })}
+              </div>
+            )}
 
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <div className="mt-6 flex justify-center items-center gap-2">
+            {/* Pagination */}
+            {totalOrders > ordersPerPage && (
+              <div className="mt-6 flex justify-center items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  السابق
+                </button>
+                <div className="flex gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
                     <button
-                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                      disabled={currentPage === 1}
-                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`px-3 py-2 rounded-lg font-semibold transition ${
+                        currentPage === page
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                      }`}
                     >
-                      السابق
+                      {page}
                     </button>
-                    <div className="flex gap-1">
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                        <button
-                          key={page}
-                          onClick={() => setCurrentPage(page)}
-                          className={`px-3 py-2 rounded-lg font-semibold transition ${
-                            currentPage === page
-                              ? 'bg-blue-500 text-white'
-                              : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                          }`}
-                        >
-                          {page}
-                        </button>
-                      ))}
-                    </div>
-                    <button
-                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                      disabled={currentPage === totalPages}
-                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      التالي
-                    </button>
-                  </div>
-                )}
+                  ))}
+                </div>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  التالي
+                </button>
               </div>
             )}
           </div>
