@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getOrder, updateOrderStatus } from '@/lib/db';
+import { getOrder, updateOrderStatus, getEmployee } from '@/lib/db';
 import { verifySessionToken } from '@/lib/auth';
 
 export async function PATCH(
@@ -30,9 +30,9 @@ export async function PATCH(
     // Await params as required by Next.js 15
     const { orderId } = await context.params;
 
-    console.log('Updating order status:', { orderId, newStatus: status, adminId: payload.adminId });
+    console.log('Updating order status:', { orderId, newStatus: status, userId: payload.adminId || payload.employeeId });
 
-    // Check if order exists and belongs to the admin
+    // Check if order exists
     const order = await getOrder(orderId);
 
     if (!order) {
@@ -40,9 +40,25 @@ export async function PATCH(
       return NextResponse.json({ error: 'الطلب غير موجود' }, { status: 404 });
     }
 
-    if (order.adminId !== payload.adminId) {
-      console.log('Permission denied:', { orderAdmin: order.adminId, requestAdmin: payload.adminId });
-      return NextResponse.json({ error: 'غير مصرح' }, { status: 403 });
+    // التحقق من الصلاحية:
+    // 1. الأدمن يمكنه تعديل أي طلب يخصه
+    // 2. العامل يمكنه تعديل الطلبات المُعيَّنة له
+    // 3. أي عامل توصيل يمكنه تعديل الطلبات المعينة لـ "ANY_DELIVERY"
+    const isAdmin = payload.adminId && order.adminId === payload.adminId;
+    const isAssignedEmployee = payload.employeeId && order.assignedTo === payload.employeeId;
+
+    // Check if order is assigned to ANY_DELIVERY and user is a delivery employee
+    let isAnyDeliveryEmployee = false;
+    if (payload.employeeId && order.assignedTo === 'ANY_DELIVERY') {
+      const employee = await getEmployee(payload.employeeId);
+      if (employee && employee.isDelivery) {
+        isAnyDeliveryEmployee = true;
+      }
+    }
+
+    if (!isAdmin && !isAssignedEmployee && !isAnyDeliveryEmployee) {
+      console.log('Permission denied:', { orderAdmin: order.adminId, assignedTo: order.assignedTo, userId: payload.adminId || payload.employeeId });
+      return NextResponse.json({ error: 'غير مصرح - يمكن فقط للعامل المُعيَّن تحديث حالة هذا الطلب' }, { status: 403 });
     }
 
     // Update order status

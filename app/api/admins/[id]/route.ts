@@ -58,7 +58,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { username, currentPassword, newPassword, logoUrl, backgroundUrl, theme, cardStyle, fontFamily, welcomeMessage, contactMessage, whatsappNumber, isAcceptingOrders, isAcceptingOrdersViaWhatsapp, isAcceptingTableOrders, tablesCount } = body;
+    const { username, currentPassword, newPassword, logoUrl, backgroundUrl, theme, cardStyle, fontFamily, welcomeMessage, contactMessage, whatsappNumber, isAcceptingOrders, isAcceptingOrdersViaWhatsapp, isAcceptingTableOrders, tablesCount, showDeliveryStaff, showWaiterStaff } = body;
 
     // التحقق من كلمة المرور فقط إذا أراد تغيير كلمة المرور
     if (newPassword) {
@@ -97,6 +97,8 @@ export async function PUT(
     if (isAcceptingOrdersViaWhatsapp !== undefined) updates.isAcceptingOrdersViaWhatsapp = isAcceptingOrdersViaWhatsapp;
     if (isAcceptingTableOrders !== undefined) updates.isAcceptingTableOrders = isAcceptingTableOrders;
     if (tablesCount !== undefined) updates.tablesCount = tablesCount;
+    if (showDeliveryStaff !== undefined) updates.showDeliveryStaff = showDeliveryStaff;
+    if (showWaiterStaff !== undefined) updates.showWaiterStaff = showWaiterStaff;
 
     const updatedAdmin = await updateAdmin(id, updates);
 
@@ -148,6 +150,8 @@ export async function PATCH(
     if (body.isAcceptingOrdersViaWhatsapp !== undefined) updates.isAcceptingOrdersViaWhatsapp = body.isAcceptingOrdersViaWhatsapp;
     if (body.isAcceptingTableOrders !== undefined) updates.isAcceptingTableOrders = body.isAcceptingTableOrders;
     if (body.tablesCount !== undefined) updates.tablesCount = body.tablesCount;
+    if (body.showDeliveryStaff !== undefined) updates.showDeliveryStaff = body.showDeliveryStaff;
+    if (body.showWaiterStaff !== undefined) updates.showWaiterStaff = body.showWaiterStaff;
 
     const updatedAdmin = await updateAdmin(id, updates);
 

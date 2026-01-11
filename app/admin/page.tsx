@@ -77,6 +77,11 @@ const THEMES = {
 export default function AdminPage() {
   const router = useRouter();
   const [currentAdmin, setCurrentAdmin] = useState<Admin | null>(null);
+  const [userType, setUserType] = useState<'admin' | 'employee'>('admin');
+  const [isWaiter, setIsWaiter] = useState(false); // Track if employee is a waiter
+  const [isDelivery, setIsDelivery] = useState(false); // Track if employee is delivery
+  const [currentEmployeeId, setCurrentEmployeeId] = useState<string | null>(null); // Track current employee ID
+  const [initialDataLoaded, setInitialDataLoaded] = useState(false); // Track if initial data fetch completed
   const [lists, setLists] = useState<MenuList[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -84,7 +89,7 @@ export default function AdminPage() {
   const [selectedList, setSelectedList] = useState<MenuList | null>(null);
   const [editingList, setEditingList] = useState<MenuList | null>(null);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
-  const [activeTab, setActiveTab] = useState<'lists' | 'settings' | 'delivery' | 'orders' | 'tableOrders'>('lists');
+  const [activeTab, setActiveTab] = useState<'lists' | 'settings' | 'delivery' | 'orders' | 'tableOrders' | 'employees'>('orders');
 
   const [listFormData, setListFormData] = useState({
     name: '',
@@ -117,6 +122,18 @@ export default function AdminPage() {
     isAcceptingOrdersViaWhatsapp: false,
     isAcceptingTableOrders: false,
     tablesCount: 0,
+    showDeliveryStaff: false,
+    showWaiterStaff: false,
+  });
+
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [employeeFormData, setEmployeeFormData] = useState({
+    name: '',
+    username: '',
+    password: '',
+    confirmPassword: '',
+    isDelivery: false,
+    isWaiter: false,
   });
 
   const [isRefreshingOrders, setIsRefreshingOrders] = useState(false);
@@ -128,24 +145,83 @@ export default function AdminPage() {
   const [updatingTableOrderStatus, setUpdatingTableOrderStatus] = useState<{ orderId: string; status: string } | null>(null);
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [deletingTableOrderId, setDeletingTableOrderId] = useState<string | null>(null);
+  const [assigningEmployee, setAssigningEmployee] = useState<string | null>(null); // orderId being assigned
 
   // Filtering and pagination state
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'read' | 'delivering' | 'delivered'>('all');
   const [orderTypeFilter, setOrderTypeFilter] = useState<'all' | 'website' | 'whatsapp'>('all');
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [employeeFilter, setEmployeeFilter] = useState<string>('all'); // 'all' or employee ID
   const [currentPage, setCurrentPage] = useState(1);
   const ordersPerPage = 10;
   const [totalOrders, setTotalOrders] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
 
   useEffect(() => {
+    // Try admin data first
     const adminData = localStorage.getItem('admin_data');
+    const employeeData = localStorage.getItem('employee_data');
+
+    if (!adminData && !employeeData) {
+      router.push('/login');
+      return;
+    }
+
+    if (employeeData) {
+      // Employee login
+      const employee = JSON.parse(employeeData);
+      setUserType('employee');
+      setCurrentEmployeeId(employee.id);
+
+      // Track employee roles
+      setIsWaiter(employee.isWaiter || false);
+      setIsDelivery(employee.isDelivery || false);
+
+      // Don't set employeeFilter here - it will trigger useEffect
+      // We'll set it after fetchData completes
+
+      // For employees, we still need the admin ID to fetch data
+      // The employee object should have adminId
+      if (!employee.adminId) {
+        // If no adminId, logout and redirect
+        localStorage.removeItem('employee_data');
+        localStorage.removeItem('session_token');
+        router.push('/login');
+        return;
+      }
+
+      // Fetch full admin data for the employee's admin
+      const token = localStorage.getItem('session_token');
+      fetch(`/api/admins/${employee.adminId}/info`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        }
+      })
+        .then(res => res.json())
+        .then(adminData => {
+          setCurrentAdmin(adminData);
+          // Pass EMPLOYEE_ALL to show all employee's orders (assigned + ANY_DELIVERY)
+          fetchData(employee.adminId, 'EMPLOYEE_ALL');
+        })
+        .catch(error => {
+          console.error('Error fetching admin data:', error);
+          // Fallback to minimal admin object
+          setCurrentAdmin({ id: employee.adminId } as Admin);
+          // Pass EMPLOYEE_ALL to show all employee's orders (assigned + ANY_DELIVERY)
+          fetchData(employee.adminId, 'EMPLOYEE_ALL');
+        });
+      return;
+    }
+
     if (!adminData) {
       router.push('/login');
       return;
     }
 
+    // Admin login
     const admin = JSON.parse(adminData);
+    setUserType('admin');
     setCurrentAdmin(admin);
     setSettingsFormData({
       username: admin.username || '',
@@ -165,6 +241,8 @@ export default function AdminPage() {
       isAcceptingOrdersViaWhatsapp: admin.isAcceptingOrdersViaWhatsapp || false,
       isAcceptingTableOrders: admin.isAcceptingTableOrders || false,
       tablesCount: admin.tablesCount || 0,
+      showDeliveryStaff: admin.showDeliveryStaff || false,
+      showWaiterStaff: admin.showWaiterStaff || false,
     });
     fetchData(admin.id);
   }, [router]);
@@ -172,12 +250,31 @@ export default function AdminPage() {
   // Refetch orders when filters or page changes
   useEffect(() => {
     if (currentAdmin) {
+      // For employees with EMPLOYEE_ALL or EMPLOYEE_MINE filter, wait until currentEmployeeId is set
+      if (userType === 'employee' && (employeeFilter === 'EMPLOYEE_ALL' || employeeFilter === 'EMPLOYEE_MINE') && !currentEmployeeId) {
+        return;
+      }
       refreshOrders();
     }
-  }, [currentPage, statusFilter, orderTypeFilter, dateFilter]);
+  }, [currentPage, statusFilter, orderTypeFilter, dateFilter, employeeFilter, currentEmployeeId]);
+
+  // Set default active tab based on user type and employee role
+  useEffect(() => {
+    if (userType === 'employee') {
+      // For employees, set the first available tab
+      if (isDelivery && !isWaiter) {
+        setActiveTab('orders'); // Delivery only -> delivery orders tab
+      } else if (isWaiter && !isDelivery) {
+        setActiveTab('tableOrders'); // Waiter only -> table orders tab
+      } else if (isDelivery && isWaiter) {
+        setActiveTab('orders'); // Both -> default to delivery orders
+      }
+    }
+  }, [userType, isDelivery, isWaiter]);
 
   const handleLogout = () => {
     localStorage.removeItem('admin_data');
+    localStorage.removeItem('employee_data');
     localStorage.removeItem('session_token');
     router.push('/login');
   };
@@ -191,18 +288,36 @@ export default function AdminPage() {
     };
   };
 
-  const fetchData = async (adminId: string) => {
-    // جلب القوائم الخاصة بالأدمن الحالي
-    const listsRes = await fetch(`/api/lists?adminId=${adminId}`);
-    const listsData = await listsRes.json();
+  const fetchData = async (adminId: string, employeeIdOverride?: string) => {
+    // جلب العاملين أولاً - قبل أي شيء آخر
+    const employeesPromise = fetch('/api/employees', {
+      headers: getAuthHeaders(),
+    }).then(res => res.json());
+
+    // جلب القوائم والعناصر بالتوازي
+    const [listsData, menuData, employeesData] = await Promise.all([
+      fetch(`/api/lists?adminId=${adminId}`).then(res => res.json()),
+      fetch('/api/menu').then(res => res.json()),
+      employeesPromise
+    ]);
+
     setLists(Array.isArray(listsData) ? listsData : []);
-
-    // جلب جميع العناصر
-    const menuRes = await fetch('/api/menu');
-    const menuData = await menuRes.json();
     setItems(Array.isArray(menuData.items) ? menuData.items : []);
+    setEmployees(Array.isArray(employeesData) ? employeesData : []);
 
-    // جلب الطلبات الخاصة بالأدمن مع الفلترة والصفحات
+    // Determine which employeeId to use: override (for initial load) or state (for subsequent loads)
+    let effectiveEmployeeFilter = employeeIdOverride !== undefined ? employeeIdOverride : employeeFilter;
+
+    // Convert employee-specific filters to actual employee ID when needed
+    if (currentEmployeeId && effectiveEmployeeFilter === 'EMPLOYEE_ALL') {
+      // For EMPLOYEE_ALL, we'll send a special marker + actual employee ID
+      effectiveEmployeeFilter = `EMPLOYEE_ALL:${currentEmployeeId}`;
+    } else if (currentEmployeeId && effectiveEmployeeFilter === 'EMPLOYEE_MINE') {
+      // For EMPLOYEE_MINE, send just the employee ID
+      effectiveEmployeeFilter = currentEmployeeId;
+    }
+
+    // جلب الطلبات والطلبات الطاولات بالتوازي
     const params = new URLSearchParams({
       adminId,
       page: currentPage.toString(),
@@ -211,23 +326,52 @@ export default function AdminPage() {
       orderType: orderTypeFilter,
       dateFilter: dateFilter
     });
-    const ordersRes = await fetch(`/api/orders?${params}`);
-    const ordersData = await ordersRes.json();
+
+    // Add employeeId filter separately to handle empty string
+    if (effectiveEmployeeFilter !== 'all') {
+      params.append('employeeId', effectiveEmployeeFilter);
+    }
+
+    const [ordersData, tableOrdersData] = await Promise.all([
+      fetch(`/api/orders?${params}`).then(res => res.json()),
+      fetch(`/api/table-orders?adminId=${adminId}`, {
+        headers: getAuthHeaders()
+      }).then(res => res.json())
+    ]);
+
     setOrders(Array.isArray(ordersData.orders) ? ordersData.orders : []);
     setTotalOrders(ordersData.total || 0);
     setTotalPages(ordersData.totalPages || 1);
-
-    // جلب طلبات الطاولات الخاصة بالأدمن
-    const tableOrdersRes = await fetch(`/api/table-orders?adminId=${adminId}`);
-    const tableOrdersData = await tableOrdersRes.json();
     setTableOrders(Array.isArray(tableOrdersData) ? tableOrdersData : []);
+
+    // Mark initial data as loaded
+    setInitialDataLoaded(true);
+
+    // Set employeeFilter after data is fetched (only if it was passed as override)
+    if (employeeIdOverride !== undefined && employeeIdOverride !== employeeFilter) {
+      setEmployeeFilter(employeeIdOverride);
+    }
   };
 
   // دالة لتحديث طلبات التوصيل فقط
   const refreshOrders = async () => {
     if (!currentAdmin) return;
+
+    // For employees with EMPLOYEE_ALL or EMPLOYEE_MINE filter, wait until currentEmployeeId is set
+    if (userType === 'employee' && (employeeFilter === 'EMPLOYEE_ALL' || employeeFilter === 'EMPLOYEE_MINE') && !currentEmployeeId) {
+      return;
+    }
+
     setIsRefreshingOrders(true);
     try {
+      // Convert employee-specific filters to actual employee ID when needed
+      let effectiveEmployeeFilter = employeeFilter;
+      if (currentEmployeeId && effectiveEmployeeFilter === 'EMPLOYEE_ALL') {
+        effectiveEmployeeFilter = `EMPLOYEE_ALL:${currentEmployeeId}`;
+      } else if (currentEmployeeId && effectiveEmployeeFilter === 'EMPLOYEE_MINE') {
+        effectiveEmployeeFilter = currentEmployeeId;
+      }
+
       const params = new URLSearchParams({
         adminId: currentAdmin.id,
         page: currentPage.toString(),
@@ -236,6 +380,11 @@ export default function AdminPage() {
         orderType: orderTypeFilter,
         dateFilter: dateFilter
       });
+
+      // Add employeeId filter separately to handle empty string
+      if (effectiveEmployeeFilter !== 'all') {
+        params.append('employeeId', effectiveEmployeeFilter);
+      }
       const ordersRes = await fetch(`/api/orders?${params}`);
       const ordersData = await ordersRes.json();
       setOrders(Array.isArray(ordersData.orders) ? ordersData.orders : []);
@@ -253,7 +402,9 @@ export default function AdminPage() {
     if (!currentAdmin) return;
     setIsRefreshingTableOrders(true);
     try {
-      const tableOrdersRes = await fetch(`/api/table-orders?adminId=${currentAdmin.id}`);
+      const tableOrdersRes = await fetch(`/api/table-orders?adminId=${currentAdmin.id}`, {
+        headers: getAuthHeaders()
+      });
       const tableOrdersData = await tableOrdersRes.json();
       setTableOrders(Array.isArray(tableOrdersData) ? tableOrdersData : []);
     } catch (error) {
@@ -268,6 +419,9 @@ export default function AdminPage() {
     if (!currentAdmin || activeTab !== 'orders') return;
     // لا تعمل auto-refresh إذا كانت طلبات التوصيل غير مفعلة
     if (!currentAdmin.isAcceptingOrders && !currentAdmin.isAcceptingOrdersViaWhatsapp) return;
+
+    // Skip initial refresh if data was just loaded by fetchData
+    if (!initialDataLoaded) return;
 
     // تحديث فوري عند فتح التاب
     refreshOrders();
@@ -646,6 +800,95 @@ export default function AdminPage() {
     return items.filter(item => item.listId === listId);
   };
 
+  // دالة تعيين عامل لطلب توصيل
+  const handleAssignEmployee = async (orderId: string, employeeId: string | null) => {
+    // Set loading state
+    setAssigningEmployee(orderId);
+
+    try {
+      const res = await fetch(`/api/orders/${orderId}/assign`, {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ employeeId }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        alert(`فشل تعيين العامل: ${error.error || 'خطأ غير معروف'}`);
+      } else {
+        // Success - refresh orders to reflect filter changes
+        await refreshOrders();
+      }
+    } catch (error) {
+      alert('حدث خطأ أثناء تعيين العامل');
+    } finally {
+      setAssigningEmployee(null);
+    }
+  };
+
+  // دوال إدارة العاملين
+  const handleEmployeeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentAdmin) return;
+
+    // التحقق من تطابق كلمة المرور
+    if (employeeFormData.password !== employeeFormData.confirmPassword) {
+      alert('كلمة المرور غير متطابقة');
+      return;
+    }
+
+    // التحقق من طول كلمة المرور
+    if (employeeFormData.password.length < 6) {
+      alert('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      return;
+    }
+
+    const res = await fetch('/api/employees', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        name: employeeFormData.name,
+        username: employeeFormData.username,
+        password: employeeFormData.password,
+        isDelivery: employeeFormData.isDelivery,
+        isWaiter: employeeFormData.isWaiter,
+      }),
+    });
+
+    if (res.ok) {
+      const newEmployee = await res.json();
+      setEmployees([...employees, newEmployee]);
+      setEmployeeFormData({
+        name: '',
+        username: '',
+        password: '',
+        confirmPassword: '',
+        isDelivery: false,
+        isWaiter: false,
+      });
+      alert('تم إضافة العامل بنجاح!');
+    } else {
+      const error = await res.json();
+      alert(`فشل إضافة العامل: ${error.error || 'خطأ غير معروف'}`);
+    }
+  };
+
+  const handleDeleteEmployee = async (id: string) => {
+    if (!confirm('هل أنت متأكد من حذف هذا العامل؟')) return;
+
+    const res = await fetch(`/api/employees/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+
+    if (res.ok) {
+      setEmployees(employees.filter(emp => emp.id !== id));
+      alert('تم حذف العامل بنجاح');
+    } else {
+      alert('فشل حذف العامل');
+    }
+  };
+
 
   if (!currentAdmin) {
     return (
@@ -690,56 +933,89 @@ export default function AdminPage() {
 
           {/* Tabs */}
           <div className="flex flex-wrap gap-2 mt-6 border-b">
-            <button
-              onClick={() => setActiveTab('lists')}
-              className={`px-6 py-3 font-bold transition-colors ${
-                activeTab === 'lists'
-                  ? 'border-b-2 border-blue-600 text-blue-600'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              إدارة القوائم
-            </button>
-            <button
-              onClick={() => setActiveTab('orders')}
-              className={`px-6 py-3 font-bold transition-colors ${
-                activeTab === 'orders'
-                  ? 'border-b-2 border-blue-600 text-blue-600'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              طلبات التوصيل
-            </button>
-            <button
-              onClick={() => setActiveTab('tableOrders')}
-              className={`px-6 py-3 font-bold transition-colors ${
-                activeTab === 'tableOrders'
-                  ? 'border-b-2 border-purple-600 text-purple-600'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              طلبات الطاولات
-            </button>
-            <button
-              onClick={() => setActiveTab('delivery')}
-              className={`px-6 py-3 font-bold transition-colors ${
-                activeTab === 'delivery'
-                  ? 'border-b-2 border-blue-600 text-blue-600'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              إعدادات الطلبات
-            </button>
-            <button
-              onClick={() => setActiveTab('settings')}
-              className={`px-6 py-3 font-bold transition-colors ${
-                activeTab === 'settings'
-                  ? 'border-b-2 border-blue-600 text-blue-600'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              إعدادات الحساب
-            </button>
+            {/* إدارة القوائم - للأدمن فقط */}
+            {userType === 'admin' && (
+              <button
+                onClick={() => setActiveTab('lists')}
+                className={`px-6 py-3 font-bold transition-colors ${
+                  activeTab === 'lists'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                إدارة القوائم
+              </button>
+            )}
+
+            {/* طلبات التوصيل - للأدمن وعمال التوصيل فقط */}
+            {(userType === 'admin' || isDelivery) && (
+              <button
+                onClick={() => setActiveTab('orders')}
+                className={`px-6 py-3 font-bold transition-colors ${
+                  activeTab === 'orders'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                طلبات التوصيل
+              </button>
+            )}
+
+            {/* طلبات الطاولات - للأدمن والنوادل فقط */}
+            {(userType === 'admin' || isWaiter) && (
+              <button
+                onClick={() => setActiveTab('tableOrders')}
+                className={`px-6 py-3 font-bold transition-colors ${
+                  activeTab === 'tableOrders'
+                    ? 'border-b-2 border-purple-600 text-purple-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                طلبات الطاولات
+              </button>
+            )}
+
+            {/* إعدادات الطلبات - للأدمن فقط */}
+            {userType === 'admin' && (
+              <button
+                onClick={() => setActiveTab('delivery')}
+                className={`px-6 py-3 font-bold transition-colors ${
+                  activeTab === 'delivery'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                إعدادات الطلبات
+              </button>
+            )}
+
+            {/* إدارة العاملين - للأدمن فقط */}
+            {userType === 'admin' && (
+              <button
+                onClick={() => setActiveTab('employees')}
+                className={`px-6 py-3 font-bold transition-colors ${
+                  activeTab === 'employees'
+                    ? 'border-b-2 border-green-600 text-green-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                إدارة العاملين
+              </button>
+            )}
+
+            {/* إعدادات الحساب - للأدمن فقط */}
+            {userType === 'admin' && (
+              <button
+                onClick={() => setActiveTab('settings')}
+                className={`px-6 py-3 font-bold transition-colors ${
+                  activeTab === 'settings'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                إعدادات الحساب
+              </button>
+            )}
           </div>
         </div>
 
@@ -1031,9 +1307,9 @@ export default function AdminPage() {
             </div>
 
             {/* Filters */}
-            {(totalOrders > 0 || statusFilter !== 'all' || orderTypeFilter !== 'all' || dateFilter !== 'all') && (
+            {(totalOrders > 0 || statusFilter !== 'all' || orderTypeFilter !== 'all' || dateFilter !== 'all' || employeeFilter !== 'all') && (
               <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   {/* Status Filter */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">الحالة</label>
@@ -1154,6 +1430,43 @@ export default function AdminPage() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Employee Filter - للأدمن فقط */}
+                  {userType === 'admin' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">عامل التوصيل</label>
+                      <select
+                        value={employeeFilter}
+                        onChange={(e) => { setEmployeeFilter(e.target.value); setCurrentPage(1); }}
+                        className="w-full px-1.5 py-0.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors bg-white text-sm"
+                      >
+                        <option value="all">الكل</option>
+                        <option value="">بدون عامل توصيل محدد</option>
+                        <option value="ANY_DELIVERY">عامل التوصيل أي عامل</option>
+                        {employees.filter(emp => emp.isDelivery).map((emp) => (
+                          <option key={emp.id} value={emp.id}>
+                            {emp.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Employee Filter - للموظفين */}
+                  {userType === 'employee' && isDelivery && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">نوع الطلبات</label>
+                      <select
+                        value={employeeFilter}
+                        onChange={(e) => { setEmployeeFilter(e.target.value); setCurrentPage(1); }}
+                        className="w-full px-1.5 py-0.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors bg-white text-sm"
+                      >
+                        <option value="EMPLOYEE_ALL">كل طلباتي</option>
+                        <option value="EMPLOYEE_MINE">المعينة لي فقط</option>
+                        <option value="ANY_DELIVERY">طلبات أي عامل فقط</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1206,7 +1519,16 @@ export default function AdminPage() {
                   };
 
                   return (
-                  <div key={order.id} className="border-2 border-gray-200 rounded-xl p-4 hover:shadow-lg transition-shadow">
+                  <div key={order.id} className="border-2 border-gray-200 rounded-xl p-4 hover:shadow-lg transition-shadow relative">
+                    {/* ANY_DELIVERY Badge - Absolute positioned in top-left corner */}
+                    {userType === 'employee' && isDelivery && (order as any).assignedTo === 'ANY_DELIVERY' && (
+                      <div className="absolute -top-0.5 -left-0.5 w-8 h-5 bg-blue-700 rounded-full flex items-center justify-center  border-2 border-grey"  title="لأي عامل توصيل">
+                        <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
+                        </svg>
+                      </div>
+                    )}
+
                     {/* Responsive Grid Layout: Custom 2-column on small screens, custom columns on larger screens */}
                     <div className="grid grid-cols-2 md:grid-cols-[auto_1fr_auto_150px] gap-3 md:gap-4">
                       {/* Date/Time and Order ID - Row 1, Col 1 on small screens */}
@@ -1312,90 +1634,129 @@ export default function AdminPage() {
 
                     {/* Order Status Buttons */}
                     <div className="mt-3 pt-3 border-t border-gray-200">
-                      <div className="flex flex-wrap gap-1 mb-3">
-                        <button
-                          onClick={() => handleStatusUpdate(order.id, 'pending')}
-                          disabled={updatingOrderStatus?.orderId === order.id}
-                          className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                            (order.status || 'pending') === 'pending'
-                              ? 'bg-blue-600 text-white shadow-md'
-                              : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'pending'
-                              ? 'bg-blue-100 text-gray-700'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      <div className="flex gap-2 flex-wrap md:flex-nowrap md:items-center">
+                        {/* Status Buttons */}
+                        <div className="flex flex-wrap gap-1 flex-1 md:flex-initial">
+                          <button
+                            onClick={() => handleStatusUpdate(order.id, 'pending')}
+                            disabled={updatingOrderStatus?.orderId === order.id}
+                            className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                              (order.status || 'pending') === 'pending'
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'pending'
+                                ? 'bg-blue-100 text-gray-700'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                            title="جديد"
+                          >
+                            جديد
+                          </button>
+                          <button
+                            onClick={() => handleStatusUpdate(order.id, 'read')}
+                            disabled={updatingOrderStatus?.orderId === order.id}
+                            className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                              order.status === 'read'
+                                ? 'bg-blue-500 text-white shadow-md'
+                                : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'read'
+                                ? 'bg-blue-100 text-gray-700'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                            title="مقروء"
+                          >
+                            مقروء
+                          </button>
+                          <button
+                            onClick={() => handleStatusUpdate(order.id, 'delivering')}
+                            disabled={updatingOrderStatus?.orderId === order.id}
+                            className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                              order.status === 'delivering'
+                                ? 'bg-teal-500 text-white shadow-md'
+                                : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'delivering'
+                                ? 'bg-teal-100 text-gray-700'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                            title="قيد التوصيل"
+                          >
+                            قيد التوصيل
+                          </button>
+                          <button
+                            onClick={() => handleStatusUpdate(order.id, 'delivered')}
+                            disabled={updatingOrderStatus?.orderId === order.id}
+                            className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                              order.status === 'delivered'
+                                ? 'bg-green-500 text-white shadow-md'
+                                : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'delivered'
+                                ? 'bg-green-100 text-gray-700'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                            title="تم"
+                          >
+                            تم
+                          </button>
+                        </div>
+
+                        {/* Employee Assignment Dropdown - في المنتصف على الشاشات الواسعة */}
+                        {userType === 'admin' && (
+                          <div className="w-full md:flex-1 md:mx-2">
+                            <select
+                              value={assigningEmployee === order.id ? '' : ((order as any).assignedTo || '')}
+                              onChange={(e) => handleAssignEmployee(order.id, e.target.value || null)}
+                              disabled={assigningEmployee === order.id}
+                              className={`w-full px-3  border-2 border-gray-200 rounded-lg focus:outline-none focus:border-green-500 transition-colors ${
+                                assigningEmployee === order.id ? 'opacity-50 cursor-wait' : ''
+                              }`}
+                            >
+                              {assigningEmployee === order.id ? (
+                                <option value="">جاري التعيين...</option>
+                              ) : (
+                                <>
+                                  <option value="">بدون عامل توصيل محدد</option>
+                                  <option value="ANY_DELIVERY">عامل التوصيل أي عامل</option>
+                                  {(order as any).assignedEmployee && (
+                                    <option value={(order as any).assignedEmployee.id}>
+                                      عامل التوصيل {(order as any).assignedEmployee.name}
+                                    </option>
+                                  )}
+                                  {employees.filter(emp => emp.isDelivery && emp.id !== (order as any).assignedTo).map((emp) => (
+                                    <option key={emp.id} value={emp.id}>
+                                      عامل التوصيل {emp.name}
+                                    </option>
+                                  ))}
+                                </>
+                              )}
+                            </select>
+                          </div>
+                        )}
+
+                        {/* Delete button - على اليسار تماماً في الشاشات الواسعة */}
+                        {userType === 'admin' && (
+                          <button
+                            onClick={async () => {
+                              setDeletingOrderId(order.id);
+                              const token = localStorage.getItem('session_token');
+                              const res = await fetch(`/api/orders/${order.id}`, {
+                                method: 'DELETE',
+                                headers: {
+                                  'Authorization': `Bearer ${token}`,
+                                },
+                              });
+
+                              if (res.ok) {
+                                setOrders(orders.filter(o => o.id !== order.id));
+                              }
+                              setDeletingOrderId(null);
+                            }}
+                            disabled={deletingOrderId === order.id}
+                          className={`w-full md:w-auto px-4 py-1 rounded-lg text-sm font-semibold transition ${
+                            deletingOrderId === order.id
+                              ? 'bg-red-100 text-gray-700 cursor-not-allowed'
+                              : 'bg-red-500 hover:bg-red-600 text-white'
                           }`}
-                          title="جديد"
-                        >
-                          جديد
-                        </button>
-                        <button
-                          onClick={() => handleStatusUpdate(order.id, 'read')}
-                          disabled={updatingOrderStatus?.orderId === order.id}
-                          className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                            order.status === 'read'
-                              ? 'bg-blue-500 text-white shadow-md'
-                              : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'read'
-                              ? 'bg-blue-100 text-gray-700'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                          title="مقروء"
-                        >
-                          مقروء
-                        </button>
-                        <button
-                          onClick={() => handleStatusUpdate(order.id, 'delivering')}
-                          disabled={updatingOrderStatus?.orderId === order.id}
-                          className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                            order.status === 'delivering'
-                              ? 'bg-teal-500 text-white shadow-md'
-                              : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'delivering'
-                              ? 'bg-teal-100 text-gray-700'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                          title="قيد التوصيل"
-                        >
-                          قيد التوصيل
-                        </button>
-                        <button
-                          onClick={() => handleStatusUpdate(order.id, 'delivered')}
-                          disabled={updatingOrderStatus?.orderId === order.id}
-                          className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                            order.status === 'delivered'
-                              ? 'bg-green-500 text-white shadow-md'
-                              : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'delivered'
-                              ? 'bg-green-100 text-gray-700'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                          title="تم"
-                        >
-                          تم
-                        </button>
+                          >
+                            مسح
+                          </button>
+                        )}
                       </div>
-
-                      <button
-                        onClick={async () => {
-                          setDeletingOrderId(order.id);
-                          const token = localStorage.getItem('session_token');
-                          const res = await fetch(`/api/orders/${order.id}`, {
-                            method: 'DELETE',
-                            headers: {
-                              'Authorization': `Bearer ${token}`,
-                            },
-                          });
-
-                          if (res.ok) {
-                            setOrders(orders.filter(o => o.id !== order.id));
-                          }
-                          setDeletingOrderId(null);
-                        }}
-                        disabled={deletingOrderId === order.id}
-                        className={`w-full px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                          deletingOrderId === order.id
-                            ? 'bg-red-100 text-gray-700 cursor-not-allowed'
-                            : 'bg-red-500 hover:bg-red-600 text-white'
-                        }`}
-                      >
-                        مسح
-                      </button>
                     </div>
                   </div>
                   );
@@ -1755,6 +2116,171 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* Employees Tab */}
+        {activeTab === 'employees' && (
+          <div className="bg-white p-8 rounded-lg shadow-md max-w-4xl mx-auto">
+            <h2 className="text-2xl font-bold mb-6 text-gray-800">إدارة العاملين</h2>
+
+            {/* Add Employee Form */}
+            <div className="bg-green-50 border-2 border-green-200 rounded-lg p-6 mb-8">
+              <h3 className="text-lg font-bold text-gray-800 mb-4">إضافة عامل جديد</h3>
+              <form onSubmit={handleEmployeeSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    الاسم <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={employeeFormData.name}
+                    onChange={(e) => setEmployeeFormData({ ...employeeFormData, name: e.target.value })}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-green-500 transition-colors"
+                    placeholder="أدخل اسم العامل"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    اسم المستخدم <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={employeeFormData.username}
+                    onChange={(e) => setEmployeeFormData({ ...employeeFormData, username: e.target.value })}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-green-500 transition-colors"
+                    placeholder="اسم مستخدم للتسجيل"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">سيستخدمه العامل لتسجيل الدخول</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      كلمة المرور <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      value={employeeFormData.password}
+                      onChange={(e) => setEmployeeFormData({ ...employeeFormData, password: e.target.value })}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-green-500 transition-colors"
+                      placeholder="كلمة المرور"
+                      minLength={6}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      تأكيد كلمة المرور <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      value={employeeFormData.confirmPassword}
+                      onChange={(e) => setEmployeeFormData({ ...employeeFormData, confirmPassword: e.target.value })}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-green-500 transition-colors"
+                      placeholder="تأكيد كلمة المرور"
+                      minLength={6}
+                    />
+                  </div>
+                </div>
+
+                {/* Employee Type Checkboxes */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-3">نوع الموظف</label>
+                  <div className="flex gap-6">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={employeeFormData.isDelivery}
+                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, isDelivery: e.target.checked })}
+                        className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                      />
+                      <span className="text-sm font-medium text-gray-700">موصل (طلبات التوصيل)</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={employeeFormData.isWaiter}
+                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, isWaiter: e.target.checked })}
+                        className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                      />
+                      <span className="text-sm font-medium text-gray-700">نادل (طلبات الطاولات)</span>
+                    </label>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">يمكن اختيار أحدهما أو كليهما</p>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white py-3 px-4 rounded-lg font-bold text-lg transition-all duration-200 transform hover:scale-[1.02] shadow-lg"
+                >
+                  إضافة عامل
+                </button>
+              </form>
+            </div>
+
+            {/* Employees List */}
+            <div>
+              <h3 className="text-lg font-bold text-gray-800 mb-4">العاملون ({employees.length})</h3>
+              {employees.length === 0 ? (
+                <div className="text-center py-12">
+                  <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  <p className="text-gray-500 text-lg">لا يوجد عاملون بعد</p>
+                  <p className="text-gray-400 text-sm mt-2">أضف عامل من النموذج أعلاه</p>
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {employees.map((employee) => (
+                    <div
+                      key={employee.id}
+                      className="border-2 border-gray-200 rounded-lg p-4 hover:border-green-300 transition-colors"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h4 className="text-lg font-bold text-gray-800">{employee.name}</h4>
+                          <p className="text-sm text-gray-600 mt-1">
+                            <span className="font-medium">اسم المستخدم:</span> {employee.username}
+                          </p>
+                          <div className="flex gap-2 mt-2">
+                            {employee.isDelivery && (
+                              <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded">
+                                موصل
+                              </span>
+                            )}
+                            {employee.isWaiter && (
+                              <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-bold rounded">
+                                نادل
+                              </span>
+                            )}
+                            {!employee.isDelivery && !employee.isWaiter && (
+                              <span className="px-2 py-1 bg-gray-100 text-gray-500 text-xs font-bold rounded">
+                                غير محدد
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-500 mt-2">
+                            تاريخ الإضافة: {new Date(employee.createdAt).toLocaleDateString('ar-EG')}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteEmployee(employee.id)}
+                          className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-bold transition-colors"
+                        >
+                          حذف
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Table Orders Tab */}
         {activeTab === 'tableOrders' && (
           <div className="bg-white p-8 rounded-lg shadow-md">
@@ -1951,91 +2477,100 @@ export default function AdminPage() {
 
                                 {/* Order Status Buttons */}
                                 <div className="mt-3 pt-3 border-t border-gray-200">
-                                  <div className="flex flex-wrap gap-1 mb-3">
-                                    <button
-                                      onClick={() => handleTableOrderStatusUpdate(order.id, 'pending')}
-                                      disabled={updatingTableOrderStatus?.orderId === order.id}
-                                      className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                                        (order.status || 'pending') === 'pending'
-                                          ? 'bg-purple-600 text-white shadow-md'
-                                          : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'pending'
-                                          ? 'bg-purple-200 text-gray-700'
-                                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                      }`}
-                                      title="جديد"
-                                    >
-                                      جديد
-                                    </button>
-                                    <button
-                                      onClick={() => handleTableOrderStatusUpdate(order.id, 'read')}
-                                      disabled={updatingTableOrderStatus?.orderId === order.id}
-                                      className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                                        order.status === 'read'
-                                          ? 'bg-fuchsia-600 text-white shadow-md'
-                                          : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'read'
-                                          ? 'bg-fuchsia-200 text-gray-700'
-                                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                      }`}
-                                      title="مقروء"
-                                    >
-                                      مقروء
-                                    </button>
-                                    <button
-                                      onClick={() => handleTableOrderStatusUpdate(order.id, 'served')}
-                                      disabled={updatingTableOrderStatus?.orderId === order.id}
-                                      className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                                        order.status === 'served'
-                                          ? 'bg-pink-600 text-white shadow-md'
-                                          : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'served'
-                                          ? 'bg-pink-200 text-gray-700'
-                                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                      }`}
-                                      title="تم التقديم"
-                                    >
-                                      تم التقديم
-                                    </button>
-                                    <button
-                                      onClick={() => handleTableOrderStatusUpdate(order.id, 'completed')}
-                                      disabled={updatingTableOrderStatus?.orderId === order.id}
-                                      className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                                        order.status === 'completed'
-                                          ? 'bg-rose-600 text-white shadow-md'
-                                          : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'completed'
-                                          ? 'bg-rose-200 text-gray-700'
-                                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                      }`}
-                                      title="تم"
-                                    >
-                                      تم
-                                    </button>
+                                  <div className="flex gap-2 flex-wrap md:flex-nowrap md:items-center">
+                                    {/* Status Buttons */}
+                                    <div className="flex flex-wrap gap-1 flex-1 md:flex-initial">
+                                      <button
+                                        onClick={() => handleTableOrderStatusUpdate(order.id, 'pending')}
+                                        disabled={updatingTableOrderStatus?.orderId === order.id}
+                                        className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                                          (order.status || 'pending') === 'pending'
+                                            ? 'bg-purple-600 text-white shadow-md'
+                                            : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'pending'
+                                            ? 'bg-purple-200 text-gray-700'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
+                                        title="جديد"
+                                      >
+                                        جديد
+                                      </button>
+                                      <button
+                                        onClick={() => handleTableOrderStatusUpdate(order.id, 'read')}
+                                        disabled={updatingTableOrderStatus?.orderId === order.id}
+                                        className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                                          order.status === 'read'
+                                            ? 'bg-fuchsia-600 text-white shadow-md'
+                                            : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'read'
+                                            ? 'bg-fuchsia-200 text-gray-700'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
+                                        title="مقروء"
+                                      >
+                                        مقروء
+                                      </button>
+                                      <button
+                                        onClick={() => handleTableOrderStatusUpdate(order.id, 'served')}
+                                        disabled={updatingTableOrderStatus?.orderId === order.id}
+                                        className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                                          order.status === 'served'
+                                            ? 'bg-pink-600 text-white shadow-md'
+                                            : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'served'
+                                            ? 'bg-pink-200 text-gray-700'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
+                                        title="تم التقديم"
+                                      >
+                                        تم التقديم
+                                      </button>
+                                      <button
+                                        onClick={() => handleTableOrderStatusUpdate(order.id, 'completed')}
+                                        disabled={updatingTableOrderStatus?.orderId === order.id}
+                                        className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
+                                          order.status === 'completed'
+                                            ? 'bg-rose-600 text-white shadow-md'
+                                            : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'completed'
+                                            ? 'bg-rose-200 text-gray-700'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
+                                        title="تم"
+                                      >
+                                        تم
+                                      </button>
+                                    </div>
+
+                                    {/* Spacer - لدفع زر المسح إلى اليسار في الشاشات الواسعة */}
+                                    <div className="hidden md:block md:flex-1"></div>
+
+                                    {/* Delete button - على اليسار تماماً في الشاشات الواسعة */}
+                                    {userType === 'admin' && (
+                                      <button
+                                        onClick={async () => {
+                                          setDeletingTableOrderId(order.id);
+                                          const token = localStorage.getItem('session_token');
+                                          const res = await fetch(`/api/table-orders/${order.id}`, {
+                                            method: 'DELETE',
+                                            headers: {
+                                              'Authorization': `Bearer ${token}`,
+                                            },
+                                          });
+
+                                          if (res.ok) {
+                                            setTableOrders(tableOrders.filter(o => o.id !== order.id));
+                                          }
+                                          setDeletingTableOrderId(null);
+                                        }}
+                                        disabled={deletingTableOrderId === order.id}
+                                        className={`w-full md:w-auto px-4 py-1 rounded-lg text-sm font-semibold transition ${
+                                          deletingTableOrderId === order.id
+                                            ? 'bg-red-100 text-gray-700 cursor-not-allowed'
+                                            : 'bg-red-500 hover:bg-red-600 text-white'
+                                        }`}
+                                      >
+                                        مسح
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
-
-                                <button
-                                  onClick={async () => {
-                                    setDeletingTableOrderId(order.id);
-                                    const token = localStorage.getItem('session_token');
-                                    const res = await fetch(`/api/table-orders/${order.id}`, {
-                                      method: 'DELETE',
-                                      headers: {
-                                        'Authorization': `Bearer ${token}`,
-                                      },
-                                    });
-
-                                    if (res.ok) {
-                                      setTableOrders(tableOrders.filter(o => o.id !== order.id));
-                                    }
-                                    setDeletingTableOrderId(null);
-                                  }}
-                                  disabled={deletingTableOrderId === order.id}
-                                  className={`mt-3 w-full px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                                    deletingTableOrderId === order.id
-                                      ? 'bg-red-100 text-gray-700 cursor-not-allowed'
-                                      : 'bg-red-500 hover:bg-red-600 text-white'
-                                  }`}
-                                >
-                                  مسح
-                                </button>
                               </div>
                                 );
                               })}

@@ -1,20 +1,23 @@
 import crypto from 'crypto';
 
 export interface SessionToken {
-  adminId: string;
+  adminId?: string; // للأدمن
+  employeeId?: string; // للعامل
   username: string;
   expiresAt: number;
+  userType: 'admin' | 'employee'; // نوع المستخدم
 }
 
 const SESSION_SECRET = process.env.SESSION_SECRET || 'default-secret-change-in-production';
 
-export function createSessionToken(adminId: string, username: string): string {
+export function createSessionToken(userId: string, username: string, userType: 'admin' | 'employee'): string {
   const expiresAt = Date.now() + (24 * 60 * 60 * 1000); // 24 ساعة
 
   const payload: SessionToken = {
-    adminId,
+    ...(userType === 'admin' ? { adminId: userId } : { employeeId: userId }),
     username,
     expiresAt,
+    userType,
   };
 
   const payloadStr = JSON.stringify(payload);

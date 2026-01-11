@@ -33,6 +33,8 @@ export interface Admin {
   isAcceptingOrdersViaWhatsapp?: boolean; // تفعيل الطلب عبر واتساب
   isAcceptingTableOrders?: boolean; // تفعيل طلبات الطاولة
   tablesCount?: number; // عدد الطاولات المتاحة
+  showDeliveryStaff?: boolean; // إظهار قائمة الموظفين في طلبات التوصيل
+  showWaiterStaff?: boolean; // إظهار قائمة الموظفين في طلبات الطاولات
 }
 
 export interface MenuList {
@@ -71,6 +73,8 @@ export interface Order {
   customerPhone?: string; // رقم العميل (للطلبات من الموقع)
   createdAt: string;
   status?: 'pending' | 'read' | 'delivering' | 'delivered'; // حالة الطلب
+  assignedTo?: string; // معرف العامل المسؤول عن الطلب
+  assignedEmployee?: { id: string; name: string }; // بيانات العامل المعيّن (يتم إضافتها عند الجلب)
 }
 
 export interface TableOrder {
@@ -82,6 +86,19 @@ export interface TableOrder {
   totalDiscount: number;
   createdAt: string;
   status?: 'pending' | 'read' | 'served' | 'completed'; // حالة الطلب
+  assignedTo?: string; // معرف العامل المسؤول عن الطلب
+  assignedEmployee?: { id: string; name: string }; // بيانات العامل المعيّن (يتم إضافتها عند الجلب)
+}
+
+export interface Employee {
+  id: string;
+  adminId: string; // معرف الأدمن المالك
+  name: string;
+  username: string; // اسم فريد لتسجيل الدخول
+  password: string;
+  isDelivery: boolean; // موصل - يظهر في طلبات التوصيل
+  isWaiter: boolean; // نادل - يظهر في طلبات الطاولات
+  createdAt: string;
 }
 
 interface Database {
@@ -90,6 +107,7 @@ interface Database {
   items: MenuItem[];
   orders: Order[];
   tableOrders: TableOrder[];
+  employees: Employee[];
 }
 
 // السمات المتاحة
@@ -154,16 +172,19 @@ async function readDB(): Promise<Database> {
   try {
     const data = await kv.get<Database>(KV_KEY);
     if (!data) {
-      return { admins: [], lists: [], items: [], orders: [], tableOrders: [] };
+      return { admins: [], lists: [], items: [], orders: [], tableOrders: [], employees: [] };
     }
-    // للتوافق مع البيانات القديمة التي لا تحتوي على tableOrders
+    // للتوافق مع البيانات القديمة التي لا تحتوي على tableOrders أو employees
     if (!data.tableOrders) {
       data.tableOrders = [];
+    }
+    if (!data.employees) {
+      data.employees = [];
     }
     return data;
   } catch (error) {
     console.error('Error reading from KV:', error);
-    return { admins: [], lists: [], items: [], orders: [], tableOrders: [] };
+    return { admins: [], lists: [], items: [], orders: [], tableOrders: [], employees: [] };
   }
 }
 
@@ -332,6 +353,7 @@ export async function getOrders(
     status?: 'all' | 'pending' | 'read' | 'delivering' | 'delivered';
     orderType?: 'all' | 'website' | 'whatsapp';
     dateFilter?: 'all' | 'today' | 'week' | 'month';
+    employeeId?: string;
   }
 ): Promise<{ orders: Order[]; total: number }> {
   const db = await readDB();
@@ -349,6 +371,28 @@ export async function getOrders(
   // Apply orderType filter
   if (options?.orderType && options.orderType !== 'all') {
     filtered = filtered.filter(order => order.orderType === options.orderType);
+  }
+
+  // Apply employeeId filter
+  if (options?.employeeId !== undefined) {
+    if (options.employeeId === '') {
+      // Filter for orders with no assigned employee
+      filtered = filtered.filter(order => !order.assignedTo);
+    } else if (options.employeeId.startsWith('EMPLOYEE_ALL:')) {
+      // Extract actual employee ID from EMPLOYEE_ALL:employeeId
+      const actualEmployeeId = options.employeeId.substring(13); // Remove "EMPLOYEE_ALL:" prefix
+      // Show orders assigned to this employee OR assigned to "ANY_DELIVERY"
+      filtered = filtered.filter(order =>
+        order.assignedTo === actualEmployeeId || order.assignedTo === 'ANY_DELIVERY'
+      );
+    } else if (options.employeeId === 'ANY_DELIVERY') {
+      // Filter for orders assigned to ANY_DELIVERY only
+      filtered = filtered.filter(order => order.assignedTo === 'ANY_DELIVERY');
+    } else {
+      // Filter for orders assigned to specific employee ONLY (no ANY_DELIVERY)
+      // This is used for EMPLOYEE_MINE filter
+      filtered = filtered.filter(order => order.assignedTo === options.employeeId);
+    }
   }
 
   // Apply date filter
@@ -383,7 +427,21 @@ export async function getOrders(
     filtered = filtered.slice(startIndex, endIndex);
   }
 
-  return { orders: filtered, total };
+  // Add employee data to orders
+  const ordersWithEmployees = filtered.map(order => {
+    if (order.assignedTo) {
+      const employee = db.employees.find(emp => emp.id === order.assignedTo);
+      if (employee) {
+        return {
+          ...order,
+          assignedEmployee: { id: employee.id, name: employee.name }
+        };
+      }
+    }
+    return order;
+  });
+
+  return { orders: ordersWithEmployees, total };
 }
 
 export async function getOrder(id: string): Promise<Order | null> {
@@ -447,7 +505,21 @@ export async function getTableOrders(adminId?: string, tableNumber?: number): Pr
     orders = orders.filter(order => order.tableNumber === tableNumber);
   }
 
-  return orders;
+  // Add employee data to table orders
+  const ordersWithEmployees = orders.map(order => {
+    if (order.assignedTo) {
+      const employee = db.employees.find(emp => emp.id === order.assignedTo);
+      if (employee) {
+        return {
+          ...order,
+          assignedEmployee: { id: employee.id, name: employee.name }
+        };
+      }
+    }
+    return order;
+  });
+
+  return ordersWithEmployees;
 }
 
 export async function getTableOrder(id: string): Promise<TableOrder | null> {
@@ -489,5 +561,101 @@ export async function updateTableOrderStatus(
 
   order.status = status;
   await writeDB(db);
+  return order;
+}
+
+// ==================== Employee Functions ====================
+
+export async function createEmployee(employee: Omit<Employee, 'id' | 'createdAt'>): Promise<Employee> {
+  const db = await readDB();
+
+  // التحقق من عدم وجود username مكرر
+  const existing = db.employees.find(e => e.username === employee.username);
+  if (existing) {
+    throw new Error('اسم المستخدم موجود بالفعل');
+  }
+
+  const newEmployee: Employee = {
+    ...employee,
+    id: `employee_${Date.now()}`,
+    createdAt: new Date().toISOString(),
+  };
+
+  db.employees.push(newEmployee);
+  await writeDB(db);
+  return newEmployee;
+}
+
+export async function getEmployees(adminId: string): Promise<Employee[]> {
+  const db = await readDB();
+  return db.employees.filter(e => e.adminId === adminId);
+}
+
+export async function getEmployee(id: string): Promise<Employee | null> {
+  const db = await readDB();
+  return db.employees.find(e => e.id === id) || null;
+}
+
+export async function getEmployeeByUsername(username: string): Promise<Employee | null> {
+  const db = await readDB();
+  return db.employees.find(e => e.username === username) || null;
+}
+
+export async function deleteEmployee(id: string): Promise<boolean> {
+  const db = await readDB();
+  const index = db.employees.findIndex(e => e.id === id);
+
+  if (index === -1) return false;
+
+  db.employees.splice(index, 1);
+  await writeDB(db);
+  return true;
+}
+
+// ==================== Order Assignment Functions ====================
+
+export async function assignOrderToEmployee(orderId: string, employeeId: string | null): Promise<Order | null> {
+  const db = await readDB();
+  const order = db.orders.find(o => o.id === orderId);
+
+  if (!order) return null;
+
+  order.assignedTo = employeeId || undefined;
+  await writeDB(db);
+
+  // Add employee data if assigned
+  if (employeeId) {
+    const employee = db.employees.find(emp => emp.id === employeeId);
+    if (employee) {
+      return {
+        ...order,
+        assignedEmployee: { id: employee.id, name: employee.name }
+      };
+    }
+  }
+
+  return order;
+}
+
+export async function assignTableOrderToEmployee(orderId: string, employeeId: string | null): Promise<TableOrder | null> {
+  const db = await readDB();
+  const order = db.tableOrders.find(o => o.id === orderId);
+
+  if (!order) return null;
+
+  order.assignedTo = employeeId || undefined;
+  await writeDB(db);
+
+  // Add employee data if assigned
+  if (employeeId) {
+    const employee = db.employees.find(emp => emp.id === employeeId);
+    if (employee) {
+      return {
+        ...order,
+        assignedEmployee: { id: employee.id, name: employee.name }
+      };
+    }
+  }
+
   return order;
 }

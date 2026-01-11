@@ -56,6 +56,7 @@ export async function GET(request: Request) {
     const status = (searchParams.get('status') || 'all') as 'all' | 'pending' | 'read' | 'delivering' | 'delivered';
     const orderType = (searchParams.get('orderType') || 'all') as 'all' | 'website' | 'whatsapp';
     const dateFilter = (searchParams.get('dateFilter') || 'all') as 'all' | 'today' | 'week' | 'month';
+    const employeeId = searchParams.has('employeeId') ? (searchParams.get('employeeId') ?? undefined) : undefined;
 
     // Call updated database function with pagination options
     const { orders, total } = await getOrders(adminId, {
@@ -63,7 +64,8 @@ export async function GET(request: Request) {
       limit,
       status,
       orderType,
-      dateFilter
+      dateFilter,
+      ...(employeeId !== undefined && { employeeId })
     });
 
     // Return paginated response

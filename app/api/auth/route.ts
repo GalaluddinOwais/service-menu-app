@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     }
 
     // إنشاء session token
-    const sessionToken = createSessionToken(admin.id, admin.username);
+    const sessionToken = createSessionToken(admin.id, admin.username, 'admin');
 
     // نرجع بيانات الأدمن بدون كلمة المرور + session token
     const { password: _, ...sanitizedAdmin } = admin;

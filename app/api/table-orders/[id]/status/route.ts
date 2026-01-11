@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTableOrder, updateTableOrderStatus } from '@/lib/db';
+import { getTableOrder, updateTableOrderStatus, getEmployee } from '@/lib/db';
 import { verifySessionToken } from '@/lib/auth';
 
 export async function PATCH(
@@ -30,9 +30,9 @@ export async function PATCH(
     // Await params as required by Next.js 15
     const { id } = await context.params;
 
-    console.log('Updating table order status:', { orderId: id, newStatus: status, adminId: payload.adminId });
+    console.log('Updating table order status:', { orderId: id, newStatus: status, userId: payload.adminId || payload.employeeId });
 
-    // Check if order exists and belongs to the admin
+    // Check if order exists
     const order = await getTableOrder(id);
 
     if (!order) {
@@ -40,9 +40,22 @@ export async function PATCH(
       return NextResponse.json({ error: 'الطلب غير موجود' }, { status: 404 });
     }
 
-    if (order.adminId !== payload.adminId) {
-      console.log('Permission denied:', { orderAdmin: order.adminId, requestAdmin: payload.adminId });
-      return NextResponse.json({ error: 'غير مصرح' }, { status: 403 });
+    // التحقق من الصلاحية:
+    // 1. الأدمن يمكنه تعديل أي طلب يخصه
+    // 2. النادل فقط (isWaiter = true) يمكنه تعديل طلبات الطاولة
+    const isAdmin = payload.adminId && order.adminId === payload.adminId;
+
+    let isWaiter = false;
+    if (payload.employeeId) {
+      const employee = await getEmployee(payload.employeeId);
+      if (employee && employee.isWaiter) {
+        isWaiter = true;
+      }
+    }
+
+    if (!isAdmin && !isWaiter) {
+      console.log('Permission denied:', { orderAdmin: order.adminId, userId: payload.adminId || payload.employeeId, isWaiter });
+      return NextResponse.json({ error: 'غير مصرح - النوادل فقط يمكنهم تعديل طلبات الطاولة' }, { status: 403 });
     }
 
     // Update order status

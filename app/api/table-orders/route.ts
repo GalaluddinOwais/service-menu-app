@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createTableOrder, getTableOrders } from '@/lib/db';
+import { createTableOrder, getTableOrders, getEmployee } from '@/lib/db';
+import { verifySessionToken, getAuthHeader } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
@@ -37,8 +38,38 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
+    // التحقق من Session Token
+    const token = getAuthHeader(request);
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized: No token provided' }, { status: 401 });
+    }
+
+    const session = verifySessionToken(token);
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized: Invalid or expired token' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const adminId = searchParams.get('adminId');
+
+    // التحقق من الصلاحيات:
+    // 1. الأدمن يمكنه رؤية طلبات الطاولة الخاصة به فقط
+    // 2. الموظف يجب أن يكون نادل
+    if (session.adminId) {
+      // Admin must request their own orders
+      if (!adminId || adminId !== session.adminId) {
+        return NextResponse.json({ error: 'غير مصرح' }, { status: 403 });
+      }
+    } else if (session.employeeId) {
+      // Employee must be a waiter
+      const employee = await getEmployee(session.employeeId);
+      if (!employee || !employee.isWaiter) {
+        return NextResponse.json({ error: 'غير مصرح - النوادل فقط يمكنهم الوصول لطلبات الطاولة' }, { status: 403 });
+      }
+    } else {
+      return NextResponse.json({ error: 'غير مصرح' }, { status: 403 });
+    }
+
     const tableNumber = searchParams.get('tableNumber');
 
     const orders = await getTableOrders(
