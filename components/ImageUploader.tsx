@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useId } from 'react';
 
 interface ImageUploaderProps {
   currentImageUrl?: string;
@@ -20,6 +20,7 @@ export default function ImageUploader({
   const [previewUrl, setPreviewUrl] = useState<string | undefined>(currentImageUrl);
   const [error, setError] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputId = useId();
 
   // Update preview when currentImageUrl changes (e.g., when editing an item)
   useEffect(() => {
@@ -160,31 +161,66 @@ export default function ImageUploader({
 
   return (
     <div className="space-y-3">
-      <label className="block text-sm font-medium text-gray-700">
+      <label className="block text-sm font-bold text-gray-700">
         {label}
       </label>
 
-      {/* File Upload */}
-      <div className="flex gap-2">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleFileChange}
-          disabled={isUploading}
-          className="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50"
-        />
-        {previewUrl && !isUploading && (
-          <button
-            type="button"
-            onClick={handleRemoveImage}
-            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition whitespace-nowrap"
-            title="إزالة الصورة"
-          >
-            إزالة
-          </button>
-        )}
-      </div>
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFileChange}
+        disabled={isUploading}
+        className="hidden"
+        id={inputId}
+      />
+
+      {/* Image Preview Box OR Upload Box */}
+      {previewUrl ? (
+        <div className="inline-block relative">
+          <img
+            src={previewUrl}
+            alt="معاينة"
+            className="w-32 h-32 rounded-lg border-2 border-gray-200 object-cover"
+          />
+          {!isUploading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+              <label
+                htmlFor={inputId}
+                className="text-white text-lg font-bold cursor-pointer transition-opacity hover:opacity-60"
+                style={{ textShadow: '0 0px 2px rgba(0,0,0)' }}
+              >
+                تغييـــر
+              </label>
+              <button
+                type="button"
+                onClick={handleRemoveImage}
+                className="text-white text-lg font-bold transition-opacity hover:opacity-60"
+                style={{ textShadow: '0 0px 2px rgba(0,0,0)' }}
+              >
+                إزالـــة
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <label
+          htmlFor={inputId}
+          className={`w-32 h-32 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg cursor-pointer transition-all duration-200 ${
+            isUploading
+              ? 'bg-gray-100 cursor-not-allowed'
+              : 'hover:border-blue-400 hover:bg-blue-50'
+          }`}
+        >
+          <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <span className="text-xs font-medium text-gray-500 mt-1">
+            {isUploading ? 'جارِ الرفع...' : 'اختر صورة'}
+          </span>
+        </label>
+      )}
 
       {/* Helper Text */}
       {helperText && (
@@ -203,17 +239,6 @@ export default function ImageUploader({
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg text-sm">
           {error}
-        </div>
-      )}
-
-      {/* Image Preview */}
-      {previewUrl && (
-        <div className="inline-block">
-          <img
-            src={previewUrl}
-            alt="معاينة"
-            className="w-32 h-32 rounded-lg border-2 border-gray-200 object-cover"
-          />
         </div>
       )}
     </div>

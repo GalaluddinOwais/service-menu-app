@@ -617,6 +617,20 @@ export async function deleteEmployee(id: string): Promise<boolean> {
   return true;
 }
 
+export async function updateEmployee(id: string, updates: Partial<Omit<Employee, 'id' | 'createdAt' | 'adminId'>>): Promise<Employee | null> {
+  const db = await readDB();
+  const index = db.employees.findIndex(e => e.id === id);
+
+  if (index === -1) return null;
+
+  db.employees[index] = {
+    ...db.employees[index],
+    ...updates,
+  };
+  await writeDB(db);
+  return db.employees[index];
+}
+
 // ==================== Order Assignment Functions ====================
 
 export async function assignOrderToEmployee(orderId: string, employeeId: string | null): Promise<Order | null> {

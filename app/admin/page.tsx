@@ -131,7 +131,15 @@ export default function AdminPage() {
     showWaiterStaff: false,
   });
 
+  const [employeeSettingsForm, setEmployeeSettingsForm] = useState({
+    enableDeliveryEmployees: false,
+    showDeliveryEmployeesAnyway: false,
+    defaultDeliveryAssignment: '' as 'ANY_DELIVERY' | '',
+    enableWaiters: false,
+  });
+
   const [employees, setEmployees] = useState<any[]>([]);
+  const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
   const [employeeFormData, setEmployeeFormData] = useState({
     name: '',
     username: '',
@@ -143,6 +151,7 @@ export default function AdminPage() {
 
   const [isRefreshingOrders, setIsRefreshingOrders] = useState(false);
   const [isRefreshingTableOrders, setIsRefreshingTableOrders] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
   const [expandedTableOrders, setExpandedTableOrders] = useState<Set<string>>(new Set());
@@ -260,6 +269,12 @@ export default function AdminPage() {
           showDeliveryStaff: admin.showDeliveryStaff || false,
           showWaiterStaff: admin.showWaiterStaff || false,
         });
+        setEmployeeSettingsForm({
+          enableDeliveryEmployees: admin.enableDeliveryEmployees || false,
+          showDeliveryEmployeesAnyway: admin.showDeliveryEmployeesAnyway || false,
+          defaultDeliveryAssignment: admin.defaultDeliveryAssignment || '',
+          enableWaiters: admin.enableWaiters || false,
+        });
         fetchData(admin.id);
       })
       .catch(error => {
@@ -287,6 +302,12 @@ export default function AdminPage() {
           tablesCount: admin.tablesCount || 0,
           showDeliveryStaff: admin.showDeliveryStaff || false,
           showWaiterStaff: admin.showWaiterStaff || false,
+        });
+        setEmployeeSettingsForm({
+          enableDeliveryEmployees: admin.enableDeliveryEmployees || false,
+          showDeliveryEmployeesAnyway: admin.showDeliveryEmployeesAnyway || false,
+          defaultDeliveryAssignment: admin.defaultDeliveryAssignment || '',
+          enableWaiters: admin.enableWaiters || false,
         });
         fetchData(admin.id);
       });
@@ -763,7 +784,11 @@ export default function AdminPage() {
     const res = await fetch(`/api/admins/${currentAdmin.id}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
-      body: JSON.stringify(deliveryFormData),
+      body: JSON.stringify({
+        isAcceptingOrders: deliveryFormData.isAcceptingOrders,
+        isAcceptingOrdersViaWhatsapp: deliveryFormData.isAcceptingOrdersViaWhatsapp,
+        whatsappNumber: deliveryFormData.whatsappNumber,
+      }),
     });
 
     if (res.ok) {
@@ -772,7 +797,57 @@ export default function AdminPage() {
       setCurrentAdmin(newAdminData);
       localStorage.setItem('admin_data', JSON.stringify(newAdminData));
 
-      alert('تم حفظ إعدادات التوصيل بنجاح!');
+      alert('تم حفظ إعدادات طلبات التوصيل بنجاح!');
+    } else {
+      const error = await res.json();
+      alert(`فشل حفظ الإعدادات: ${error.error || 'خطأ غير معروف'}`);
+    }
+  };
+
+  const handleTableSettingsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentAdmin) return;
+
+    const res = await fetch(`/api/admins/${currentAdmin.id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        isAcceptingTableOrders: deliveryFormData.isAcceptingTableOrders,
+        tablesCount: deliveryFormData.tablesCount,
+      }),
+    });
+
+    if (res.ok) {
+      const updatedAdmin = await res.json();
+      const newAdminData = { ...currentAdmin, ...updatedAdmin };
+      setCurrentAdmin(newAdminData);
+      localStorage.setItem('admin_data', JSON.stringify(newAdminData));
+
+      alert('تم حفظ إعدادات الطاولة بنجاح!');
+    } else {
+      const error = await res.json();
+      alert(`فشل حفظ الإعدادات: ${error.error || 'خطأ غير معروف'}`);
+    }
+  };
+
+  const handleEmployeeSettingsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentAdmin) return;
+
+    const token = localStorage.getItem('session_token');
+    const res = await fetch('/api/admin/settings', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(employeeSettingsForm),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      setCurrentAdmin(prev => prev ? { ...prev, ...data.admin } : null);
+      alert('تم حفظ إعدادات العاملين بنجاح!');
     } else {
       const error = await res.json();
       alert(`فشل حفظ الإعدادات: ${error.error || 'خطأ غير معروف'}`);
@@ -876,45 +951,90 @@ export default function AdminPage() {
     e.preventDefault();
     if (!currentAdmin) return;
 
-    // التحقق من تطابق كلمة المرور
-    if (employeeFormData.password !== employeeFormData.confirmPassword) {
-      alert('كلمة المرور غير متطابقة');
+    // التحقق من تطابق كلمة المرور (فقط إذا تم إدخال كلمة مرور)
+    if (employeeFormData.password || employeeFormData.confirmPassword) {
+      if (employeeFormData.password !== employeeFormData.confirmPassword) {
+        alert('كلمة المرور غير متطابقة');
+        return;
+      }
+      if (employeeFormData.password.length < 6) {
+        alert('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+        return;
+      }
+    }
+
+    // في وضع الإنشاء، كلمة المرور مطلوبة
+    if (!editingEmployeeId && !employeeFormData.password) {
+      alert('كلمة المرور مطلوبة');
       return;
     }
 
-    // التحقق من طول كلمة المرور
-    if (employeeFormData.password.length < 6) {
-      alert('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
-      return;
-    }
-
-    const res = await fetch('/api/employees', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({
+    if (editingEmployeeId) {
+      // وضع التحديث
+      const updates: Record<string, unknown> = {
         name: employeeFormData.name,
-        username: employeeFormData.username,
-        password: employeeFormData.password,
         isDelivery: employeeFormData.isDelivery,
         isWaiter: employeeFormData.isWaiter,
-      }),
-    });
+      };
+      if (employeeFormData.password) {
+        updates.password = employeeFormData.password;
+      }
 
-    if (res.ok) {
-      const newEmployee = await res.json();
-      setEmployees([...employees, newEmployee]);
-      setEmployeeFormData({
-        name: '',
-        username: '',
-        password: '',
-        confirmPassword: '',
-        isDelivery: false,
-        isWaiter: false,
+      const res = await fetch(`/api/employees/${editingEmployeeId}`, {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(updates),
       });
-      alert('تم إضافة العامل بنجاح!');
+
+      if (res.ok) {
+        const { employee: updatedEmployee } = await res.json();
+        setEmployees(employees.map(emp =>
+          emp.id === editingEmployeeId ? { ...emp, ...updatedEmployee } : emp
+        ));
+        setEditingEmployeeId(null);
+        setEmployeeFormData({
+          name: '',
+          username: '',
+          password: '',
+          confirmPassword: '',
+          isDelivery: false,
+          isWaiter: false,
+        });
+        alert('تم تحديث العامل بنجاح!');
+      } else {
+        const error = await res.json();
+        alert(`فشل تحديث العامل: ${error.error || 'خطأ غير معروف'}`);
+      }
     } else {
-      const error = await res.json();
-      alert(`فشل إضافة العامل: ${error.error || 'خطأ غير معروف'}`);
+      // وضع الإنشاء
+      const res = await fetch('/api/employees', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          name: employeeFormData.name,
+          username: employeeFormData.username,
+          password: employeeFormData.password,
+          isDelivery: employeeFormData.isDelivery,
+          isWaiter: employeeFormData.isWaiter,
+        }),
+      });
+
+      if (res.ok) {
+        const newEmployee = await res.json();
+        setEmployees([...employees, newEmployee]);
+        setEmployeeFormData({
+          name: '',
+          username: '',
+          password: '',
+          confirmPassword: '',
+          isDelivery: false,
+          isWaiter: false,
+        });
+        alert('تم إضافة العامل بنجاح!');
+      } else {
+        const error = await res.json();
+        alert(`فشل إضافة العامل: ${error.error || 'خطأ غير معروف'}`);
+      }
     }
   };
 
@@ -934,6 +1054,30 @@ export default function AdminPage() {
     }
   };
 
+  const handleEditEmployee = (employee: any) => {
+    setEditingEmployeeId(employee.id);
+    setEmployeeFormData({
+      name: employee.name,
+      username: employee.username,
+      password: '',
+      confirmPassword: '',
+      isDelivery: employee.isDelivery || false,
+      isWaiter: employee.isWaiter || false,
+    });
+  };
+
+  const handleCancelEditEmployee = () => {
+    setEditingEmployeeId(null);
+    setEmployeeFormData({
+      name: '',
+      username: '',
+      password: '',
+      confirmPassword: '',
+      isDelivery: false,
+      isWaiter: false,
+    });
+  };
+
 
   if (!currentAdmin) {
     return (
@@ -949,11 +1093,17 @@ export default function AdminPage() {
         {/* Header */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-800">لوحة التحكم</h1>
-              <p className="text-gray-600 mt-1">مرحباً، {currentAdmin.username}</p>
-            </div>
+            <h1 className="text-3xl font-bold text-gray-800">لوحة التحكم</h1>
             <div className="flex gap-3">
+              <button
+                onClick={() => setIsSidebarOpen(true)}
+                className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+                قائمة التحكم
+              </button>
               <Link
                 href={`/menu/${currentAdmin.username}`}
                 className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition flex items-center gap-2"
@@ -962,7 +1112,7 @@ export default function AdminPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
-                عرض قائمتي
+                عرض صفحة العميل
               </Link>
               <button
                 onClick={handleLogout}
@@ -976,30 +1126,67 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* Tabs */}
-          <div className="flex flex-wrap gap-2 mt-6 border-b">
+        </div>
+
+        {/* Sidebar Overlay */}
+        {isSidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/30 z-40"
+            onClick={() => setIsSidebarOpen(false)}
+          />
+        )}
+
+        {/* Sidebar */}
+        <div className={`fixed top-0 right-0 h-full w-64 bg-white shadow-xl z-50 transform transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+          <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+            <h3 className="font-bold text-gray-800">التحكم</h3>
+            <button
+              onClick={() => setIsSidebarOpen(false)}
+              className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <nav className="p-2 space-y-1">
             {/* إدارة القوائم - للأدمن فقط */}
             {userType === 'admin' && (
               <button
-                onClick={() => setActiveTab('lists')}
-                className={`px-6 py-3 font-bold transition-colors ${
+                onClick={() => { setActiveTab('lists'); setIsSidebarOpen(false); }}
+                className={`w-full text-right px-4 py-3 rounded-lg font-bold transition-colors ${
                   activeTab === 'lists'
-                    ? 'border-b-2 border-blue-600 text-blue-600'
-                    : 'text-gray-500 hover:text-gray-700'
+                    ? 'bg-gray-800 text-white'
+                    : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
                 إدارة القوائم
               </button>
             )}
 
+            {/* إدارة العاملين - للأدمن فقط */}
+            {userType === 'admin' && (
+              <button
+                onClick={() => { setActiveTab('employees'); setIsSidebarOpen(false); }}
+                className={`w-full text-right px-4 py-3 rounded-lg font-bold transition-colors ${
+                  activeTab === 'employees'
+                    ? 'bg-gray-800 text-white'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                إدارة العاملين
+              </button>
+            )}
+
             {/* طلبات التوصيل - للأدمن وعمال التوصيل فقط */}
             {(userType === 'admin' || isDelivery) && (
               <button
-                onClick={() => setActiveTab('orders')}
-                className={`px-6 py-3 font-bold transition-colors ${
+                onClick={() => { setActiveTab('orders'); setIsSidebarOpen(false); }}
+                className={`w-full text-right px-4 py-3 rounded-lg font-bold transition-colors ${
                   activeTab === 'orders'
-                    ? 'border-b-2 border-blue-600 text-blue-600'
-                    : 'text-gray-500 hover:text-gray-700'
+                    ? 'bg-gray-800 text-white'
+                    : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
                 طلبات التوصيل
@@ -1009,59 +1196,45 @@ export default function AdminPage() {
             {/* طلبات الطاولات - للأدمن والنوادل فقط */}
             {(userType === 'admin' || isWaiter) && (
               <button
-                onClick={() => setActiveTab('tableOrders')}
-                className={`px-6 py-3 font-bold transition-colors ${
+                onClick={() => { setActiveTab('tableOrders'); setIsSidebarOpen(false); }}
+                className={`w-full text-right px-4 py-3 rounded-lg font-bold transition-colors ${
                   activeTab === 'tableOrders'
-                    ? 'border-b-2 border-purple-600 text-purple-600'
-                    : 'text-gray-500 hover:text-gray-700'
+                    ? 'bg-gray-800 text-white'
+                    : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
-                طلبات الطاولات
+                طلبات الطاولة
               </button>
             )}
 
             {/* إعدادات الطلبات - للأدمن فقط */}
             {userType === 'admin' && (
               <button
-                onClick={() => setActiveTab('delivery')}
-                className={`px-6 py-3 font-bold transition-colors ${
+                onClick={() => { setActiveTab('delivery'); setIsSidebarOpen(false); }}
+                className={`w-full text-right px-4 py-3 rounded-lg font-bold transition-colors ${
                   activeTab === 'delivery'
-                    ? 'border-b-2 border-blue-600 text-blue-600'
-                    : 'text-gray-500 hover:text-gray-700'
+                    ? 'bg-gray-800 text-white'
+                    : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
                 إعدادات الطلبات
               </button>
             )}
 
-            {/* إدارة العاملين - للأدمن فقط */}
-            {userType === 'admin' && (
-              <button
-                onClick={() => setActiveTab('employees')}
-                className={`px-6 py-3 font-bold transition-colors ${
-                  activeTab === 'employees'
-                    ? 'border-b-2 border-green-600 text-green-600'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                إدارة العاملين
-              </button>
-            )}
-
             {/* إعدادات الحساب - للأدمن فقط */}
             {userType === 'admin' && (
               <button
-                onClick={() => setActiveTab('settings')}
-                className={`px-6 py-3 font-bold transition-colors ${
+                onClick={() => { setActiveTab('settings'); setIsSidebarOpen(false); }}
+                className={`w-full text-right px-4 py-3 rounded-lg font-bold transition-colors ${
                   activeTab === 'settings'
-                    ? 'border-b-2 border-blue-600 text-blue-600'
-                    : 'text-gray-500 hover:text-gray-700'
+                    ? 'bg-gray-800 text-white'
+                    : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
                 إعدادات الحساب
               </button>
             )}
-          </div>
+          </nav>
         </div>
 
         {/* Content */}
@@ -1069,39 +1242,48 @@ export default function AdminPage() {
           <div className="grid md:grid-cols-3 gap-6">
             {/* قسم إدارة القوائم */}
             <div className="bg-white p-6 rounded-lg shadow-md">
-              <h2 className="text-xl font-bold mb-4 text-gray-800">
-                {editingList ? 'تعديل قائمة' : 'إضافة قائمة جديدة'}
-              </h2>
-              <form onSubmit={handleListSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">اسم القائمة</label>
-                  <input
-                    type="text"
-                    required
-                    value={listFormData.name}
-                    onChange={(e) => setListFormData({ ...listFormData, name: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="مثال: أسعار المشروبات"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    type="submit"
-                    className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg font-semibold transition"
-                  >
-                    {editingList ? 'تحديث' : 'إضافة'}
-                  </button>
-                  {editingList && (
+              {/* Add/Edit List Form */}
+              <div className={`border-2 rounded-lg p-6 mb-6 ${editingList ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'}`}>
+                <h3 className="text-lg font-bold text-gray-800 mb-4">
+                  {editingList ? 'تحديث قائمة' : 'إضافة قائمة جديدة'}
+                </h3>
+                <form onSubmit={handleListSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      اسم القائمة <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={listFormData.name}
+                      onChange={(e) => setListFormData({ ...listFormData, name: e.target.value })}
+                      className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingList ? 'focus:border-blue-500' : 'focus:border-green-500'}`}
+                      placeholder="مثال: أسعار المشروبات"
+                    />
+                  </div>
+                  <div className="flex gap-3">
                     <button
-                      type="button"
-                      onClick={handleCancelList}
-                      className="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-2 rounded-lg font-semibold transition"
+                      type="submit"
+                      className={`flex-1 py-3 px-4 rounded-lg font-bold text-lg transition-all duration-200 transform hover:scale-[1.02] shadow-lg text-white ${
+                        editingList
+                          ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
+                          : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700'
+                      }`}
                     >
-                      إلغاء
+                      {editingList ? 'تحديث' : 'إضافة القائمة'}
                     </button>
-                  )}
-                </div>
-              </form>
+                    {editingList && (
+                      <button
+                        type="button"
+                        onClick={handleCancelList}
+                        className="px-6 py-3 rounded-lg font-bold text-lg transition-all duration-200 bg-gray-200 hover:bg-gray-300 text-gray-700"
+                      >
+                        إلغاء
+                      </button>
+                    )}
+                  </div>
+                </form>
+              </div>
 
               <div className="mt-6">
                 <h3 className="text-lg font-bold text-gray-800 mb-3">القوائم ({lists.length})</h3>
@@ -1112,12 +1294,11 @@ export default function AdminPage() {
                     lists.map((list) => (
                       <div
                         key={list.id}
-                        className={`border rounded-lg p-3 cursor-pointer transition ${
+                        className={`border rounded-lg p-3 transition ${
                           selectedList?.id === list.id
                             ? 'bg-blue-50 border-blue-500'
                             : 'hover:bg-gray-50'
                         }`}
-                        onClick={() => setSelectedList(list)}
                       >
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
@@ -1126,21 +1307,21 @@ export default function AdminPage() {
                               {getListItems(list.id).length} عنصر
                             </p>
                           </div>
-                          <div className="flex gap-1">
+                          <div className="flex gap-1 flex-wrap justify-end">
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEditList(list);
-                              }}
+                              onClick={() => handleEditList(list)}
                               className="bg-blue-500 hover:bg-blue-600 text-white py-1 px-2 rounded text-xs transition"
                             >
-                              تعديل
+                              تحديث
                             </button>
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteList(list.id);
-                              }}
+                              onClick={() => setSelectedList(list)}
+                              className="bg-blue-500 hover:bg-blue-600 text-white py-1 px-2 rounded text-xs transition"
+                            >
+                              تحديث العناصر
+                            </button>
+                            <button
+                              onClick={() => handleDeleteList(list.id)}
                               className="bg-red-500 hover:bg-red-600 text-white py-1 px-2 rounded text-xs transition"
                             >
                               حذف
@@ -1158,88 +1339,97 @@ export default function AdminPage() {
             <div className="md:col-span-2 bg-white p-6 rounded-lg shadow-md">
               {selectedList ? (
                 <>
-                  <h2 className="text-xl font-bold mb-4 text-gray-800">
-                    {editingItem ? 'تعديل عنصر' : 'إضافة عنصر جديد'}
-                  </h2>
-                  <p className="text-sm text-gray-600 mb-4">القائمة: {selectedList.name}</p>
+                  {/* Add/Edit Item Form */}
+                  <div className={`border-2 rounded-lg p-6 mb-6 ${editingItem ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'}`}>
+                    <h3 className="text-lg font-bold text-gray-800 mb-2">
+                      {editingItem ? 'تحديث عنصر' : 'إضافة عنصر جديد'}
+                    </h3>
 
-                  <form onSubmit={handleItemSubmit} className="space-y-4 mb-6">
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          اسم العنصر
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={itemFormData.name}
-                          onChange={(e) => setItemFormData({ ...itemFormData, name: e.target.value })}
-                          className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
+                    <form onSubmit={handleItemSubmit} className="space-y-4">
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-bold text-gray-700 mb-2">
+                            اسم العنصر <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={itemFormData.name}
+                            onChange={(e) => setItemFormData({ ...itemFormData, name: e.target.value })}
+                            className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingItem ? 'focus:border-blue-500' : 'focus:border-green-500'}`}
+                            placeholder="أدخل اسم العنصر"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-bold text-gray-700 mb-2">
+                            السعر <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            required
+                            value={itemFormData.price}
+                            onChange={(e) => setItemFormData({ ...itemFormData, price: e.target.value })}
+                            className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingItem ? 'focus:border-blue-500' : 'focus:border-green-500'}`}
+                            placeholder="0.00"
+                          />
+                        </div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">السعر</label>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">
+                          السعر بعد الخصم (اختياري)
+                        </label>
                         <input
                           type="number"
                           step="0.01"
-                          required
-                          value={itemFormData.price}
-                          onChange={(e) => setItemFormData({ ...itemFormData, price: e.target.value })}
-                          className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          value={itemFormData.discountedPrice}
+                          onChange={(e) => setItemFormData({ ...itemFormData, discountedPrice: e.target.value })}
+                          placeholder="هل يوجد خصم؟ ضع السعر الجديد"
+                          className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingItem ? 'focus:border-blue-500' : 'focus:border-green-500'}`}
                         />
                       </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        السعر بعد الخصم إن وجد
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={itemFormData.discountedPrice}
-                        onChange={(e) => setItemFormData({ ...itemFormData, discountedPrice: e.target.value })}
-                        placeholder="هل يوجد خصم؟ ضع السعر الجديد"
-                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      <ImageUploader
+                        currentImageUrl={itemFormData.imageUrl}
+                        onImageUploaded={(url) => setItemFormData({ ...itemFormData, imageUrl: url })}
+                        onUploadStateChange={setIsUploadingImage}
+                        label="صورة العنصر (اختياري)"
                       />
-                    </div>
-                    <ImageUploader
-                      currentImageUrl={itemFormData.imageUrl}
-                      onImageUploaded={(url) => setItemFormData({ ...itemFormData, imageUrl: url })}
-                      onUploadStateChange={setIsUploadingImage}
-                      label="صورة العنصر (اختياري)"
-                      helperText="يمكنك رفع صورة من جهازك أو إدخال رابط صورة"
-                    />
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        الوصف (اختياري)
-                      </label>
-                      <textarea
-                        value={itemFormData.description}
-                        onChange={(e) => setItemFormData({ ...itemFormData, description: e.target.value })}
-                        rows={3}
-                        placeholder="السطر الأول سيظهر بخط عريض، والباقي بخط عادي"
-                        className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="submit"
-                        disabled={isUploadingImage}
-                        className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isUploadingImage ? 'جاري رفع الصورة...' : editingItem ? 'تحديث العنصر' : 'إضافة العنصر'}
-                      </button>
-                      {editingItem && (
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">
+                          الوصف (اختياري)
+                        </label>
+                        <textarea
+                          value={itemFormData.description}
+                          onChange={(e) => setItemFormData({ ...itemFormData, description: e.target.value })}
+                          rows={3}
+                          placeholder="السطر الأول سيظهر بخط عريض، والباقي بخط عادي"
+                          className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingItem ? 'focus:border-blue-500' : 'focus:border-green-500'}`}
+                        />
+                      </div>
+                      <div className="flex gap-3">
                         <button
-                          type="button"
-                          onClick={handleCancelItem}
-                          className="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-2 rounded-lg font-semibold transition"
+                          type="submit"
+                          disabled={isUploadingImage}
+                          className={`flex-1 py-3 px-4 rounded-lg font-bold text-lg transition-all duration-200 transform hover:scale-[1.02] shadow-lg text-white disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none ${
+                            editingItem
+                              ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
+                              : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700'
+                          }`}
                         >
-                          إلغاء
+                          {isUploadingImage ? 'جاري رفع الصورة...' : editingItem ? 'تحديث' : 'إضافة العنصر'}
                         </button>
-                      )}
-                    </div>
-                  </form>
+                        {editingItem && (
+                          <button
+                            type="button"
+                            onClick={handleCancelItem}
+                            className="px-6 py-3 rounded-lg font-bold text-lg transition-all duration-200 bg-gray-200 hover:bg-gray-300 text-gray-700"
+                          >
+                            إلغاء
+                          </button>
+                        )}
+                      </div>
+                    </form>
+                  </div>
 
                   <div>
                     <h3 className="text-lg font-bold text-gray-800 mb-3">
@@ -1272,7 +1462,7 @@ export default function AdminPage() {
                                       onClick={() => handleEditItem(item)}
                                       className="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-sm transition"
                                     >
-                                      تعديل
+                                      تحديث
                                     </button>
                                     <button
                                       onClick={() => handleDeleteItem(item.id)}
@@ -1322,7 +1512,7 @@ export default function AdminPage() {
         {activeTab === 'orders' && (
           <div className="bg-white p-8 rounded-lg shadow-md">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">الطلبات</h2>
+              <h2 className="text-2xl font-bold text-gray-800">طلبات التوصيل</h2>
               {(currentAdmin?.isAcceptingOrders || currentAdmin?.isAcceptingOrdersViaWhatsapp) && (
                 <div className="flex flex-col items-end gap-1">
                   <button
@@ -1813,11 +2003,11 @@ export default function AdminPage() {
                               setDeletingOrderId(null);
                             }}
                             disabled={deletingOrderId === order.id}
-                          className={`w-full md:w-auto px-4 py-1 rounded-lg text-sm font-semibold transition ${
-                            deletingOrderId === order.id
-                              ? 'bg-red-100 text-gray-700 cursor-not-allowed'
-                              : 'bg-red-500 hover:bg-red-600 text-white'
-                          }`}
+                            className={`w-full md:w-auto px-4 py-2 rounded-lg text-sm font-medium transition ${
+                              deletingOrderId === order.id
+                                ? 'bg-red-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-red-500 hover:bg-red-600 text-white'
+                            }`}
                           >
                             مسح
                           </button>
@@ -1869,26 +2059,39 @@ export default function AdminPage() {
 
         {activeTab === 'delivery' && (
           <div className="bg-white p-8 rounded-lg shadow-md max-w-2xl mx-auto">
-            <h2 className="text-2xl font-bold mb-6 text-gray-800">إعدادات طلبات التوصيل</h2>
+            <h2 className="text-2xl font-bold mb-6 text-gray-800">إعدادات الطلبات</h2>
+
+            {/* نموذج إعدادات التوصيل */}
             <form onSubmit={handleDeliverySubmit} className="space-y-6">
-              <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={deliveryFormData.isAcceptingOrders}
-                    onChange={(e) => setDeliveryFormData({ ...deliveryFormData, isAcceptingOrders: e.target.checked })}
-                    className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <div className="flex-1">
-                    <span className="text-base font-bold text-gray-800">تفعيل الطلب عبر الموقع</span>
-                    <p className="text-xs text-gray-600 mt-1">عند التفعيل، سيظهر زر "اطلب الآن عبر الموقع" في السلة</p>
-                  </div>
-                </label>
-              </div>
+              <h3 className="text-lg font-bold text-gray-800">إعدادات طلبات التوصيل</h3>
 
-              <div className="border-t-2 border-gray-200 pt-6">
-                <h3 className="text-lg font-bold text-gray-800 mb-4">إعدادات الواتساب</h3>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={deliveryFormData.isAcceptingOrders}
+                  onChange={(e) => setDeliveryFormData({ ...deliveryFormData, isAcceptingOrders: e.target.checked })}
+                  className="w-5 h-5 text-gray-600 border-gray-300 rounded focus:ring-gray-500"
+                />
+                <div className="flex-1">
+                  <span className="font-bold text-gray-800">تفعيل الطلب عبر الموقع</span>
+                  <p className="text-xs text-gray-500 mt-0.5">سيظهر زر "اطلب الآن عبر الموقع" في السلة</p>
+                </div>
+              </label>
 
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={deliveryFormData.isAcceptingOrdersViaWhatsapp}
+                  onChange={(e) => setDeliveryFormData({ ...deliveryFormData, isAcceptingOrdersViaWhatsapp: e.target.checked })}
+                  className="w-5 h-5 text-gray-600 border-gray-300 rounded focus:ring-gray-500"
+                />
+                <div className="flex-1">
+                  <span className="font-bold text-gray-800">تفعيل الطلب عبر واتساب</span>
+                  <p className="text-xs text-gray-500 mt-0.5">سيظهر زر "اطلب من خلال واتساب" في السلة</p>
+                </div>
+              </label>
+
+              {deliveryFormData.isAcceptingOrdersViaWhatsapp && (
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">
                     رقم الواتساب
@@ -1899,103 +2102,171 @@ export default function AdminPage() {
                     onChange={(e) => setDeliveryFormData({ ...deliveryFormData, whatsappNumber: e.target.value })}
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
                     placeholder="مثال: 201234567890"
+                    required
                   />
-                  <p className="text-xs text-gray-500 mt-1">مطلوب لتفعيل الطلب عبر واتساب (مع كود الدولة بدون +)</p>
+                  <p className="text-xs text-gray-500 mt-1">مع كود الدولة بدون +</p>
                 </div>
-
-                <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4 mt-4">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={deliveryFormData.isAcceptingOrdersViaWhatsapp}
-                      onChange={(e) => {
-                        if (e.target.checked && !deliveryFormData.whatsappNumber.trim()) {
-                          alert('يجب إدخال رقم الواتساب أولاً');
-                          return;
-                        }
-                        setDeliveryFormData({ ...deliveryFormData, isAcceptingOrdersViaWhatsapp: e.target.checked });
-                      }}
-                      className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500"
-                      disabled={!deliveryFormData.whatsappNumber.trim()}
-                    />
-                    <div className="flex-1">
-                      <span className="text-base font-bold text-gray-800">تفعيل الطلب عبر واتساب</span>
-                      <p className="text-xs text-gray-600 mt-1">
-                        {deliveryFormData.whatsappNumber.trim()
-                          ? 'عند التفعيل، سيظهر زر "اطلب من خلال واتساب" في السلة'
-                          : 'يجب إدخال رقم الواتساب أولاً لتفعيل هذا الخيار'}
-                      </p>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              <div className="border-t-2 border-gray-200 pt-6">
-                <h3 className="text-lg font-bold text-gray-800 mb-4">إعدادات طلبات الطاولة</h3>
-
-                <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={deliveryFormData.isAcceptingTableOrders}
-                      onChange={(e) => setDeliveryFormData({ ...deliveryFormData, isAcceptingTableOrders: e.target.checked })}
-                      className="w-5 h-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
-                    />
-                    <div className="flex-1">
-                      <span className="text-base font-bold text-gray-800">تفعيل طلبات الطاولة</span>
-                      <p className="text-xs text-gray-600 mt-1">للمطاعم - يمكن للعملاء الطلب من الطاولة مباشرة</p>
-                    </div>
-                  </label>
-                </div>
-
-                {deliveryFormData.isAcceptingTableOrders && (
-                  <div className="mt-4">
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
-                      عدد الطاولات
-                    </label>
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setDeliveryFormData({
-                          ...deliveryFormData,
-                          tablesCount: Math.max(0, deliveryFormData.tablesCount - 1)
-                        })}
-                        className="w-10 h-10 bg-red-500 hover:bg-red-600 text-white rounded-lg font-bold text-xl transition-colors"
-                      >
-                        −
-                      </button>
-                      <input
-                        type="number"
-                        value={deliveryFormData.tablesCount}
-                        onChange={(e) => setDeliveryFormData({
-                          ...deliveryFormData,
-                          tablesCount: Math.max(0, parseInt(e.target.value) || 0)
-                        })}
-                        min="0"
-                        className="w-24 px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-purple-500 transition-colors text-center font-bold text-lg"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setDeliveryFormData({
-                          ...deliveryFormData,
-                          tablesCount: deliveryFormData.tablesCount + 1
-                        })}
-                        className="w-10 h-10 bg-green-500 hover:bg-green-600 text-white rounded-lg font-bold text-xl transition-colors"
-                      >
-                        +
-                      </button>
-                      <span className="text-sm text-gray-600">طاولة</span>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">سيتم إنشاء رابط خاص و QR كود لكل طاولة</p>
-                  </div>
-                )}
-              </div>
+              )}
 
               <button
                 type="submit"
-                className="w-full bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white py-3 px-4 rounded-lg font-bold text-lg transition-all duration-200 transform hover:scale-[1.02] shadow-lg"
+                className="w-full bg-gray-800 hover:bg-gray-900 text-white py-3 px-4 rounded-xl font-bold transition-colors"
               >
-                حفظ
+                حفظ إعدادات طلبات التوصيل
+              </button>
+            </form>
+
+            <div className="border-t-2 border-gray-200 my-6"></div>
+
+            {/* نموذج إعدادات الطاولات */}
+            <form onSubmit={handleTableSettingsSubmit} className="space-y-6">
+              <h3 className="text-lg font-bold text-gray-800">إعدادات طلبات الطاولة</h3>
+
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={deliveryFormData.isAcceptingTableOrders}
+                  onChange={(e) => setDeliveryFormData({ ...deliveryFormData, isAcceptingTableOrders: e.target.checked })}
+                  className="w-5 h-5 text-gray-600 border-gray-300 rounded focus:ring-gray-500"
+                />
+                <div className="flex-1">
+                  <span className="font-bold text-gray-800">تفعيل طلبات الطاولة</span>
+                  <p className="text-xs text-gray-500 mt-0.5">للمطاعم - يمكن للعملاء الطلب من الطاولة مباشرة</p>
+                </div>
+              </label>
+
+              {deliveryFormData.isAcceptingTableOrders && (
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    عدد الطاولات
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDeliveryFormData({
+                        ...deliveryFormData,
+                        tablesCount: Math.max(0, deliveryFormData.tablesCount - 1)
+                      })}
+                      className="w-9 h-9 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-bold text-lg transition-colors"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      value={deliveryFormData.tablesCount}
+                      onChange={(e) => setDeliveryFormData({
+                        ...deliveryFormData,
+                        tablesCount: Math.max(0, parseInt(e.target.value) || 0)
+                      })}
+                      min="0"
+                      className="w-20 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 transition-colors text-center font-bold"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setDeliveryFormData({
+                        ...deliveryFormData,
+                        tablesCount: deliveryFormData.tablesCount + 1
+                      })}
+                      className="w-9 h-9 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-bold text-lg transition-colors"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">سيتم إنشاء رابط و QR كود لكل طاولة</p>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full bg-gray-800 hover:bg-gray-900 text-white py-3 px-4 rounded-xl font-bold transition-colors"
+              >
+                حفظ إعدادات طلبات الطاولة
+              </button>
+            </form>
+
+            <div className="border-t-2 border-gray-200 my-6"></div>
+
+            {/* قسم إعدادات العاملين */}
+            <form onSubmit={handleEmployeeSettingsSubmit} className="space-y-6">
+              <h3 className="text-lg font-bold text-gray-800">إعدادات العاملين</h3>
+
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={employeeSettingsForm.enableDeliveryEmployees}
+                  onChange={(e) => setEmployeeSettingsForm({ ...employeeSettingsForm, enableDeliveryEmployees: e.target.checked })}
+                  className="w-5 h-5 text-gray-600 border-gray-300 rounded focus:ring-gray-500"
+                />
+                <div className="flex-1">
+                  <span className="font-bold text-gray-800">تفعيل عمال التوصيل</span>
+                  <p className="text-xs text-gray-500 mt-0.5">سيتمكن العمال من التحكم في حالة طلبات التوصيل</p>
+                </div>
+              </label>
+
+              {employeeSettingsForm.enableDeliveryEmployees && (
+                <div className="mr-6 pr-4 border-r-2 border-gray-200">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    القيمة الافتراضية للطلبات الجديدة
+                  </label>
+                  <select
+                    value={employeeSettingsForm.defaultDeliveryAssignment}
+                    onChange={(e) => setEmployeeSettingsForm({ ...employeeSettingsForm, defaultDeliveryAssignment: e.target.value as 'ANY_DELIVERY' | '' })}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
+                  >
+                    <option value="">بدون عامل توصيل</option>
+                    <option value="ANY_DELIVERY">أي عامل يمكنه التوصيل</option>
+                  </select>
+                </div>
+              )}
+
+              {!employeeSettingsForm.enableDeliveryEmployees && (
+                <div className="mr-6 pr-4 border-r-2 border-gray-200 space-y-4">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={employeeSettingsForm.showDeliveryEmployeesAnyway}
+                      onChange={(e) => setEmployeeSettingsForm({ ...employeeSettingsForm, showDeliveryEmployeesAnyway: e.target.checked })}
+                      className="w-4 h-4 text-gray-600 border-gray-300 rounded focus:ring-gray-500"
+                    />
+                    <span className="text-sm text-gray-700">إظهار عمال التوصيل في الطلبات رغم عدم التفعيل</span>
+                  </label>
+
+                  {employeeSettingsForm.showDeliveryEmployeesAnyway && (
+                    <div className="mr-4">
+                      <label className="block text-sm font-bold text-gray-700 mb-2">
+                        القيمة الافتراضية للطلبات الجديدة
+                      </label>
+                      <select
+                        value={employeeSettingsForm.defaultDeliveryAssignment}
+                        onChange={(e) => setEmployeeSettingsForm({ ...employeeSettingsForm, defaultDeliveryAssignment: e.target.value as 'ANY_DELIVERY' | '' })}
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
+                      >
+                        <option value="">بدون عامل توصيل</option>
+                        <option value="ANY_DELIVERY">أي عامل يمكنه التوصيل</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={employeeSettingsForm.enableWaiters}
+                  onChange={(e) => setEmployeeSettingsForm({ ...employeeSettingsForm, enableWaiters: e.target.checked })}
+                  className="w-5 h-5 text-gray-600 border-gray-300 rounded focus:ring-gray-500"
+                />
+                <div className="flex-1">
+                  <span className="font-bold text-gray-800">تفعيل الندلاء</span>
+                  <p className="text-xs text-gray-500 mt-0.5">سيتمكن الندلاء من التحكم في حالة طلبات الطاولة</p>
+                </div>
+              </label>
+
+              <button
+                type="submit"
+                className="w-full bg-gray-800 hover:bg-gray-900 text-white py-3 px-4 rounded-xl font-bold transition-colors"
+              >
+                حفظ إعدادات العاملين
               </button>
             </form>
           </div>
@@ -2129,7 +2400,7 @@ export default function AdminPage() {
               <button
                 type="submit"
                 disabled={isUploadingImage}
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white py-3 px-4 rounded-lg font-bold text-lg transition-all duration-200 transform hover:scale-[1.02] shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-gray-800 hover:bg-gray-900 text-white py-3 px-4 rounded-xl font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isUploadingImage ? 'جاري رفع الصورة...' : 'حفظ الإعدادات'}
               </button>
@@ -2174,7 +2445,7 @@ export default function AdminPage() {
                 type="button"
                 onClick={handlePasswordChange}
                 disabled={isUploadingImage}
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white py-3 px-4 rounded-lg font-bold text-lg transition-all duration-200 transform hover:scale-[1.02] shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-gray-800 hover:bg-gray-900 text-white py-3 px-4 rounded-xl font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isUploadingImage ? 'جاري رفع الصورة...' : 'تغيير كلمة المرور'}
               </button>
@@ -2187,189 +2458,11 @@ export default function AdminPage() {
           <div className="bg-white p-8 rounded-lg shadow-md max-w-4xl mx-auto">
             <h2 className="text-2xl font-bold mb-6 text-gray-800">إدارة العاملين</h2>
 
-            {/* Enable/Disable Employee Types */}
-            <div className="bg-gray-50 border-2 border-gray-200 rounded-lg p-6 mb-8">
-              <div className="space-y-4">
-                {/* Enable Delivery Employees */}
-                <div className="flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    id="enableDeliveryEmployees"
-                    checked={currentAdmin?.enableDeliveryEmployees ?? false}
-                    onChange={async (e) => {
-                      const newValue = e.target.checked;
-                      // تحديث الواجهة فوراً
-                      setCurrentAdmin(prev => prev ? { ...prev, enableDeliveryEmployees: newValue } : null);
-
-                      // إرسال التحديث للسيرفر
-                      const token = localStorage.getItem('session_token');
-                      const res = await fetch('/api/admin/settings', {
-                        method: 'PATCH',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          'Authorization': `Bearer ${token}`,
-                        },
-                        body: JSON.stringify({ enableDeliveryEmployees: newValue }),
-                      });
-                      // إذا فشل، أعد القيمة السابقة
-                      if (!res.ok) {
-                        setCurrentAdmin(prev => prev ? { ...prev, enableDeliveryEmployees: !newValue } : null);
-                      }
-                    }}
-                    className="w-5 h-5 mt-0.5 text-green-600 border-gray-300 rounded focus:ring-green-500 cursor-pointer"
-                  />
-                  <div>
-                    <label htmlFor="enableDeliveryEmployees" className="text-base font-bold text-gray-800 cursor-pointer">
-                      تفعيل عمال التوصيل
-                    </label>
-                    <p className="text-sm text-gray-500">سيتمكن العمال الذين تنشئهم من التحكم في حالة طلبات التوصيل</p>
-                  </div>
-                </div>
-
-                {/* Default Delivery Assignment - يظهر عند تفعيل عمال التوصيل */}
-                {currentAdmin?.enableDeliveryEmployees && (
-                  <div className="mr-8 border-r-2 border-gray-300 pr-4">
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
-                      القيمة الافتراضية للطلبات الجديدة
-                    </label>
-                    <select
-                      value={currentAdmin?.defaultDeliveryAssignment ?? ''}
-                      onChange={async (e) => {
-                        const newValue = e.target.value as 'ANY_DELIVERY' | '';
-                        setCurrentAdmin(prev => prev ? { ...prev, defaultDeliveryAssignment: newValue } : null);
-
-                        const token = localStorage.getItem('session_token');
-                        const res = await fetch('/api/admin/settings', {
-                          method: 'PATCH',
-                          headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}`,
-                          },
-                          body: JSON.stringify({ defaultDeliveryAssignment: newValue }),
-                        });
-                        if (!res.ok) {
-                          setCurrentAdmin(prev => prev ? { ...prev, defaultDeliveryAssignment: currentAdmin?.defaultDeliveryAssignment } : null);
-                        }
-                      }}
-                      className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors bg-white text-sm"
-                    >
-                      <option value="">بدون عامل توصيل</option>
-                      <option value="ANY_DELIVERY">أي عامل يمكنه التوصيل</option>
-                    </select>
-                  </div>
-                )}
-
-                {/* Show Delivery Employees Anyway - يظهر فقط عند عدم التفعيل */}
-                {!currentAdmin?.enableDeliveryEmployees && (
-                  <div className="mr-8 border-r-2 border-gray-300 pr-4 space-y-3">
-                    <div className="flex items-start gap-3">
-                      <input
-                        type="checkbox"
-                        id="showDeliveryEmployeesAnyway"
-                        checked={currentAdmin?.showDeliveryEmployeesAnyway ?? false}
-                        onChange={async (e) => {
-                          const newValue = e.target.checked;
-                          setCurrentAdmin(prev => prev ? { ...prev, showDeliveryEmployeesAnyway: newValue } : null);
-
-                          const token = localStorage.getItem('session_token');
-                          const res = await fetch('/api/admin/settings', {
-                            method: 'PATCH',
-                            headers: {
-                              'Content-Type': 'application/json',
-                              'Authorization': `Bearer ${token}`,
-                            },
-                            body: JSON.stringify({ showDeliveryEmployeesAnyway: newValue }),
-                          });
-                          if (!res.ok) {
-                            setCurrentAdmin(prev => prev ? { ...prev, showDeliveryEmployeesAnyway: !newValue } : null);
-                          }
-                        }}
-                        className="w-5 h-5 mt-0.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
-                      />
-                      <div>
-                        <label htmlFor="showDeliveryEmployeesAnyway" className="text-sm font-bold text-gray-700 cursor-pointer">
-                          إظهار عمال التوصيل في الطلبات رغم عدم التفعيل
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Default Delivery Assignment - يظهر فقط عند تفعيل الإظهار */}
-                    {currentAdmin?.showDeliveryEmployeesAnyway && (
-                      <div className="mr-6">
-                        <label className="block text-sm font-bold text-gray-700 mb-2">
-                          القيمة الافتراضية للطلبات الجديدة
-                        </label>
-                        <select
-                          value={currentAdmin?.defaultDeliveryAssignment ?? ''}
-                          onChange={async (e) => {
-                            const newValue = e.target.value as 'ANY_DELIVERY' | '';
-                            setCurrentAdmin(prev => prev ? { ...prev, defaultDeliveryAssignment: newValue } : null);
-
-                            const token = localStorage.getItem('session_token');
-                            const res = await fetch('/api/admin/settings', {
-                              method: 'PATCH',
-                              headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${token}`,
-                              },
-                              body: JSON.stringify({ defaultDeliveryAssignment: newValue }),
-                            });
-                            if (!res.ok) {
-                              setCurrentAdmin(prev => prev ? { ...prev, defaultDeliveryAssignment: currentAdmin?.defaultDeliveryAssignment } : null);
-                            }
-                          }}
-                          className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors bg-white text-sm"
-                        >
-                          <option value="">بدون عامل توصيل</option>
-                          <option value="ANY_DELIVERY">أي عامل يمكنه التوصيل</option>
-                        </select>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Enable Waiters */}
-                <div className="flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    id="enableWaiters"
-                    checked={currentAdmin?.enableWaiters ?? false}
-                    onChange={async (e) => {
-                      const newValue = e.target.checked;
-                      // تحديث الواجهة فوراً
-                      setCurrentAdmin(prev => prev ? { ...prev, enableWaiters: newValue } : null);
-
-                      // إرسال التحديث للسيرفر
-                      const token = localStorage.getItem('session_token');
-                      const res = await fetch('/api/admin/settings', {
-                        method: 'PATCH',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          'Authorization': `Bearer ${token}`,
-                        },
-                        body: JSON.stringify({ enableWaiters: newValue }),
-                      });
-                      // إذا فشل، أعد القيمة السابقة
-                      if (!res.ok) {
-                        setCurrentAdmin(prev => prev ? { ...prev, enableWaiters: !newValue } : null);
-                      }
-                    }}
-                    className="w-5 h-5 mt-0.5 text-green-600 border-gray-300 rounded focus:ring-green-500 cursor-pointer"
-                  />
-                  <div>
-                    <label htmlFor="enableWaiters" className="text-base font-bold text-gray-800 cursor-pointer">
-                      تفعيل الندلاء
-                    </label>
-                    <p className="text-sm text-gray-500">سيتمكن الندلاء الذين تنشئهم من التحكم في حالة طلبات الطاولة</p>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
-            {/* Add Employee Form */}
-            <div className="bg-green-50 border-2 border-green-200 rounded-lg p-6 mb-8">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">إضافة عامل جديد</h3>
+            {/* Add/Edit Employee Form */}
+            <div className={`border-2 rounded-lg p-6 mb-8 ${editingEmployeeId ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'}`}>
+              <h3 className="text-lg font-bold text-gray-800 mb-4">
+                {editingEmployeeId ? 'تحديث عامل' : 'إضافة عامل جديد'}
+              </h3>
               <form onSubmit={handleEmployeeSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">
@@ -2380,53 +2473,56 @@ export default function AdminPage() {
                     required
                     value={employeeFormData.name}
                     onChange={(e) => setEmployeeFormData({ ...employeeFormData, name: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-green-500 transition-colors"
+                    className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingEmployeeId ? 'focus:border-blue-500' : 'focus:border-green-500'}`}
                     placeholder="أدخل اسم العامل"
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">
-                    اسم المستخدم <span className="text-red-500">*</span>
+                    اسم المستخدم {!editingEmployeeId && <span className="text-red-500">*</span>}
                   </label>
                   <input
                     type="text"
-                    required
+                    required={!editingEmployeeId}
+                    disabled={!!editingEmployeeId}
                     value={employeeFormData.username}
                     onChange={(e) => setEmployeeFormData({ ...employeeFormData, username: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-green-500 transition-colors"
+                    className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingEmployeeId ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'focus:border-green-500'}`}
                     placeholder="اسم مستخدم للتسجيل"
                   />
-                  <p className="text-xs text-gray-500 mt-1">سيستخدمه العامل لتسجيل الدخول</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {editingEmployeeId ? 'لا يمكن تغيير اسم المستخدم' : 'سيستخدمه العامل لتسجيل الدخول'}
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-2">
-                      كلمة المرور <span className="text-red-500">*</span>
+                      {editingEmployeeId ? 'كلمة مرور جديدة' : 'كلمة المرور'} {!editingEmployeeId && <span className="text-red-500">*</span>}
                     </label>
                     <input
                       type="password"
-                      required
+                      required={!editingEmployeeId}
                       value={employeeFormData.password}
                       onChange={(e) => setEmployeeFormData({ ...employeeFormData, password: e.target.value })}
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-green-500 transition-colors"
-                      placeholder="كلمة المرور"
+                      className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingEmployeeId ? 'focus:border-blue-500' : 'focus:border-green-500'}`}
+                      placeholder={editingEmployeeId ? 'اتركه فارغاً للإبقاء على كلمة المرور الحالية' : 'كلمة المرور'}
                       minLength={6}
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-2">
-                      تأكيد كلمة المرور <span className="text-red-500">*</span>
+                      {editingEmployeeId ? 'تأكيد كلمة المرور الجديدة' : 'تأكيد كلمة المرور'} {!editingEmployeeId && <span className="text-red-500">*</span>}
                     </label>
                     <input
                       type="password"
-                      required
+                      required={!editingEmployeeId}
                       value={employeeFormData.confirmPassword}
                       onChange={(e) => setEmployeeFormData({ ...employeeFormData, confirmPassword: e.target.value })}
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-green-500 transition-colors"
-                      placeholder="تأكيد كلمة المرور"
+                      className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingEmployeeId ? 'focus:border-blue-500' : 'focus:border-green-500'}`}
+                      placeholder={editingEmployeeId ? 'تأكيد كلمة المرور الجديدة' : 'تأكيد كلمة المرور'}
                       minLength={6}
                     />
                   </div>
@@ -2441,7 +2537,7 @@ export default function AdminPage() {
                         type="checkbox"
                         checked={employeeFormData.isDelivery}
                         onChange={(e) => setEmployeeFormData({ ...employeeFormData, isDelivery: e.target.checked })}
-                        className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                        className={`w-5 h-5 border-gray-300 rounded ${editingEmployeeId ? 'text-blue-600 focus:ring-blue-500' : 'text-green-600 focus:ring-green-500'}`}
                       />
                       <span className="text-sm font-medium text-gray-700">عامل توصيل (طلبات التوصيل)</span>
                     </label>
@@ -2450,19 +2546,34 @@ export default function AdminPage() {
                         type="checkbox"
                         checked={employeeFormData.isWaiter}
                         onChange={(e) => setEmployeeFormData({ ...employeeFormData, isWaiter: e.target.checked })}
-                        className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                        className={`w-5 h-5 border-gray-300 rounded ${editingEmployeeId ? 'text-blue-600 focus:ring-blue-500' : 'text-green-600 focus:ring-green-500'}`}
                       />
-                      <span className="text-sm font-medium text-gray-700">نادل (طلبات الطاولات)</span>
+                      <span className="text-sm font-medium text-gray-700">نادل (طلبات الطاولة)</span>
                     </label>
                   </div>
                 </div>
 
-                <button
-                  type="submit"
-                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white py-3 px-4 rounded-lg font-bold text-lg transition-all duration-200 transform hover:scale-[1.02] shadow-lg"
-                >
-                  إضافة عامل
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    className={`flex-1 py-3 px-4 rounded-lg font-bold text-lg transition-all duration-200 transform hover:scale-[1.02] shadow-lg text-white ${
+                      editingEmployeeId
+                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
+                        : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700'
+                    }`}
+                  >
+                    {editingEmployeeId ? 'تحديث' : 'إضافة العامل'}
+                  </button>
+                  {editingEmployeeId && (
+                    <button
+                      type="button"
+                      onClick={handleCancelEditEmployee}
+                      className="px-6 py-3 rounded-lg font-bold text-lg transition-all duration-200 bg-gray-200 hover:bg-gray-300 text-gray-700"
+                    >
+                      إلغاء
+                    </button>
+                  )}
+                </div>
               </form>
             </div>
 
@@ -2478,48 +2589,60 @@ export default function AdminPage() {
                   <p className="text-gray-400 text-sm mt-2">أضف عامل من النموذج أعلاه</p>
                 </div>
               ) : (
-                <div className="grid gap-4">
-                  {employees.map((employee) => (
-                    <div
-                      key={employee.id}
-                      className="border-2 border-gray-200 rounded-lg p-4 hover:border-green-300 transition-colors"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <h4 className="text-lg font-bold text-gray-800">{employee.name}</h4>
-                          <p className="text-sm text-gray-600 mt-1">
-                            <span className="font-medium">اسم المستخدم:</span> {employee.username}
-                          </p>
-                          <div className="flex gap-2 mt-2">
-                            {employee.isDelivery && (
-                              <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded">
-                                موصل
-                              </span>
-                            )}
-                            {employee.isWaiter && (
-                              <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-bold rounded">
-                                نادل
-                              </span>
-                            )}
-                            {!employee.isDelivery && !employee.isWaiter && (
-                              <span className="px-2 py-1 bg-gray-100 text-gray-500 text-xs font-bold rounded">
-                                غير محدد
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-gray-500 mt-2">
-                            تاريخ الإضافة: {new Date(employee.createdAt).toLocaleDateString('ar-EG')}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => handleDeleteEmployee(employee.id)}
-                          className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-bold transition-colors"
-                        >
-                          حذف
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="text-right px-4 py-3 text-sm font-bold text-gray-700">الاسم</th>
+                        <th className="text-right px-4 py-3 text-sm font-bold text-gray-700">اسم المستخدم</th>
+                        <th className="text-right px-4 py-3 text-sm font-bold text-gray-700">النوع</th>
+                        <th className="text-center px-4 py-3 text-sm font-bold text-gray-700">إجراءات</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {employees.map((employee) => (
+                        <tr key={employee.id} className={`border-t hover:bg-gray-50 ${editingEmployeeId === employee.id ? 'bg-blue-50' : ''}`}>
+                          <td className="px-4 py-3 text-gray-800 font-medium">{employee.name}</td>
+                          <td className="px-4 py-3 text-gray-500 text-sm">{employee.username}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-2 flex-wrap">
+                              {employee.isDelivery && (
+                                <span className="inline-block px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                                  عامل توصيل
+                                </span>
+                              )}
+                              {employee.isWaiter && (
+                                <span className="inline-block px-2 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded">
+                                  نادل
+                                </span>
+                              )}
+                              {!employee.isDelivery && !employee.isWaiter && (
+                                <span className="inline-block px-2 py-1 bg-gray-100 text-gray-500 text-xs font-medium rounded">
+                                  غير محدد
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-2 justify-center">
+                              <button
+                                onClick={() => handleEditEmployee(employee)}
+                                className="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-sm transition"
+                              >
+                                تحديث
+                              </button>
+                              <button
+                                onClick={() => handleDeleteEmployee(employee.id)}
+                                className="bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded text-sm transition"
+                              >
+                                حذف
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
@@ -2530,7 +2653,7 @@ export default function AdminPage() {
         {activeTab === 'tableOrders' && (
           <div className="bg-white p-8 rounded-lg shadow-md">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">طلبات الطاولات</h2>
+              <h2 className="text-2xl font-bold text-gray-800">طلبات الطاولة</h2>
               {currentAdmin?.isAcceptingTableOrders && (
                 <div className="flex flex-col items-end gap-1">
                   <button
@@ -2821,9 +2944,9 @@ export default function AdminPage() {
                                           setDeletingTableOrderId(null);
                                         }}
                                         disabled={deletingTableOrderId === order.id}
-                                        className={`w-full md:w-auto px-4 py-1 rounded-lg text-sm font-semibold transition ${
+                                        className={`w-full md:w-auto px-4 py-2 rounded-lg text-sm font-medium transition ${
                                           deletingTableOrderId === order.id
-                                            ? 'bg-red-100 text-gray-700 cursor-not-allowed'
+                                            ? 'bg-red-100 text-gray-400 cursor-not-allowed'
                                             : 'bg-red-500 hover:bg-red-600 text-white'
                                         }`}
                                       >

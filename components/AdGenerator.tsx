@@ -230,7 +230,7 @@ export default function AdGenerator({
       <button
         onClick={generateAd}
         className="hover:bg-red-600 text-white py-1 px-3 rounded text-sm transition"
-     style={{ backgroundColor: '#00a254ff', width:100 }}>
+     style={{ backgroundColor: 'rgb(240, 196, 0)', width:100 }}>
         تحميل إعلان!
       </button>
       <canvas ref={canvasRef} style={{ display: 'none' }} />
