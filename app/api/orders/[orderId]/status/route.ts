@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getOrder, updateOrderStatus, getEmployee } from '@/lib/db';
+import { getOrder, updateOrderStatus, getEmployee, getAdmin } from '@/lib/db';
 import { verifySessionToken } from '@/lib/auth';
 
 export async function PATCH(
@@ -42,9 +42,21 @@ export async function PATCH(
 
     // التحقق من الصلاحية:
     // 1. الأدمن يمكنه تعديل أي طلب يخصه
-    // 2. العامل يمكنه تعديل الطلبات المُعيَّنة له
-    // 3. أي عامل توصيل يمكنه تعديل الطلبات المعينة لـ "ANY_DELIVERY"
+    // 2. العامل يمكنه تعديل الطلبات المُعيَّنة له (إذا كان enableDeliveryEmployees مفعل)
+    // 3. أي عامل توصيل يمكنه تعديل الطلبات المعينة لـ "ANY_DELIVERY" (إذا كان enableDeliveryEmployees مفعل)
     const isAdmin = payload.adminId && order.adminId === payload.adminId;
+
+    // التحقق من أن عمال التوصيل مفعلين قبل السماح للموظف
+    if (payload.employeeId && !payload.adminId) {
+      const employee = await getEmployee(payload.employeeId);
+      if (employee) {
+        const admin = await getAdmin(employee.adminId);
+        if (!admin?.enableDeliveryEmployees) {
+          return NextResponse.json({ error: 'عمال التوصيل معطلين حالياً' }, { status: 403 });
+        }
+      }
+    }
+
     const isAssignedEmployee = payload.employeeId && order.assignedTo === payload.employeeId;
 
     // Check if order is assigned to ANY_DELIVERY and user is a delivery employee

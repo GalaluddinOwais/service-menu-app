@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createTableOrder, getTableOrders, getEmployee } from '@/lib/db';
+import { createTableOrder, getTableOrders, getEmployee, getAdmin } from '@/lib/db';
 import { verifySessionToken, getAuthHeader } from '@/lib/auth';
 
 export async function POST(request: Request) {
@@ -66,6 +66,8 @@ export async function GET(request: Request) {
       if (!employee || !employee.isWaiter) {
         return NextResponse.json({ error: 'غير مصرح - النوادل فقط يمكنهم الوصول لطلبات الطاولة' }, { status: 403 });
       }
+      // ملاحظة: نسمح للنادل بجلب الطلبات حتى لو كان معطلاً
+      // التحقق من التفعيل يتم فقط عند تعديل حالة الطلب
     } else {
       return NextResponse.json({ error: 'غير مصرح' }, { status: 403 });
     }

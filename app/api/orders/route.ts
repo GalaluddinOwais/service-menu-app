@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createOrder, getOrders } from '@/lib/db';
+import { createOrder, getOrders, getAdmin, getEmployee } from '@/lib/db';
+import { verifySessionToken } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
@@ -24,12 +25,18 @@ export async function POST(request: Request) {
       ...(item.imageUrl && { imageUrl: item.imageUrl }),
     }));
 
+    // جلب إعدادات الأدمن للحصول على القيمة الافتراضية لعامل التوصيل
+    const admin = await getAdmin(adminId);
+    const defaultAssignment = admin?.defaultDeliveryAssignment || '';
+
     const newOrder = await createOrder({
       adminId,
       orderType,
       items: sanitizedItems,
       totalPrice: totalPrice || 0,
       totalDiscount: totalDiscount || 0,
+      status: 'pending', // الحالة الابتدائية دائماً pending
+      ...(defaultAssignment && { assignedTo: defaultAssignment }), // القيمة الافتراضية لعامل التوصيل
       ...(customerName && { customerName }),
       ...(customerPhone && { customerPhone }),
     });
@@ -49,6 +56,9 @@ export async function GET(request: Request) {
     if (!adminId) {
       return NextResponse.json({ error: 'Missing adminId' }, { status: 400 });
     }
+
+    // ملاحظة: نسمح للموظف بجلب الطلبات حتى لو كان معطلاً
+    // التحقق من التفعيل يتم فقط عند تعديل حالة الطلب
 
     // Extract pagination and filter parameters
     const page = parseInt(searchParams.get('page') || '1', 10);

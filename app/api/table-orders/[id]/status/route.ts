@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTableOrder, updateTableOrderStatus, getEmployee } from '@/lib/db';
+import { getTableOrder, updateTableOrderStatus, getEmployee, getAdmin } from '@/lib/db';
 import { verifySessionToken } from '@/lib/auth';
 
 export async function PATCH(
@@ -42,13 +42,18 @@ export async function PATCH(
 
     // التحقق من الصلاحية:
     // 1. الأدمن يمكنه تعديل أي طلب يخصه
-    // 2. النادل فقط (isWaiter = true) يمكنه تعديل طلبات الطاولة
+    // 2. النادل فقط (isWaiter = true) يمكنه تعديل طلبات الطاولة (إذا كان enableWaiters مفعل)
     const isAdmin = payload.adminId && order.adminId === payload.adminId;
 
     let isWaiter = false;
     if (payload.employeeId) {
       const employee = await getEmployee(payload.employeeId);
       if (employee && employee.isWaiter) {
+        // التحقق من أن الندلاء مفعلين
+        const admin = await getAdmin(employee.adminId);
+        if (!admin?.enableWaiters) {
+          return NextResponse.json({ error: 'الندلاء معطلين حالياً' }, { status: 403 });
+        }
         isWaiter = true;
       }
     }

@@ -19,6 +19,11 @@ interface Admin {
   isAcceptingOrdersViaWhatsapp?: boolean;
   isAcceptingTableOrders?: boolean;
   tablesCount?: number;
+  enableDeliveryEmployees?: boolean;
+  enableWaiters?: boolean;
+  showDeliveryEmployeesAnyway?: boolean;
+  showWaitersAnyway?: boolean;
+  defaultDeliveryAssignment?: 'ANY_DELIVERY' | '';
 }
 
 interface MenuList {
@@ -219,32 +224,72 @@ export default function AdminPage() {
       return;
     }
 
-    // Admin login
-    const admin = JSON.parse(adminData);
+    // Admin login - جلب البيانات المحدثة من الـ API
+    const adminFromStorage = JSON.parse(adminData);
     setUserType('admin');
-    setCurrentAdmin(admin);
-    setSettingsFormData({
-      username: admin.username || '',
-      theme: admin.theme || 'ocean',
-      cardStyle: admin.cardStyle || 'rounded',
-      fontFamily: admin.fontFamily || 'baloo-bhaijaan',
-      logoUrl: admin.logoUrl || '',
-      backgroundUrl: admin.backgroundUrl || '',
-      welcomeMessage: admin.welcomeMessage || '',
-      contactMessage: admin.contactMessage || '',
-      currentPassword: '',
-      newPassword: '',
-    });
-    setDeliveryFormData({
-      whatsappNumber: admin.whatsappNumber || '',
-      isAcceptingOrders: admin.isAcceptingOrders || false,
-      isAcceptingOrdersViaWhatsapp: admin.isAcceptingOrdersViaWhatsapp || false,
-      isAcceptingTableOrders: admin.isAcceptingTableOrders || false,
-      tablesCount: admin.tablesCount || 0,
-      showDeliveryStaff: admin.showDeliveryStaff || false,
-      showWaiterStaff: admin.showWaiterStaff || false,
-    });
-    fetchData(admin.id);
+
+    // Fetch fresh admin data from API
+    const token = localStorage.getItem('session_token');
+    fetch(`/api/admins/${adminFromStorage.id}/info`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      }
+    })
+      .then(res => res.json())
+      .then(admin => {
+        setCurrentAdmin(admin);
+        setSettingsFormData({
+          username: admin.username || '',
+          theme: admin.theme || 'ocean',
+          cardStyle: admin.cardStyle || 'rounded',
+          fontFamily: admin.fontFamily || 'baloo-bhaijaan',
+          logoUrl: admin.logoUrl || '',
+          backgroundUrl: admin.backgroundUrl || '',
+          welcomeMessage: admin.welcomeMessage || '',
+          contactMessage: admin.contactMessage || '',
+          currentPassword: '',
+          newPassword: '',
+        });
+        setDeliveryFormData({
+          whatsappNumber: admin.whatsappNumber || '',
+          isAcceptingOrders: admin.isAcceptingOrders || false,
+          isAcceptingOrdersViaWhatsapp: admin.isAcceptingOrdersViaWhatsapp || false,
+          isAcceptingTableOrders: admin.isAcceptingTableOrders || false,
+          tablesCount: admin.tablesCount || 0,
+          showDeliveryStaff: admin.showDeliveryStaff || false,
+          showWaiterStaff: admin.showWaiterStaff || false,
+        });
+        fetchData(admin.id);
+      })
+      .catch(error => {
+        console.error('Error fetching admin data:', error);
+        // Fallback to localStorage data
+        const admin = adminFromStorage;
+        setCurrentAdmin(admin);
+        setSettingsFormData({
+          username: admin.username || '',
+          theme: admin.theme || 'ocean',
+          cardStyle: admin.cardStyle || 'rounded',
+          fontFamily: admin.fontFamily || 'baloo-bhaijaan',
+          logoUrl: admin.logoUrl || '',
+          backgroundUrl: admin.backgroundUrl || '',
+          welcomeMessage: admin.welcomeMessage || '',
+          contactMessage: admin.contactMessage || '',
+          currentPassword: '',
+          newPassword: '',
+        });
+        setDeliveryFormData({
+          whatsappNumber: admin.whatsappNumber || '',
+          isAcceptingOrders: admin.isAcceptingOrders || false,
+          isAcceptingOrdersViaWhatsapp: admin.isAcceptingOrdersViaWhatsapp || false,
+          isAcceptingTableOrders: admin.isAcceptingTableOrders || false,
+          tablesCount: admin.tablesCount || 0,
+          showDeliveryStaff: admin.showDeliveryStaff || false,
+          showWaiterStaff: admin.showWaiterStaff || false,
+        });
+        fetchData(admin.id);
+      });
   }, [router]);
 
   // Refetch orders when filters or page changes
@@ -1432,7 +1477,7 @@ export default function AdminPage() {
                   </div>
 
                   {/* Employee Filter - للأدمن فقط */}
-                  {userType === 'admin' && (
+                  {userType === 'admin' && (currentAdmin?.enableDeliveryEmployees || currentAdmin?.showDeliveryEmployeesAnyway) && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">عامل التوصيل</label>
                       <select
@@ -1441,8 +1486,8 @@ export default function AdminPage() {
                         className="w-full px-1.5 py-0.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors bg-white text-sm"
                       >
                         <option value="all">الكل</option>
-                        <option value="">بدون عامل توصيل محدد</option>
-                        <option value="ANY_DELIVERY">عامل التوصيل أي عامل</option>
+                        <option value="">بدون عامل توصيل</option>
+                        <option value="ANY_DELIVERY">أي عامل يمكنه التوصيل</option>
                         {employees.filter(emp => emp.isDelivery).map((emp) => (
                           <option key={emp.id} value={emp.id}>
                             {emp.name}
@@ -1639,9 +1684,13 @@ export default function AdminPage() {
                         <div className="flex flex-wrap gap-1 flex-1 md:flex-initial">
                           <button
                             onClick={() => handleStatusUpdate(order.id, 'pending')}
-                            disabled={updatingOrderStatus?.orderId === order.id}
+                            disabled={updatingOrderStatus?.orderId === order.id || (userType === 'employee' && isDelivery && !currentAdmin?.enableDeliveryEmployees)}
                             className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                              (order.status || 'pending') === 'pending'
+                              userType === 'employee' && isDelivery && !currentAdmin?.enableDeliveryEmployees && order.status !== 'pending'
+                                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                : userType === 'employee' && isDelivery && !currentAdmin?.enableDeliveryEmployees && order.status === 'pending'
+                                ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                                : (order.status || 'pending') === 'pending'
                                 ? 'bg-blue-600 text-white shadow-md'
                                 : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'pending'
                                 ? 'bg-blue-100 text-gray-700'
@@ -1653,9 +1702,13 @@ export default function AdminPage() {
                           </button>
                           <button
                             onClick={() => handleStatusUpdate(order.id, 'read')}
-                            disabled={updatingOrderStatus?.orderId === order.id}
+                            disabled={updatingOrderStatus?.orderId === order.id || (userType === 'employee' && isDelivery && !currentAdmin?.enableDeliveryEmployees)}
                             className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                              order.status === 'read'
+                              userType === 'employee' && isDelivery && !currentAdmin?.enableDeliveryEmployees && order.status !== 'read'
+                                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                : userType === 'employee' && isDelivery && !currentAdmin?.enableDeliveryEmployees && order.status === 'read'
+                                ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                                : order.status === 'read'
                                 ? 'bg-blue-500 text-white shadow-md'
                                 : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'read'
                                 ? 'bg-blue-100 text-gray-700'
@@ -1667,9 +1720,13 @@ export default function AdminPage() {
                           </button>
                           <button
                             onClick={() => handleStatusUpdate(order.id, 'delivering')}
-                            disabled={updatingOrderStatus?.orderId === order.id}
+                            disabled={updatingOrderStatus?.orderId === order.id || (userType === 'employee' && isDelivery && !currentAdmin?.enableDeliveryEmployees)}
                             className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                              order.status === 'delivering'
+                              userType === 'employee' && isDelivery && !currentAdmin?.enableDeliveryEmployees && order.status !== 'delivering'
+                                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                : userType === 'employee' && isDelivery && !currentAdmin?.enableDeliveryEmployees && order.status === 'delivering'
+                                ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                                : order.status === 'delivering'
                                 ? 'bg-teal-500 text-white shadow-md'
                                 : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'delivering'
                                 ? 'bg-teal-100 text-gray-700'
@@ -1681,9 +1738,13 @@ export default function AdminPage() {
                           </button>
                           <button
                             onClick={() => handleStatusUpdate(order.id, 'delivered')}
-                            disabled={updatingOrderStatus?.orderId === order.id}
+                            disabled={updatingOrderStatus?.orderId === order.id || (userType === 'employee' && isDelivery && !currentAdmin?.enableDeliveryEmployees)}
                             className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                              order.status === 'delivered'
+                              userType === 'employee' && isDelivery && !currentAdmin?.enableDeliveryEmployees && order.status !== 'delivered'
+                                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                : userType === 'employee' && isDelivery && !currentAdmin?.enableDeliveryEmployees && order.status === 'delivered'
+                                ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                                : order.status === 'delivered'
                                 ? 'bg-green-500 text-white shadow-md'
                                 : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'delivered'
                                 ? 'bg-green-100 text-gray-700'
@@ -1696,7 +1757,7 @@ export default function AdminPage() {
                         </div>
 
                         {/* Employee Assignment Dropdown - في المنتصف على الشاشات الواسعة */}
-                        {userType === 'admin' && (
+                        {userType === 'admin' && (currentAdmin?.enableDeliveryEmployees || currentAdmin?.showDeliveryEmployeesAnyway) && (
                           <div className="w-full md:flex-1 md:mx-2">
                             <select
                               value={assigningEmployee === order.id ? '' : ((order as any).assignedTo || '')}
@@ -1710,8 +1771,8 @@ export default function AdminPage() {
                                 <option value="">جاري التعيين...</option>
                               ) : (
                                 <>
-                                  <option value="">بدون عامل توصيل محدد</option>
-                                  <option value="ANY_DELIVERY">عامل التوصيل أي عامل</option>
+                                  <option value="">بدون عامل توصيل</option>
+                                  <option value="ANY_DELIVERY">أي عامل يمكنه التوصيل</option>
                                   {(order as any).assignedEmployee && (
                                     <option value={(order as any).assignedEmployee.id}>
                                       عامل التوصيل {(order as any).assignedEmployee.name}
@@ -1726,6 +1787,11 @@ export default function AdminPage() {
                               )}
                             </select>
                           </div>
+                        )}
+
+                        {/* Spacer - لدفع زر المسح إلى اليسار عندما لا يظهر dropdown العمال */}
+                        {userType === 'admin' && !(currentAdmin?.enableDeliveryEmployees || currentAdmin?.showDeliveryEmployeesAnyway) && (
+                          <div className="hidden md:block md:flex-1"></div>
                         )}
 
                         {/* Delete button - على اليسار تماماً في الشاشات الواسعة */}
@@ -2121,6 +2187,186 @@ export default function AdminPage() {
           <div className="bg-white p-8 rounded-lg shadow-md max-w-4xl mx-auto">
             <h2 className="text-2xl font-bold mb-6 text-gray-800">إدارة العاملين</h2>
 
+            {/* Enable/Disable Employee Types */}
+            <div className="bg-gray-50 border-2 border-gray-200 rounded-lg p-6 mb-8">
+              <div className="space-y-4">
+                {/* Enable Delivery Employees */}
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    id="enableDeliveryEmployees"
+                    checked={currentAdmin?.enableDeliveryEmployees ?? false}
+                    onChange={async (e) => {
+                      const newValue = e.target.checked;
+                      // تحديث الواجهة فوراً
+                      setCurrentAdmin(prev => prev ? { ...prev, enableDeliveryEmployees: newValue } : null);
+
+                      // إرسال التحديث للسيرفر
+                      const token = localStorage.getItem('session_token');
+                      const res = await fetch('/api/admin/settings', {
+                        method: 'PATCH',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({ enableDeliveryEmployees: newValue }),
+                      });
+                      // إذا فشل، أعد القيمة السابقة
+                      if (!res.ok) {
+                        setCurrentAdmin(prev => prev ? { ...prev, enableDeliveryEmployees: !newValue } : null);
+                      }
+                    }}
+                    className="w-5 h-5 mt-0.5 text-green-600 border-gray-300 rounded focus:ring-green-500 cursor-pointer"
+                  />
+                  <div>
+                    <label htmlFor="enableDeliveryEmployees" className="text-base font-bold text-gray-800 cursor-pointer">
+                      تفعيل عمال التوصيل
+                    </label>
+                    <p className="text-sm text-gray-500">سيتمكن العمال الذين تنشئهم من التحكم في حالة طلبات التوصيل</p>
+                  </div>
+                </div>
+
+                {/* Default Delivery Assignment - يظهر عند تفعيل عمال التوصيل */}
+                {currentAdmin?.enableDeliveryEmployees && (
+                  <div className="mr-8 border-r-2 border-gray-300 pr-4">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      القيمة الافتراضية للطلبات الجديدة
+                    </label>
+                    <select
+                      value={currentAdmin?.defaultDeliveryAssignment ?? ''}
+                      onChange={async (e) => {
+                        const newValue = e.target.value as 'ANY_DELIVERY' | '';
+                        setCurrentAdmin(prev => prev ? { ...prev, defaultDeliveryAssignment: newValue } : null);
+
+                        const token = localStorage.getItem('session_token');
+                        const res = await fetch('/api/admin/settings', {
+                          method: 'PATCH',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`,
+                          },
+                          body: JSON.stringify({ defaultDeliveryAssignment: newValue }),
+                        });
+                        if (!res.ok) {
+                          setCurrentAdmin(prev => prev ? { ...prev, defaultDeliveryAssignment: currentAdmin?.defaultDeliveryAssignment } : null);
+                        }
+                      }}
+                      className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors bg-white text-sm"
+                    >
+                      <option value="">بدون عامل توصيل</option>
+                      <option value="ANY_DELIVERY">أي عامل يمكنه التوصيل</option>
+                    </select>
+                  </div>
+                )}
+
+                {/* Show Delivery Employees Anyway - يظهر فقط عند عدم التفعيل */}
+                {!currentAdmin?.enableDeliveryEmployees && (
+                  <div className="mr-8 border-r-2 border-gray-300 pr-4 space-y-3">
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        id="showDeliveryEmployeesAnyway"
+                        checked={currentAdmin?.showDeliveryEmployeesAnyway ?? false}
+                        onChange={async (e) => {
+                          const newValue = e.target.checked;
+                          setCurrentAdmin(prev => prev ? { ...prev, showDeliveryEmployeesAnyway: newValue } : null);
+
+                          const token = localStorage.getItem('session_token');
+                          const res = await fetch('/api/admin/settings', {
+                            method: 'PATCH',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'Authorization': `Bearer ${token}`,
+                            },
+                            body: JSON.stringify({ showDeliveryEmployeesAnyway: newValue }),
+                          });
+                          if (!res.ok) {
+                            setCurrentAdmin(prev => prev ? { ...prev, showDeliveryEmployeesAnyway: !newValue } : null);
+                          }
+                        }}
+                        className="w-5 h-5 mt-0.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                      />
+                      <div>
+                        <label htmlFor="showDeliveryEmployeesAnyway" className="text-sm font-bold text-gray-700 cursor-pointer">
+                          إظهار عمال التوصيل في الطلبات رغم عدم التفعيل
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Default Delivery Assignment - يظهر فقط عند تفعيل الإظهار */}
+                    {currentAdmin?.showDeliveryEmployeesAnyway && (
+                      <div className="mr-6">
+                        <label className="block text-sm font-bold text-gray-700 mb-2">
+                          القيمة الافتراضية للطلبات الجديدة
+                        </label>
+                        <select
+                          value={currentAdmin?.defaultDeliveryAssignment ?? ''}
+                          onChange={async (e) => {
+                            const newValue = e.target.value as 'ANY_DELIVERY' | '';
+                            setCurrentAdmin(prev => prev ? { ...prev, defaultDeliveryAssignment: newValue } : null);
+
+                            const token = localStorage.getItem('session_token');
+                            const res = await fetch('/api/admin/settings', {
+                              method: 'PATCH',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`,
+                              },
+                              body: JSON.stringify({ defaultDeliveryAssignment: newValue }),
+                            });
+                            if (!res.ok) {
+                              setCurrentAdmin(prev => prev ? { ...prev, defaultDeliveryAssignment: currentAdmin?.defaultDeliveryAssignment } : null);
+                            }
+                          }}
+                          className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors bg-white text-sm"
+                        >
+                          <option value="">بدون عامل توصيل</option>
+                          <option value="ANY_DELIVERY">أي عامل يمكنه التوصيل</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Enable Waiters */}
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    id="enableWaiters"
+                    checked={currentAdmin?.enableWaiters ?? false}
+                    onChange={async (e) => {
+                      const newValue = e.target.checked;
+                      // تحديث الواجهة فوراً
+                      setCurrentAdmin(prev => prev ? { ...prev, enableWaiters: newValue } : null);
+
+                      // إرسال التحديث للسيرفر
+                      const token = localStorage.getItem('session_token');
+                      const res = await fetch('/api/admin/settings', {
+                        method: 'PATCH',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({ enableWaiters: newValue }),
+                      });
+                      // إذا فشل، أعد القيمة السابقة
+                      if (!res.ok) {
+                        setCurrentAdmin(prev => prev ? { ...prev, enableWaiters: !newValue } : null);
+                      }
+                    }}
+                    className="w-5 h-5 mt-0.5 text-green-600 border-gray-300 rounded focus:ring-green-500 cursor-pointer"
+                  />
+                  <div>
+                    <label htmlFor="enableWaiters" className="text-base font-bold text-gray-800 cursor-pointer">
+                      تفعيل الندلاء
+                    </label>
+                    <p className="text-sm text-gray-500">سيتمكن الندلاء الذين تنشئهم من التحكم في حالة طلبات الطاولة</p>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
             {/* Add Employee Form */}
             <div className="bg-green-50 border-2 border-green-200 rounded-lg p-6 mb-8">
               <h3 className="text-lg font-bold text-gray-800 mb-4">إضافة عامل جديد</h3>
@@ -2197,7 +2443,7 @@ export default function AdminPage() {
                         onChange={(e) => setEmployeeFormData({ ...employeeFormData, isDelivery: e.target.checked })}
                         className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500"
                       />
-                      <span className="text-sm font-medium text-gray-700">موصل (طلبات التوصيل)</span>
+                      <span className="text-sm font-medium text-gray-700">عامل توصيل (طلبات التوصيل)</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -2209,7 +2455,6 @@ export default function AdminPage() {
                       <span className="text-sm font-medium text-gray-700">نادل (طلبات الطاولات)</span>
                     </label>
                   </div>
-                  <p className="text-xs text-gray-500 mt-2">يمكن اختيار أحدهما أو كليهما</p>
                 </div>
 
                 <button
@@ -2482,9 +2727,13 @@ export default function AdminPage() {
                                     <div className="flex flex-wrap gap-1 flex-1 md:flex-initial">
                                       <button
                                         onClick={() => handleTableOrderStatusUpdate(order.id, 'pending')}
-                                        disabled={updatingTableOrderStatus?.orderId === order.id}
+                                        disabled={updatingTableOrderStatus?.orderId === order.id || (userType === 'employee' && !currentAdmin?.enableWaiters)}
                                         className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                                          (order.status || 'pending') === 'pending'
+                                          userType === 'employee' && !currentAdmin?.enableWaiters && (order.status || 'pending') !== 'pending'
+                                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                            : userType === 'employee' && !currentAdmin?.enableWaiters && (order.status || 'pending') === 'pending'?
+                                            'bg-gray-400 text-gray-600 cursor-not-allowed'
+                                            : (order.status || 'pending') === 'pending'
                                             ? 'bg-purple-600 text-white shadow-md'
                                             : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'pending'
                                             ? 'bg-purple-200 text-gray-700'
@@ -2496,9 +2745,13 @@ export default function AdminPage() {
                                       </button>
                                       <button
                                         onClick={() => handleTableOrderStatusUpdate(order.id, 'read')}
-                                        disabled={updatingTableOrderStatus?.orderId === order.id}
+                                        disabled={updatingTableOrderStatus?.orderId === order.id || (userType === 'employee' && !currentAdmin?.enableWaiters)}
                                         className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                                          order.status === 'read'
+                                          userType === 'employee' && !currentAdmin?.enableWaiters  && order.status !== 'read'
+                                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                            : userType === 'employee' && !currentAdmin?.enableWaiters && order.status === 'read'?
+                                            'bg-gray-400 text-gray-600 cursor-not-allowed'
+                                            : order.status === 'read'
                                             ? 'bg-fuchsia-600 text-white shadow-md'
                                             : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'read'
                                             ? 'bg-fuchsia-200 text-gray-700'
@@ -2510,9 +2763,13 @@ export default function AdminPage() {
                                       </button>
                                       <button
                                         onClick={() => handleTableOrderStatusUpdate(order.id, 'served')}
-                                        disabled={updatingTableOrderStatus?.orderId === order.id}
+                                        disabled={updatingTableOrderStatus?.orderId === order.id || (userType === 'employee' && !currentAdmin?.enableWaiters)}
                                         className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                                          order.status === 'served'
+                                          userType === 'employee' && !currentAdmin?.enableWaiters && order.status !== 'served'
+                                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                            : userType === 'employee' && !currentAdmin?.enableWaiters && order.status === 'served'?
+                                            'bg-gray-400 text-gray-600 cursor-not-allowed'
+                                            : order.status === 'served'
                                             ? 'bg-pink-600 text-white shadow-md'
                                             : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'served'
                                             ? 'bg-pink-200 text-gray-700'
@@ -2524,9 +2781,13 @@ export default function AdminPage() {
                                       </button>
                                       <button
                                         onClick={() => handleTableOrderStatusUpdate(order.id, 'completed')}
-                                        disabled={updatingTableOrderStatus?.orderId === order.id}
+                                        disabled={updatingTableOrderStatus?.orderId === order.id || (userType === 'employee' && !currentAdmin?.enableWaiters)}
                                         className={`px-2 py-1 rounded-lg text-sm font-semibold transition ${
-                                          order.status === 'completed'
+                                          userType === 'employee' && !currentAdmin?.enableWaiters && order.status !== 'completed'
+                                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                            : userType === 'employee' && !currentAdmin?.enableWaiters && order.status === 'completed'?
+                                            'bg-gray-400 text-gray-600 cursor-not-allowed'
+                                            : order.status === 'completed'
                                             ? 'bg-rose-600 text-white shadow-md'
                                             : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'completed'
                                             ? 'bg-rose-200 text-gray-700'

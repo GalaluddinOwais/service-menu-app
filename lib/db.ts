@@ -35,6 +35,11 @@ export interface Admin {
   tablesCount?: number; // عدد الطاولات المتاحة
   showDeliveryStaff?: boolean; // إظهار قائمة الموظفين في طلبات التوصيل
   showWaiterStaff?: boolean; // إظهار قائمة الموظفين في طلبات الطاولات
+  enableDeliveryEmployees?: boolean; // تفعيل عمال التوصيل
+  enableWaiters?: boolean; // تفعيل الندلاء
+  showDeliveryEmployeesAnyway?: boolean; // إظهار عمال التوصيل في الطلبات حتى لو معطلين
+  showWaitersAnyway?: boolean; // إظهار الندلاء في الطلبات حتى لو معطلين
+  defaultDeliveryAssignment?: 'ANY_DELIVERY' | ''; // القيمة الافتراضية لعامل التوصيل في الطلبات الجديدة
 }
 
 export interface MenuList {
