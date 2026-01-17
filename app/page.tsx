@@ -77,9 +77,10 @@ export default async function Home() {
           <h2 className="text-3xl font-bold text-center mb-6 text-gray-800">عملاؤنا</h2>
           <div className="flex flex-wrap justify-center gap-4">
             {clients.map((client) => (
-              <div
+              <Link
                 key={client.id}
-                className="w-24 h-24 bg-white rounded-2xl shadow-md flex items-center justify-center overflow-hidden border border-gray-100"
+                href={`/${client.username}`}
+                className="w-24 h-24 bg-white rounded-2xl shadow-md hover:shadow-lg flex items-center justify-center overflow-hidden border border-gray-100 transition-all transform hover:scale-105"
               >
                 {client.logoUrl ? (
                   <img
@@ -92,7 +93,7 @@ export default async function Home() {
                     {client.username}
                   </span>
                 )}
-              </div>
+              </Link>
             ))}
           </div>
         </div>
