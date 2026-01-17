@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAdminByUsername } from '@/lib/db';
-import { createSessionToken } from '@/lib/auth';
+import { createSessionToken, comparePassword } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
@@ -13,7 +13,13 @@ export async function POST(request: Request) {
 
     const admin = await getAdminByUsername(username);
 
-    if (!admin || admin.password !== password) {
+    if (!admin) {
+      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+    }
+
+    // Compare hashed password
+    const isPasswordValid = await comparePassword(password, admin.password);
+    if (!isPasswordValid) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 

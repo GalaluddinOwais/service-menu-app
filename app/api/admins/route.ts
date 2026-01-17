@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAdmins, createAdmin } from '@/lib/db';
+import { hashPassword } from '@/lib/auth';
 
 export async function GET(request: Request) {
   try {
@@ -37,9 +38,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid theme' }, { status: 400 });
     }
 
+    // Hash the password before saving
+    const hashedPassword = await hashPassword(password);
+
     const newAdmin = await createAdmin({
       username,
-      password,
+      password: hashedPassword,
       logoUrl,
       backgroundUrl,
       theme: theme || 'ocean',

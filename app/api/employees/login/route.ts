@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEmployeeByUsername } from '@/lib/db';
-import { createSessionToken } from '@/lib/auth';
+import { createSessionToken, comparePassword } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,8 +18,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' }, { status: 401 });
     }
 
-    // التحقق من كلمة المرور
-    if (employee.password !== password) {
+    // التحقق من كلمة المرور باستخدام bcrypt
+    const isPasswordValid = await comparePassword(password, employee.password);
+    if (!isPasswordValid) {
       return NextResponse.json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' }, { status: 401 });
     }
 

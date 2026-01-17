@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteEmployee, getEmployee, updateEmployee } from '@/lib/db';
-import { verifySessionToken } from '@/lib/auth';
+import { verifySessionToken, hashPassword } from '@/lib/auth';
 
 export async function PATCH(
   request: NextRequest,
@@ -46,7 +46,8 @@ export async function PATCH(
       updates.isWaiter = body.isWaiter;
     }
     if (body.password !== undefined && body.password.trim() !== '') {
-      updates.password = body.password;
+      // Hash password before updating
+      updates.password = await hashPassword(body.password);
     }
 
     const updatedEmployee = await updateEmployee(id, updates);

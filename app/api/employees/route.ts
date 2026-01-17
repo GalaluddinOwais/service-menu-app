@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createEmployee, getEmployees } from '@/lib/db';
-import { verifySessionToken } from '@/lib/auth';
+import { verifySessionToken, hashPassword } from '@/lib/auth';
 
 // إنشاء عامل جديد
 export async function POST(request: NextRequest) {
@@ -29,11 +29,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'جميع الحقول مطلوبة' }, { status: 400 });
     }
 
+    // Hash password before saving
+    const hashedPassword = await hashPassword(password);
+
     const employee = await createEmployee({
       adminId: payload.adminId,
       name,
       username,
-      password,
+      password: hashedPassword,
       isDelivery: isDelivery || false,
       isWaiter: isWaiter || false,
     });

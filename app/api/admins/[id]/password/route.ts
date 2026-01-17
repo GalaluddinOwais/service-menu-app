@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdmin, updateAdmin } from '@/lib/db';
-import { verifySessionToken } from '@/lib/auth';
+import { verifySessionToken, comparePassword, hashPassword } from '@/lib/auth';
 
 export async function PATCH(
   request: NextRequest,
@@ -43,13 +43,18 @@ export async function PATCH(
       return NextResponse.json({ error: 'كلمة المرور الجديدة مطلوبة' }, { status: 400 });
     }
 
-    if (currentPassword !== existingAdmin.password) {
+    // Compare current password with hashed password
+    const isPasswordValid = await comparePassword(currentPassword, existingAdmin.password);
+    if (!isPasswordValid) {
       return NextResponse.json({ error: 'كلمة المرور الحالية غير صحيحة' }, { status: 401 });
     }
 
+    // Hash new password before saving
+    const hashedNewPassword = await hashPassword(newPassword);
+
     // تحديث كلمة المرور فقط
     const updatedAdmin = await updateAdmin(id, {
-      password: newPassword,
+      password: hashedNewPassword,
     });
 
     return NextResponse.json(updatedAdmin);
