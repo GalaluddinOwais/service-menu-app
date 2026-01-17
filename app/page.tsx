@@ -79,7 +79,7 @@ export default async function Home() {
             {clients.map((client) => (
               <Link
                 key={client.id}
-                href={`/${client.username}`}
+                href={`/menu/${client.username}`}
                 className="w-24 h-24 bg-white rounded-2xl shadow-md hover:shadow-lg flex items-center justify-center overflow-hidden border border-gray-100 transition-all transform hover:scale-105"
               >
                 {client.logoUrl ? (
