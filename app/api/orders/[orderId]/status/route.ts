@@ -19,7 +19,8 @@ export async function PATCH(
       return NextResponse.json({ error: 'رمز غير صالح' }, { status: 401 });
     }
 
-    const { status } = await request.json();
+    const body = await request.json();
+    const { status, previousStatus } = body;
 
     // Validate status
     const validStatuses = ['pending', 'read', 'delivering', 'delivered'];
@@ -77,12 +78,39 @@ export async function PATCH(
       return NextResponse.json({ error: 'غير مصرح - يمكن فقط للعامل المُعيَّن تحديث حالة هذا الطلب' }, { status: 403 });
     }
 
+    const currentStatus = order.status || 'pending';
+
+    const deliveryOrderLevel: Record<string, number> = { pending: 0, read: 1, delivering: 2, delivered: 3 };
+
+    // باقة البزنس فقط: إذا الحالة المطلوبة = الحالة الحالية، نرجع نجاح مع تنبيه بدون كتابة (وربما تأخير إن أُرسل previousStatus)
+    const admin = await getAdmin(order.adminId);
+    if (admin && (await checkPlanAndAutoDisable(admin, 'business'))) {
+      if (currentStatus === status) {
+        const isDowngradeFromUi = previousStatus && validStatuses.includes(previousStatus) &&
+          (deliveryOrderLevel[previousStatus] ?? 0) > (deliveryOrderLevel[status] ?? 0);
+        return NextResponse.json({
+          success: true,
+          status,
+          order,
+          alreadyInState: true,
+          ...(isDowngradeFromUi && { statusDowngrade: true, previousStatus }),
+        });
+      }
+    }
+
     // Update order status
     const updatedOrder = await updateOrderStatus(orderId, status);
 
     if (!updatedOrder) {
       console.log('Failed to update order status');
       return NextResponse.json({ error: 'فشل تحديث الحالة' }, { status: 500 });
+    }
+
+    // باقة البزنس فقط: إذا التحديث كان تأخيراً للحالة (تراجع)، نرجع تنبيه للواجهة
+    const isDowngrade = admin && (await checkPlanAndAutoDisable(admin, 'business')) &&
+      (deliveryOrderLevel[currentStatus] ?? 0) > (deliveryOrderLevel[status] ?? 0);
+    if (isDowngrade) {
+      return NextResponse.json({ success: true, status, order: updatedOrder, statusDowngrade: true, previousStatus: currentStatus });
     }
 
     console.log('Order status updated successfully:', updatedOrder);

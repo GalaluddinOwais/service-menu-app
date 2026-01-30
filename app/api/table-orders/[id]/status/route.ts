@@ -19,7 +19,8 @@ export async function PATCH(
       return NextResponse.json({ error: 'رمز غير صالح' }, { status: 401 });
     }
 
-    const { status } = await request.json();
+    const body = await request.json();
+    const { status, previousStatus } = body;
 
     // Validate status
     const validStatuses = ['pending', 'read', 'served', 'completed'];
@@ -66,12 +67,38 @@ export async function PATCH(
       return NextResponse.json({ error: 'غير مصرح - النوادل فقط يمكنهم تعديل طلبات الطاولة' }, { status: 403 });
     }
 
+    const currentStatus = order.status || 'pending';
+    const tableOrderLevel: Record<string, number> = { pending: 0, read: 1, served: 2, completed: 3 };
+
+    // باقة البزنس فقط: إذا الحالة المطلوبة = الحالة الحالية، نرجع نجاح مع تنبيه بدون كتابة (وربما تأخير إن أُرسل previousStatus)
+    const admin = await getAdmin(order.adminId);
+    if (admin && (await checkPlanAndAutoDisable(admin, 'business'))) {
+      if (currentStatus === status) {
+        const isDowngradeFromUi = previousStatus && validStatuses.includes(previousStatus) &&
+          (tableOrderLevel[previousStatus] ?? 0) > (tableOrderLevel[status] ?? 0);
+        return NextResponse.json({
+          success: true,
+          status,
+          order,
+          alreadyInState: true,
+          ...(isDowngradeFromUi && { statusDowngrade: true, previousStatus }),
+        });
+      }
+    }
+
     // Update order status
     const updatedOrder = await updateTableOrderStatus(id, status);
 
     if (!updatedOrder) {
       console.log('Failed to update table order status');
       return NextResponse.json({ error: 'فشل تحديث الحالة' }, { status: 500 });
+    }
+
+    // باقة البزنس فقط: إذا التحديث كان تأخيراً للحالة (تراجع)، نرجع تنبيه للواجهة
+    const isDowngrade = admin && (await checkPlanAndAutoDisable(admin, 'business')) &&
+      (tableOrderLevel[currentStatus] ?? 0) > (tableOrderLevel[status] ?? 0);
+    if (isDowngrade) {
+      return NextResponse.json({ success: true, status, order: updatedOrder, statusDowngrade: true, previousStatus: currentStatus });
     }
 
     console.log('Table order status updated successfully:', updatedOrder);

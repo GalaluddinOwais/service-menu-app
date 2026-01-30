@@ -192,6 +192,16 @@ function AdminPageContent() {
   const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
   const [limitModalConfig, setLimitModalConfig] = useState({ title: '', message: '' });
 
+  // تنبيه "أحدهم حول الطلب الى هذه الحالة بالفعل" (باقة البزنس)
+  const [alreadyInStatePopup, setAlreadyInStatePopup] = useState<{ open: boolean; orderId: string; statusLabel: string }>({ open: false, orderId: '', statusLabel: '' });
+  const [statusDowngradePopup, setStatusDowngradePopup] = useState<{ open: boolean; orderId: string; previousStatusLabel: string; newStatusLabel: string }>({ open: false, orderId: '', previousStatusLabel: '', newStatusLabel: '' });
+
+  const DELIVERY_STATUS_LABELS: Record<string, string> = { pending: 'جديد', read: 'مقروء', delivering: 'قيد التوصيل', delivered: 'تم' };
+  const TABLE_STATUS_LABELS: Record<string, string> = { pending: 'جديد', read: 'مقروء', served: 'تم التقديم', completed: 'تم' };
+
+  const HIDE_ALREADY_IN_STATE_POPUP = 'hide_already_in_state_popup';
+  const HIDE_STATUS_DOWNGRADE_POPUP = 'hide_status_downgrade_popup';
+
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000); // تحديث كل دقيقة
     return () => clearInterval(timer);
@@ -386,24 +396,25 @@ function AdminPageContent() {
     }
   }, [currentPage, statusFilter, orderTypeFilter, dateFilter, employeeFilter, currentEmployeeId]);
 
-  // Set default active tab based on user type and employee role
+  // Set default active tab for employee only when URL has no valid tab (or tab not allowed for role)
   useEffect(() => {
-    if (userType === 'employee') {
-      // For employees, set the first available tab
-      if (isDelivery && !isWaiter) {
-        setActiveTab('orders'); // Delivery only -> delivery orders tab
-      } else if (isWaiter && !isDelivery) {
-        setActiveTab('tableOrders'); // Waiter only -> table orders tab
-      } else if (isDelivery && isWaiter) {
-        setActiveTab('orders'); // Both -> default to delivery orders
-      }
-    }
-  }, [userType, isDelivery, isWaiter]);
+    if (userType !== 'employee') return;
+    const allowedTabs: TabType[] = [];
+    if (isDelivery) allowedTabs.push('orders');
+    if (isWaiter) allowedTabs.push('tableOrders');
+    const tabFromUrl = tabParam as TabType | null;
+    const urlTabAllowed = tabFromUrl && TAB_VALUES.includes(tabFromUrl) && allowedTabs.includes(tabFromUrl);
+    if (urlTabAllowed) return; // احترام التبويب في الرابط
+    const defaultTab = isDelivery ? 'orders' : isWaiter ? 'tableOrders' : undefined;
+    if (defaultTab) setActiveTab(defaultTab);
+  }, [userType, isDelivery, isWaiter, tabParam]);
 
   const handleLogout = () => {
     localStorage.removeItem('admin_data');
     localStorage.removeItem('employee_data');
     localStorage.removeItem('session_token');
+    localStorage.removeItem(HIDE_ALREADY_IN_STATE_POPUP);
+    localStorage.removeItem(HIDE_STATUS_DOWNGRADE_POPUP);
     router.push('/login');
   };
 
@@ -1075,13 +1086,16 @@ function AdminPageContent() {
   const handleStatusUpdate = async (orderId: string, newStatus: 'pending' | 'read' | 'delivering' | 'delivered') => {
     try {
       setUpdatingOrderStatus({ orderId, status: newStatus });
+      const order = orders.find(o => o.id === orderId);
+      const previousStatus = (order?.status || 'pending') as string;
       const res = await fetch(`/api/orders/${orderId}/status`, {
         method: 'PATCH',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status: newStatus, previousStatus }),
       });
 
       if (res.ok) {
+        const data = await res.json();
         // If status filter is active, refetch to update the list
         if (statusFilter !== 'all') {
           await refreshOrders();
@@ -1092,6 +1106,12 @@ function AdminPageContent() {
               order.id === orderId ? { ...order, status: newStatus } : order
             )
           );
+        }
+        if (data.alreadyInState && typeof window !== 'undefined' && localStorage.getItem(HIDE_ALREADY_IN_STATE_POPUP) !== 'true') {
+          setAlreadyInStatePopup({ open: true, orderId, statusLabel: DELIVERY_STATUS_LABELS[newStatus] || newStatus });
+        }
+        if (data.statusDowngrade && data.previousStatus && typeof window !== 'undefined' && localStorage.getItem(HIDE_STATUS_DOWNGRADE_POPUP) !== 'true') {
+          setStatusDowngradePopup({ open: true, orderId, previousStatusLabel: DELIVERY_STATUS_LABELS[data.previousStatus] || data.previousStatus, newStatusLabel: DELIVERY_STATUS_LABELS[newStatus] || newStatus });
         }
       } else {
         if (res.status === 403) {
@@ -1115,6 +1135,8 @@ function AdminPageContent() {
   const handleTableOrderStatusUpdate = async (orderId: string, newStatus: 'pending' | 'read' | 'served' | 'completed') => {
     try {
       setUpdatingTableOrderStatus({ orderId, status: newStatus });
+      const order = tableOrders.find(o => o.id === orderId);
+      const previousStatus = (order?.status || 'pending') as string;
       const token = localStorage.getItem('session_token');
       const res = await fetch(`/api/table-orders/${orderId}/status`, {
         method: 'PATCH',
@@ -1122,16 +1144,23 @@ function AdminPageContent() {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status: newStatus, previousStatus }),
       });
 
       if (res.ok) {
+        const data = await res.json();
         // Update local state
         setTableOrders(prevOrders =>
           prevOrders.map(order =>
             order.id === orderId ? { ...order, status: newStatus } : order
           )
         );
+        if (data.alreadyInState && typeof window !== 'undefined' && localStorage.getItem(HIDE_ALREADY_IN_STATE_POPUP) !== 'true') {
+          setAlreadyInStatePopup({ open: true, orderId, statusLabel: TABLE_STATUS_LABELS[newStatus] || newStatus });
+        }
+        if (data.statusDowngrade && data.previousStatus && typeof window !== 'undefined' && localStorage.getItem(HIDE_STATUS_DOWNGRADE_POPUP) !== 'true') {
+          setStatusDowngradePopup({ open: true, orderId, previousStatusLabel: TABLE_STATUS_LABELS[data.previousStatus] || data.previousStatus, newStatusLabel: TABLE_STATUS_LABELS[newStatus] || newStatus });
+        }
       } else {
         const data = await res.json();
         if (res.status === 403 && confirm(data.error + '\n\nهل تريد عرض خطط الاشتراك للترقية؟')) {
@@ -1867,7 +1896,7 @@ function AdminPageContent() {
                         className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${statusFilter === 'delivered' ? 'bg-green-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
                           }`}
                       >
-                        تم التوصيل
+                        تم
                       </button>
                     </div>
                   </div>
@@ -3364,6 +3393,94 @@ function AdminPageContent() {
         title={limitModalConfig.title}
         message={limitModalConfig.message}
       />
+
+      {/* بوب أب تنبيه: أحدهم حول الطلب الى هذه الحالة بالفعل (باقة البزنس) */}
+      {alreadyInStatePopup.open && (
+        <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" dir="rtl" onClick={() => setAlreadyInStatePopup(prev => ({ ...prev, open: false }))}>
+          <div
+            className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden border border-gray-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-amber-50 border-b border-amber-100 px-5 py-5 flex flex-col items-center justify-center text-center">
+              <div className="flex-shrink-0 w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center mb-2">
+                <svg className="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-gray-800">تنبيه صغير</h3>
+            </div>
+            <div className="p-5">
+              <p className="text-gray-600 text-center mb-5">
+                <span className="block">أحدهم حول حالة الطلب <span className="font-semibold text-gray-800">#{alreadyInStatePopup.orderId.replace(/^order_/, '')}</span></span>
+                <span className="block mt-1">إلى «<span className="font-semibold text-gray-800">{alreadyInStatePopup.statusLabel}</span>» بالفعل</span>
+              </p>
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setAlreadyInStatePopup(prev => ({ ...prev, open: false }))}
+                  className="w-full py-2.5 rounded-xl font-bold bg-gray-800 text-white hover:bg-gray-700 transition"
+                >
+                  حسناً فهمت
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== 'undefined') localStorage.setItem(HIDE_ALREADY_IN_STATE_POPUP, 'true');
+                    setAlreadyInStatePopup(prev => ({ ...prev, open: false }));
+                  }}
+                  className="w-full py-2.5 rounded-xl font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition"
+                >
+                  حسناً، لا تخبرني مجدداً حتى أسجّل الخروج
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* بوب أب تنبيه: تأخير الحالة (كانت X وقد قمت بتغييرها إلى Y) - باقة البزنس - يظهر بعد إغلاق بوب أب "أحدهم حول..." إن كان الاثنان مطلوبين */}
+      {!alreadyInStatePopup.open && statusDowngradePopup.open && (
+        <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm" dir="rtl" onClick={() => setStatusDowngradePopup(prev => ({ ...prev, open: false }))}>
+          <div
+            className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden border border-gray-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-amber-50 border-b border-amber-100 px-5 py-5 flex flex-col items-center justify-center text-center">
+              <div className="flex-shrink-0 w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center mb-2">
+                <svg className="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-gray-800">تنبيه صغير</h3>
+            </div>
+            <div className="p-5">
+              <p className="text-gray-600 text-center mb-5">
+                <span className="block">حالة الطلب <span className="font-semibold text-gray-800">#{statusDowngradePopup.orderId.replace(/^order_/, '')}</span> كانت «<span className="font-semibold text-gray-800">{statusDowngradePopup.previousStatusLabel}</span>»</span>
+                <span className="block mt-1">وقد قمت بتأخيرها إلى «<span className="font-semibold text-gray-800">{statusDowngradePopup.newStatusLabel}</span>»</span>
+              </p>
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setStatusDowngradePopup(prev => ({ ...prev, open: false }))}
+                  className="w-full py-2.5 rounded-xl font-bold bg-gray-800 text-white hover:bg-gray-700 transition"
+                >
+                  حسناً
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== 'undefined') localStorage.setItem(HIDE_STATUS_DOWNGRADE_POPUP, 'true');
+                    setStatusDowngradePopup(prev => ({ ...prev, open: false }));
+                  }}
+                  className="w-full py-2.5 rounded-xl font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition"
+                >
+                  حسناً، لا تخبرني مجدداً حتى أسجّل الخروج
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
