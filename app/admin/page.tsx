@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import ImageUploader from '@/components/ImageUploader';
@@ -85,7 +85,7 @@ const THEMES = {
   canary: { name: 'الكناري', primary: '#eab308', secondary: '#facc15' },
 };
 
-export default function AdminPage() {
+function AdminPageContent() {
   const router = useRouter();
   const [currentAdmin, setCurrentAdmin] = useState<Admin | null>(null);
   const [userType, setUserType] = useState<'admin' | 'employee'>('admin');
@@ -3352,5 +3352,17 @@ export default function AdminPage() {
         message={limitModalConfig.message}
       />
     </div>
+  );
+}
+
+export default function AdminPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-100" dir="rtl">
+        <p className="text-gray-600 font-medium">جاري التحميل...</p>
+      </div>
+    }>
+      <AdminPageContent />
+    </Suspense>
   );
 }
