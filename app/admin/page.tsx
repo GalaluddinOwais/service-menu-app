@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import ImageUploader from '@/components/ImageUploader';
+import ImageUploader, { type ImageUploaderRef } from '@/components/ImageUploader';
 import AdGenerator from '@/components/AdGenerator';
 import UpgradeModal from '@/components/UpgradeModal';
 import LimitReachedModal from '@/components/LimitReachedModal';
@@ -112,6 +112,7 @@ function AdminPageContent() {
 
   const listFormRef = useRef<HTMLDivElement>(null);
   const itemFormRef = useRef<HTMLDivElement>(null);
+  const itemImageUploadRef = useRef<ImageUploaderRef>(null);
   const employeeFormRef = useRef<HTMLDivElement>(null);
 
   const [listFormData, setListFormData] = useState({
@@ -172,6 +173,7 @@ function AdminPageContent() {
   const [isRefreshingTableOrders, setIsRefreshingTableOrders] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isSubmittingItem, setIsSubmittingItem] = useState(false);
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
   const [expandedTableOrders, setExpandedTableOrders] = useState<Set<string>>(new Set());
   const [updatingOrderStatus, setUpdatingOrderStatus] = useState<{ orderId: string; status: string } | null>(null);
@@ -788,66 +790,74 @@ function AdminPageContent() {
       }
     }
 
-    // Optimistic Update: تحديث الواجهة فوراً
-    const oldItems = [...items];
-    if (editingItem) {
-      // تحديث عنصر موجود
-      setItems(items.map(item =>
-        item.id === editingItem.id
-          ? {
-            ...item,
-            name: itemFormData.name,
-            price: parseFloat(itemFormData.price),
-            discountedPrice: itemFormData.discountedPrice ? parseFloat(itemFormData.discountedPrice) : undefined,
-            imageUrl: itemFormData.imageUrl || undefined,
-            description: itemFormData.description,
-          }
-          : item
-      ));
-    } else {
-      // إضافة عنصر جديد
-      const tempItem: MenuItem = {
-        id: 'temp-' + Date.now(),
-        name: itemFormData.name,
-        price: parseFloat(itemFormData.price),
-        discountedPrice: itemFormData.discountedPrice ? parseFloat(itemFormData.discountedPrice) : undefined,
-        imageUrl: itemFormData.imageUrl || undefined,
-        description: itemFormData.description,
-        listId: selectedList.id,
-      };
-      setItems([...items, tempItem]);
-    }
-
-    setItemFormData({ name: '', price: '', discountedPrice: '', imageUrl: '', description: '' });
-    setEditingItem(null);
-
-    // إرسال الطلب للسيرفر في الخلفية
-    const res = await fetch(url, {
-      method,
-      headers: getAuthHeaders(),
-      body: JSON.stringify({
-        ...itemFormData,
-        listId: selectedList.id,
-      }),
-    });
-
-    // إذا فشل، استرجاع البيانات الحقيقية
-    if (!res.ok) {
-      if (res.status === 403) {
-        const errorData = await res.json();
-        if (confirm(errorData.error + '\n\nهل تريد عرض خطط الاشتراك للترقية؟')) {
-          setLockedFeatureName('إضافة أكثر من 15 منتج');
-          setRequiredPlan('basic');
-          setIsUpgradeModalOpen(true);
+    // رفع صورة العنصر فقط عند الإرسال (إن وُجدت صورة معلقة)
+    let imageUrlForItem: string | undefined = itemFormData.imageUrl || undefined;
+    const pendingFile = itemImageUploadRef.current?.getPendingFile();
+    if (pendingFile) {
+      setIsUploadingImage(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', pendingFile);
+        const uploadRes = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${localStorage.getItem('session_token')}` },
+          body: formData,
+        });
+        if (!uploadRes.ok) {
+          const err = await uploadRes.json();
+          alert(err.error || 'فشل رفع الصورة');
+          setIsUploadingImage(false);
+          return;
         }
+        const uploadData = await uploadRes.json();
+        imageUrlForItem = uploadData.url;
+      } catch {
+        alert('فشل رفع الصورة');
+        setIsUploadingImage(false);
+        return;
       }
-      setItems(oldItems); // استعادة البيانات القديمة فوراً
-      fetchData(currentAdmin.id);
-    } else {
-      // تحديث بالبيانات الحقيقية من السيرفر
-      fetchData(currentAdmin.id);
+      setIsUploadingImage(false);
     }
-    setTimeout(() => itemFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
+
+    const payload = {
+      name: itemFormData.name,
+      price: itemFormData.price,
+      discountedPrice: itemFormData.discountedPrice || undefined,
+      imageUrl: imageUrlForItem,
+      description: itemFormData.description,
+      listId: selectedList.id,
+    };
+
+    setIsSubmittingItem(true);
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        if (res.status === 403) {
+          const errorData = await res.json();
+          if (confirm(errorData.error + '\n\nهل تريد عرض خطط الاشتراك للترقية؟')) {
+            setLockedFeatureName('إضافة أكثر من 15 منتج');
+            setRequiredPlan('basic');
+            setIsUpgradeModalOpen(true);
+          }
+        }
+        fetchData(currentAdmin.id);
+        return;
+      }
+
+      // النجاح: مسح النموذج وتحديث البيانات
+      setItemFormData({ name: '', price: '', discountedPrice: '', imageUrl: '', description: '' });
+      setEditingItem(null);
+      itemImageUploadRef.current?.clearPendingFile();
+      fetchData(currentAdmin.id);
+      setTimeout(() => itemFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
+    } finally {
+      setIsSubmittingItem(false);
+    }
   };
 
   const handleEditItem = (item: MenuItem) => {
@@ -859,6 +869,7 @@ function AdminPageContent() {
       imageUrl: item.imageUrl || '',
       description: item.description || '',
     });
+    itemImageUploadRef.current?.clearPendingFile();
     setTimeout(() => itemFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
   };
 
@@ -1662,8 +1673,10 @@ function AdminPageContent() {
                         />
                       </div>
                       <ImageUploader
+                        ref={itemImageUploadRef}
+                        deferUpload
                         currentImageUrl={itemFormData.imageUrl}
-                        onImageUploaded={(url) => setItemFormData({ ...itemFormData, imageUrl: url })}
+                        onImageUploaded={(url) => setItemFormData(prev => ({ ...prev, imageUrl: url }))}
                         onUploadStateChange={setIsUploadingImage}
                         label="صورة العنصر (اختياري)"
                       />
@@ -1682,13 +1695,13 @@ function AdminPageContent() {
                       <div className="flex gap-3">
                         <button
                           type="submit"
-                          disabled={isUploadingImage}
+                          disabled={isUploadingImage || isSubmittingItem}
                           className={`flex-1 py-3 px-4 rounded-lg font-bold text-lg transition-all duration-200 transform hover:scale-[1.02] shadow-lg text-white disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none ${editingItem
                             ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
                             : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700'
                             }`}
                         >
-                          {isUploadingImage ? 'جاري رفع الصورة...' : editingItem ? 'تحديث' : 'إضافة العنصر'}
+                          {isUploadingImage ? 'جاري رفع الصورة...' : isSubmittingItem ? 'جاري الحفظ...' : editingItem ? 'تحديث' : 'إضافة العنصر'}
                         </button>
                         {editingItem && (
                           <button

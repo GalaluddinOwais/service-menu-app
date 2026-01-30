@@ -6,9 +6,19 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const listId = searchParams.get('listId');
+    const adminId = searchParams.get('adminId');
 
-    const items = await getMenuItems(listId || undefined);
+    let items: Awaited<ReturnType<typeof getMenuItems>>;
     const lists = await getMenuLists();
+
+    if (adminId) {
+      // جلب عناصر الأدمن فقط (لصفحة القائمة العامة)
+      const adminListIds = lists.filter(l => l.adminId === adminId).map(l => l.id);
+      const allItems = await getMenuItems();
+      items = allItems.filter(item => adminListIds.includes(item.listId));
+    } else {
+      items = await getMenuItems(listId || undefined);
+    }
 
     return NextResponse.json({ items, lists });
   } catch (error) {
@@ -28,6 +38,9 @@ export async function POST(request: Request) {
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized: Invalid or expired token' }, { status: 401 });
     }
+    if (!session.adminId) {
+      return NextResponse.json({ error: 'Forbidden: Only admins can add menu items' }, { status: 403 });
+    }
 
     const body = await request.json();
     const { name, price, discountedPrice, imageUrl, description, listId } = body;
@@ -36,9 +49,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // التحقق من الملكية - تأكد أن القائمة تنتمي للـ admin الحالي
+    // التحقق من الملكية - القائمة يجب أن تنتمي للأدمن الحالي فقط (منع وضع عنصر في قائمة أدمن آخر)
     const list = await getMenuList(listId);
-    if (!list || list.adminId !== session.adminId) {
+    if (!list) {
+      return NextResponse.json({ error: 'List not found' }, { status: 404 });
+    }
+    if (list.adminId !== session.adminId) {
       return NextResponse.json({ error: 'Forbidden: You can only add items to your own lists' }, { status: 403 });
     }
 

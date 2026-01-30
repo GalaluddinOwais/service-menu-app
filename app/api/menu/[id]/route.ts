@@ -31,12 +31,15 @@ export async function PUT(
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized: Invalid or expired token' }, { status: 401 });
     }
+    if (!session.adminId) {
+      return NextResponse.json({ error: 'Forbidden: Only admins can update menu items' }, { status: 403 });
+    }
 
     const { id } = await params;
     const body = await request.json();
     const { name, price, discountedPrice, imageUrl, description, listId } = body;
 
-    // التحقق من الملكية
+    // التحقق من الملكية - العنصر يجب أن يكون في قائمة الأدمن الحالي فقط
     const existingItem = await getMenuItem(id);
     if (!existingItem) {
       return NextResponse.json({ error: 'Item not found' }, { status: 404 });
@@ -57,10 +60,13 @@ export async function PUT(
       updates.imageUrl = imageUrl || undefined;
     }
     if (description !== undefined) updates.description = description;
-    if (listId) {
-      // إذا تم تغيير القائمة، تحقق من أن القائمة الجديدة تنتمي للـ admin الحالي
+    if (listId !== undefined && listId !== existingItem.listId) {
+      // إذا تم تغيير القائمة، القائمة الجديدة يجب أن تنتمي للأدمن الحالي فقط (منع نقل عنصر لقائمة أدمن آخر)
       const newList = await getMenuList(listId);
-      if (!newList || newList.adminId !== session.adminId) {
+      if (!newList) {
+        return NextResponse.json({ error: 'List not found' }, { status: 404 });
+      }
+      if (newList.adminId !== session.adminId) {
         return NextResponse.json({ error: 'Forbidden: You can only move items to your own lists' }, { status: 403 });
       }
       updates.listId = listId;
@@ -93,10 +99,13 @@ export async function DELETE(
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized: Invalid or expired token' }, { status: 401 });
     }
+    if (!session.adminId) {
+      return NextResponse.json({ error: 'Forbidden: Only admins can delete menu items' }, { status: 403 });
+    }
 
     const { id } = await params;
 
-    // التحقق من الملكية
+    // التحقق من الملكية - العنصر يجب أن يكون في قائمة الأدمن الحالي فقط
     const existingItem = await getMenuItem(id);
     if (!existingItem) {
       return NextResponse.json({ error: 'Item not found' }, { status: 404 });

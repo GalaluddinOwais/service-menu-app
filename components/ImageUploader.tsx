@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, useEffect, useId } from 'react';
+import { useState, useRef, useEffect, useId, forwardRef, useImperativeHandle } from 'react';
 
 interface ImageUploaderProps {
   currentImageUrl?: string;
@@ -7,29 +7,49 @@ interface ImageUploaderProps {
   label: string;
   helperText?: string;
   onUploadStateChange?: (isUploading: boolean) => void;
+  /** عند true: الصورة لا تُرفع إلا عند استدعاء uploadPendingFile من الأب (مثلاً عند الضغط على إضافة) */
+  deferUpload?: boolean;
 }
 
-export default function ImageUploader({
+export interface ImageUploaderRef {
+  getPendingFile: () => File | null;
+  clearPendingFile: () => void;
+}
+
+const ImageUploader = forwardRef<ImageUploaderRef, ImageUploaderProps>(function ImageUploader({
   currentImageUrl,
   onImageUploaded,
   label,
   helperText,
   onUploadStateChange,
-}: ImageUploaderProps) {
+  deferUpload = false,
+}, ref) {
   const [isUploading, setIsUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | undefined>(currentImageUrl);
   const [error, setError] = useState<string>('');
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputId = useId();
 
+  useImperativeHandle(ref, () => ({
+    getPendingFile: () => pendingFile,
+    clearPendingFile: () => {
+      setPendingFile(null);
+      setPreviewUrl(undefined);
+      onImageUploaded('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    },
+  }), [pendingFile, onImageUploaded]);
+
   // Update preview when currentImageUrl changes (e.g., when editing an item)
   useEffect(() => {
-    setPreviewUrl(currentImageUrl);
-    // Reset file input when switching between items
-    if (fileInputRef.current) {
+    if (!deferUpload || !pendingFile) {
+      setPreviewUrl(currentImageUrl);
+    }
+    if (!pendingFile && fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-  }, [currentImageUrl]);
+  }, [currentImageUrl, deferUpload, pendingFile]);
 
   // دالة لضغط وتصغير الصورة
   const compressImage = (file: File): Promise<File> => {
@@ -120,31 +140,38 @@ export default function ImageUploader({
       };
       reader.readAsDataURL(compressedFile);
 
-      // رفع الملف المضغوط
-      const formData = new FormData();
-      formData.append('file', compressedFile);
+      if (deferUpload) {
+        // تأجيل الرفع: تخزين الملف فقط، الرفع عند الإرسال (إضافة/تحديث)
+        setPendingFile(compressedFile);
+        onImageUploaded('');
+      } else {
+        // رفع فوري
+        const formData = new FormData();
+        formData.append('file', compressedFile);
 
-      const token = localStorage.getItem('session_token');
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
-      });
+        const token = localStorage.getItem('session_token');
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+          body: formData,
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'فشل رفع الصورة');
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'فشل رفع الصورة');
+        }
+
+        const data = await response.json();
+        setPreviewUrl(data.url);
+        onImageUploaded(data.url);
       }
-
-      const data = await response.json();
-      setPreviewUrl(data.url);
-      onImageUploaded(data.url);
       setError('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'فشل رفع الصورة');
       setPreviewUrl(currentImageUrl);
+      setPendingFile(null);
     } finally {
       setIsUploading(false);
       onUploadStateChange?.(false);
@@ -152,6 +179,7 @@ export default function ImageUploader({
   };
 
   const handleRemoveImage = () => {
+    setPendingFile(null);
     setPreviewUrl(undefined);
     onImageUploaded('');
     if (fileInputRef.current) {
@@ -243,4 +271,6 @@ export default function ImageUploader({
       )}
     </div>
   );
-}
+});
+
+export default ImageUploader;

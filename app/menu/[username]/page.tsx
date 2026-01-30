@@ -235,13 +235,12 @@ function MenuContent({ tableNumberFromParent }: { tableNumberFromParent?: number
       const foundAdmin = await adminRes.json();
       setAdmin(foundAdmin);
 
-      // جلب القوائم الخاصة بهذا الأدمن
+      // جلب القوائم والعناصر الخاصة بهذا الأدمن فقط
       const listsRes = await fetch(`/api/lists?adminId=${foundAdmin.id}`);
       const listsData = await listsRes.json();
       setLists(Array.isArray(listsData) ? listsData : []);
 
-      // جلب جميع العناصر
-      const menuRes = await fetch('/api/menu');
+      const menuRes = await fetch(`/api/menu?adminId=${foundAdmin.id}`);
       const menuData = await menuRes.json();
       setItems(Array.isArray(menuData.items) ? menuData.items : []);
 
@@ -980,18 +979,24 @@ function MenuContent({ tableNumberFromParent }: { tableNumberFromParent?: number
         adminId={admin.id}
       />
 
-      {/* Floating Cart Button - Bottom Left */}
+      {/* Floating Button - Cart or Table Order */}
       <button
         onClick={() => setIsCartOpen(true)}
         className="fixed bottom-6 left-6 w-16 h-16 text-white rounded-full shadow-2xl flex flex-col items-center justify-center z-[45] transition-all transform hover:scale-110"
         style={{
           background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`
         }}
-        title="عرض السلة"
+        title={tableNumber && admin.isAcceptingTableOrders ? `طلب الطاولة ${tableNumber}` : 'عرض السلة'}
       >
-        <svg className="w-7 h-7 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-        </svg>
+        {tableNumber && admin.isAcceptingTableOrders ? (
+          <svg className="w-7 h-7 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+        ) : (
+          <svg className="w-7 h-7 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+          </svg>
+        )}
         {cart.length > 0 && (
           <div className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-xs font-bold">
             {cart.reduce((total, item) => total + item.quantity, 0)}

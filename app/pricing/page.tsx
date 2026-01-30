@@ -118,25 +118,19 @@ function PricingContent() {
                 <svg className="w-5 h-5 text-cyan-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span className="text-sm">نظام إدارة الدليفري</span>
+                <span className="text-sm">إدارة عمال التوصيل (حتى 15)</span>
               </li>
               <li className="flex items-center gap-2 text-gray-600">
                 <svg className="w-5 h-5 text-cyan-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span className="text-sm">حتى 15 عامل توصيل</span>
-              </li>
-              <li className="flex items-center gap-2 text-gray-600">
-                <svg className="w-5 h-5 text-cyan-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span className="text-sm">تقارير المبيعات</span>
+                <span className="text-sm">رفع صور المنتجات + مولد إعلانات</span>
               </li>
               <li className="flex items-center gap-2 text-gray-400">
                 <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
-                <span className="text-sm">نظام الطاولات للمطاعم</span>
+                <span className="text-sm">طلبات الطاولات والندلاء</span>
               </li>
             </ul>
 
@@ -170,31 +164,19 @@ function PricingContent() {
                 <svg className="w-5 h-5 text-cyan-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span className="text-sm">نظام طلبات الطاولات (QR)</span>
+                <span className="text-sm">طلبات الطاولات (QR)</span>
               </li>
               <li className="flex items-center gap-2 text-gray-600">
                 <svg className="w-5 h-5 text-cyan-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span className="text-sm">إدارة الويترز (الندلاء)</span>
+                <span className="text-sm">إدارة الندلاء (الويترز)</span>
               </li>
               <li className="flex items-center gap-2 text-gray-600">
                 <svg className="w-5 h-5 text-cyan-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span className="text-sm">حتى 25 موظف / نادل</span>
-              </li>
-              <li className="flex items-center gap-2 text-gray-600">
-                <svg className="w-5 h-5 text-cyan-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span className="text-sm">مولد إعلانات السوشيال ميديا</span>
-              </li>
-              <li className="flex items-center gap-2 text-gray-600">
-                <svg className="w-5 h-5 text-cyan-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span className="text-sm">تقارير أداء متقدمة</span>
+                <span className="text-sm">حتى 25 موظف (توصيل + نادل)</span>
               </li>
             </ul>
 
@@ -225,30 +207,6 @@ function PricingContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
                 <span className="text-sm">حتى 50 موظف (الحد الأقصى)</span>
-              </li>
-              <li className="flex items-center gap-2 text-gray-600">
-                <svg className="w-5 h-5 text-cyan-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span className="text-sm">دعم فني مخصص (24/7)</span>
-              </li>
-              <li className="flex items-center gap-2 text-gray-600">
-                <svg className="w-5 h-5 text-cyan-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span className="text-sm">تخصيص كامل للهوية البصرية</span>
-              </li>
-              <li className="flex items-center gap-2 text-gray-600">
-                <svg className="w-5 h-5 text-cyan-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span className="text-sm">أولوية في ميزات السيرفر</span>
-              </li>
-              <li className="flex items-center gap-2 text-gray-600">
-                <svg className="w-5 h-5 text-cyan-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span className="text-sm">إدارة فروع متعددة مستقبلاً</span>
               </li>
             </ul>
 

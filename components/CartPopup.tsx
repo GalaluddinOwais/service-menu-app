@@ -189,9 +189,17 @@ export default function CartPopup({ themeColors, cardStyle, contactMessage, what
   const totalPrice = getTotalPrice();
   const totalDiscount = getTotalDiscount();
 
+  const isTableOrderMode = Boolean(tableNumber != null && isAcceptingTableOrders);
+  const popupTitle = isTableOrderMode ? `طلب الطاولة ${tableNumber}` : 'السلة';
+  const emptyLabel = isTableOrderMode ? 'لم تضف طلبات بعد' : 'السلة فارغة';
+  const clearConfirmText = isTableOrderMode ? 'هل تريد مسح العناصر الحالية وإعداد طلب جديد؟' : 'هل أنت متأكد من تفريغ السلة؟';
+  const clearButtonTitle = isTableOrderMode ? 'مسح الطلبات' : 'تفريغ السلة';
+  const confirmClearButtonLabel = isTableOrderMode ? 'حسناً' : 'حسناً، أفرغ السلة';
+  const confirmKeepButtonLabel = isTableOrderMode ? 'حسناً لكن اترك الطلبات، قد أعود لها' : 'حسناً';
+
   return (
     <>
-      {/* Cart Popup - Only when cart is open */}
+      {/* Cart / Table Order Popup - Only when open */}
       {isCartOpen && (
         <>
           {/* Backdrop */}
@@ -214,17 +222,17 @@ export default function CartPopup({ themeColors, cardStyle, contactMessage, what
                   background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
                 }}
               >
-                <h2 className="text-2xl font-bold text-white">السلة</h2>
+                <h2 className="text-2xl font-bold text-white">{popupTitle}</h2>
                 <div className="flex items-center gap-3">
                   {cart.length > 0 && (
                     <button
                       onClick={() => {
-                        if (confirm('هل أنت متأكد من تفريغ السلة؟')) {
+                        if (confirm(clearConfirmText)) {
                           clearCart();
                         }
                       }}
                       className="text-white hover:text-gray-200 transition-colors"
-                      title="تفريغ السلة"
+                      title={clearButtonTitle}
                     >
                       <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -247,10 +255,16 @@ export default function CartPopup({ themeColors, cardStyle, contactMessage, what
               <div className="overflow-y-auto p-6 scrollbar-custom" style={{ maxHeight: 'calc(85vh - 300px)' }}>
                 {cart.length === 0 ? (
                   <div className="text-center py-12">
-                    <svg className="w-20 h-20 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                    </svg>
-                    <p className="text-gray-500 text-lg">السلة فارغة</p>
+                    {isTableOrderMode ? (
+                      <svg className="w-20 h-20 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                    ) : (
+                      <svg className="w-20 h-20 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                      </svg>
+                    )}
+                    <p className="text-gray-500 text-lg">{emptyLabel}</p>
                   </div>
                 ) : (
                   <div className="grid md:grid-cols-2 gap-4">
@@ -554,7 +568,7 @@ export default function CartPopup({ themeColors, cardStyle, contactMessage, what
                 </p>
               )}
 
-              {/* Buttons - حسناً وحسناً أفرغ السلة */}
+              {/* Buttons */}
               <div className="mt-8 flex flex-col gap-3">
                 <button
                   onClick={() => {
@@ -567,7 +581,7 @@ export default function CartPopup({ themeColors, cardStyle, contactMessage, what
                     background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
                   }}
                 >
-                  حسناً، أفرغ السلة
+                  {confirmClearButtonLabel}
                 </button>
 
                 <button
@@ -577,7 +591,7 @@ export default function CartPopup({ themeColors, cardStyle, contactMessage, what
                   }}
                   className="w-full px-8 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold rounded-2xl transition-all transform hover:scale-105 shadow-md"
                 >
-                  حسناً
+                  {confirmKeepButtonLabel}
                 </button>
               </div>
             </div>
