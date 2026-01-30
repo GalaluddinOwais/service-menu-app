@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createOrder, getOrders, getAdmin, getEmployee } from '@/lib/db';
+import { createOrder, getOrders, getAdmin, getEmployee, checkPlanAndAutoDisable } from '@/lib/db';
 import { verifySessionToken } from '@/lib/auth';
 
 export async function POST(request: Request) {
@@ -25,9 +25,21 @@ export async function POST(request: Request) {
       ...(item.imageUrl && { imageUrl: item.imageUrl }),
     }));
 
-    // جلب إعدادات الأدمن للحصول على القيمة الافتراضية لعامل التوصيل
+    // جلب إعدادات الأدمن والتحقق من الخطة
     const admin = await getAdmin(adminId);
-    const defaultAssignment = admin?.defaultDeliveryAssignment || '';
+    if (!admin) {
+      return NextResponse.json({ error: 'المتجر غير موجود' }, { status: 404 });
+    }
+
+    // التحقق من أن الطلب عبر الموقع مفعل وأن الخطة سارية
+    if (orderType === 'website') {
+      const planActive = await checkPlanAndAutoDisable(admin, 'basic');
+      if (!planActive || !admin.isAcceptingOrders) {
+        return NextResponse.json({ error: 'الطلب عبر الموقع غير متاح حالياً' }, { status: 403 });
+      }
+    }
+
+    const defaultAssignment = admin.defaultDeliveryAssignment || '';
 
     const newOrder = await createOrder({
       adminId,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { deleteEmployee, getEmployee, updateEmployee } from '@/lib/db';
+import { deleteEmployee, getEmployee, updateEmployee, getAdmin } from '@/lib/db';
 import { verifySessionToken, hashPassword } from '@/lib/auth';
 
 export async function PATCH(

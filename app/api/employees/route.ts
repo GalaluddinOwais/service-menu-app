@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createEmployee, getEmployees } from '@/lib/db';
+import { createEmployee, getEmployees, getAdmin } from '@/lib/db';
 import { verifySessionToken, hashPassword } from '@/lib/auth';
 
 // إنشاء عامل جديد
@@ -24,6 +24,50 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { name, username, password, isDelivery, isWaiter } = body;
+
+    // Fetch admin info to check plan
+    const admin = await getAdmin(payload.adminId);
+
+    if (!admin) {
+      return NextResponse.json({ error: 'الأدمن غير موجود' }, { status: 404 });
+    }
+
+    // Check if subscription is valid
+    const isPlanActive = () => {
+      if (!admin.plan || admin.plan === 'free') return false;
+      if (!admin.subscriptionEndsAt) return false;
+      const expiryDate = new Date(admin.subscriptionEndsAt);
+      return expiryDate >= new Date();
+    };
+
+    if (!isPlanActive()) {
+      return NextResponse.json({
+      }, { status: 403 });
+    }
+
+    // Check employee count based on plan
+    if (admin.plan === 'basic') {
+      const { total } = await getEmployees(payload.adminId);
+      if (total >= 15) {
+        return NextResponse.json({
+          error: 'لقد وصلت للحد الأقصى لعدد العاملين في باقة أساسي (15 عاملين). يرجى الترقية لالباقة الاحترافية للحصول على عدد أكبر.'
+        }, { status: 403 });
+      }
+    } else if (admin.plan === 'pro') {
+      const { total } = await getEmployees(payload.adminId);
+      if (total >= 25) {
+        return NextResponse.json({
+          error: 'لقد وصلت للحد الأقصى لعدد العاملين في الباقة الاحترافية (25 عامل). يرجى الترقية لباقة الأعمال للحصول على عدد أكبر.'
+        }, { status: 403 });
+      }
+    } else if (admin.plan === 'business') {
+      const { total } = await getEmployees(payload.adminId);
+      if (total >= 50) {
+        return NextResponse.json({
+          error: 'لقد وصلت للحد الأقصى لعدد العاملين في باقة الأعمال (50 عامل).'
+        }, { status: 403 });
+      }
+    }
 
     if (!name || !username || !password) {
       return NextResponse.json({ error: 'جميع الحقول مطلوبة' }, { status: 400 });
@@ -69,8 +113,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'غير مصرح' }, { status: 403 });
     }
 
-    const employees = await getEmployees(payload.adminId);
-    return NextResponse.json(employees);
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '10');
+
+    const { employees, total } = await getEmployees(payload.adminId, { page, limit });
+    return NextResponse.json({
+      employees,
+      total,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page
+    });
   } catch (error) {
     console.error('Error fetching employees:', error);
     return NextResponse.json({ error: 'Failed to fetch employees' }, { status: 500 });

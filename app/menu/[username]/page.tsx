@@ -8,6 +8,7 @@ import CartPopup from '@/components/CartPopup';
 
 interface Admin {
   id: string;
+  name?: string;
   username: string;
   logoUrl?: string;
   backgroundUrl?: string;
@@ -274,7 +275,7 @@ function MenuContent({ tableNumberFromParent }: { tableNumberFromParent?: number
             style={{ color: theme.primary, verticalAlign: 'middle' }}
           >
             <svg className="w-5 h-5 inline-block" fill="currentColor" viewBox="0 0 24 24" style={{ verticalAlign: 'middle' }}>
-              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
             </svg>
             <span style={{ verticalAlign: 'middle' }}>{part}</span>
           </a>
@@ -346,7 +347,7 @@ function MenuContent({ tableNumberFromParent }: { tableNumberFromParent?: number
                 src={admin.logoUrl}
                 alt="Logo"
                 className="h-32 w-32 object-contain mx-auto shadow-2xl ring-4 ring-white"
-                                style={{ borderRadius: '25px' }}
+                style={{ borderRadius: '25px' }}
 
               />
             </div>
@@ -393,21 +394,19 @@ function MenuContent({ tableNumberFromParent }: { tableNumberFromParent?: number
               <div className="flex gap-3 px-4">
                 <button
                   onClick={() => setSelectedListId(null)}
-                  className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg ${
-                    selectedListId === null
-                      ? `bg-gradient-to-r ${theme.gradient} text-white shadow-xl`
-                      : 'bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white'
-                  }`}
+                  className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg ${selectedListId === null
+                    ? `bg-gradient-to-r ${theme.gradient} text-white shadow-xl`
+                    : 'bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white'
+                    }`}
                 >
                   جميع القوائم
                 </button>
                 <button
                   onClick={() => setSelectedListId('discounts')}
-                  className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg whitespace-nowrap ${
-                    selectedListId === 'discounts'
-                      ? `bg-gradient-to-r ${theme.gradient} text-white shadow-xl`
-                      : 'bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white'
-                  }`}
+                  className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg whitespace-nowrap ${selectedListId === 'discounts'
+                    ? `bg-gradient-to-r ${theme.gradient} text-white shadow-xl`
+                    : 'bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white'
+                    }`}
                 >
                   العروض والخصومات
                 </button>
@@ -415,11 +414,10 @@ function MenuContent({ tableNumberFromParent }: { tableNumberFromParent?: number
                   <button
                     key={list.id}
                     onClick={() => setSelectedListId(list.id)}
-                    className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg whitespace-nowrap ${
-                      selectedListId === list.id
-                        ? `bg-gradient-to-r ${theme.gradient} text-white shadow-xl`
-                        : 'bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white'
-                    }`}
+                    className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg whitespace-nowrap ${selectedListId === list.id
+                      ? `bg-gradient-to-r ${theme.gradient} text-white shadow-xl`
+                      : 'bg-white/80 backdrop-blur-sm text-gray-700 hover:bg-white'
+                      }`}
                   >
                     {list.name}
                   </button>
@@ -692,229 +690,229 @@ function MenuContent({ tableNumberFromParent }: { tableNumberFromParent?: number
                           </p>
                         </div>
 
-                      {/* List Items */}
-                      <div className="p-6">
-                        <div className="grid md:grid-cols-2 gap-4">
-                          {listItems.map((item, itemIdx) => {
-                            const discountPercentage = item.discountedPrice
-                              ? Math.round(((item.price - item.discountedPrice) / item.price) * 100)
-                              : 0;
+                        {/* List Items */}
+                        <div className="p-6">
+                          <div className="grid md:grid-cols-2 gap-4">
+                            {listItems.map((item, itemIdx) => {
+                              const discountPercentage = item.discountedPrice
+                                ? Math.round(((item.price - item.discountedPrice) / item.price) * 100)
+                                : 0;
 
-                            return (
-                              <div
-                                key={item.id}
-                                className={`group relative ${cardStyle.className} overflow-hidden ${cardStyle.shadow} ${cardStyle.border} transition-all duration-300 bg-white`}
-                                style={{
-                                  animation: `slideUp 0.5s ease-out ${itemIdx * 50}ms`,
-                                  ...(cardStyle.special === 'theme-border' && { borderColor: theme.primary }),
-                                  ...(cardStyle.special === 'theme-border-dashed' && { borderColor: theme.primary })
-                                }}
-                              >
-                                <div className="flex flex-row h-48">
-                                  {/* Discount Badge - On card, always visible if discount exists */}
-                                  {item.discountedPrice && (
-                                    <div
-                                      className={`absolute ${item.imageUrl ? 'top-4 left-4 text-left' : 'left-0 top-2 w-1/2 text-center'} animate-pulse z-20`}
-                                      style={{
-                                        color: '#fff',
-                                        textShadow: '3px 3px 6px rgba(0,0,0,0.8)',
-                                        fontWeight: '900',
-                                        animationDuration: '1.5s'
-                                      }}
-                                    >
-                                      {item.imageUrl ? (
-                                        <>
-                                          <div className="text-3xl font-black">خصم</div>
-                                          <div className="text-4xl font-black">{discountPercentage}%</div>
-                                        </>
-                                      ) : (
-                                        <div className="text-3xl font-black whitespace-nowrap">خصم {discountPercentage}%</div>
+                              return (
+                                <div
+                                  key={item.id}
+                                  className={`group relative ${cardStyle.className} overflow-hidden ${cardStyle.shadow} ${cardStyle.border} transition-all duration-300 bg-white`}
+                                  style={{
+                                    animation: `slideUp 0.5s ease-out ${itemIdx * 50}ms`,
+                                    ...(cardStyle.special === 'theme-border' && { borderColor: theme.primary }),
+                                    ...(cardStyle.special === 'theme-border-dashed' && { borderColor: theme.primary })
+                                  }}
+                                >
+                                  <div className="flex flex-row h-48">
+                                    {/* Discount Badge - On card, always visible if discount exists */}
+                                    {item.discountedPrice && (
+                                      <div
+                                        className={`absolute ${item.imageUrl ? 'top-4 left-4 text-left' : 'left-0 top-2 w-1/2 text-center'} animate-pulse z-20`}
+                                        style={{
+                                          color: '#fff',
+                                          textShadow: '3px 3px 6px rgba(0,0,0,0.8)',
+                                          fontWeight: '900',
+                                          animationDuration: '1.5s'
+                                        }}
+                                      >
+                                        {item.imageUrl ? (
+                                          <>
+                                            <div className="text-3xl font-black">خصم</div>
+                                            <div className="text-4xl font-black">{discountPercentage}%</div>
+                                          </>
+                                        ) : (
+                                          <div className="text-3xl font-black whitespace-nowrap">خصم {discountPercentage}%</div>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {/* Left Side - Content */}
+                                    <div className="flex-1 pr-5 pl-3 py-5 flex flex-col justify-center items-start text-right" dir="rtl">
+                                      {/* Item Name */}
+                                      <h3 className="text-lg font-bold text-gray-800 mb-2">
+                                        {item.name}
+                                      </h3>
+
+                                      {/* Description */}
+                                      {item.description && (
+                                        <div className="text-xs text-gray-700 leading-relaxed">
+                                          {item.description.split('\n').map((line, i) => (
+                                            <div key={i} className={i === 0 ? 'font-bold' : ''}>
+                                              {line}
+                                            </div>
+                                          ))}
+                                        </div>
                                       )}
                                     </div>
-                                  )}
 
-                                  {/* Left Side - Content */}
-                                  <div className="flex-1 pr-5 pl-3 py-5 flex flex-col justify-center items-start text-right" dir="rtl">
-                                    {/* Item Name */}
-                                    <h3 className="text-lg font-bold text-gray-800 mb-2">
-                                      {item.name}
-                                    </h3>
+                                    {/* Right Side - Image or Placeholder */}
+                                    <div className="relative w-1/2">
+                                      {item.imageUrl ? (
+                                        <img
+                                          src={item.imageUrl}
+                                          alt={item.name}
+                                          onClick={() => setSelectedImage(item.imageUrl!)}
+                                          className="w-full h-full object-cover cursor-pointer"
+                                        />
+                                      ) : (
+                                        <div
+                                          className="w-full h-full"
+                                          style={{
+                                            background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`
+                                          }}
+                                        />
+                                      )}
+                                    </div>
 
-                                    {/* Description */}
-                                    {item.description && (
-                                      <div className="text-xs text-gray-700 leading-relaxed">
-                                        {item.description.split('\n').map((line, i) => (
-                                          <div key={i} className={i === 0 ? 'font-bold' : ''}>
-                                            {line}
+                                    {/* Center Circle - Absolute positioned */}
+                                    <div className={`absolute z-10 ${item.imageUrl ? 'left-2 bottom-2' : 'left-1/4 top-1/2 -translate-x-1/2 -translate-y-1/2'}`}>
+                                      {item.discountedPrice ? (
+                                        <div
+                                          className="min-w-20 h-20 rounded-full flex flex-col items-center justify-center shadow-2xl border-4 border-white px-2"
+                                          style={{
+                                            background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`
+                                          }}
+                                        >
+                                          <div className="text-white text-base font-bold leading-none">جــــ</div>
+                                          <div className="text-white text-3xl font-black whitespace-nowrap leading-none">
+                                            {Number(item.discountedPrice) % 1 === 0
+                                              ? Number(item.discountedPrice).toFixed(0)
+                                              : Number(item.discountedPrice).toFixed(2)}
                                           </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  {/* Right Side - Image or Placeholder */}
-                                  <div className="relative w-1/2">
-                                    {item.imageUrl ? (
-                                      <img
-                                        src={item.imageUrl}
-                                        alt={item.name}
-                                        onClick={() => setSelectedImage(item.imageUrl!)}
-                                        className="w-full h-full object-cover cursor-pointer"
-                                      />
-                                    ) : (
-                                      <div
-                                        className="w-full h-full"
-                                        style={{
-                                          background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`
-                                        }}
-                                      />
-                                    )}
-                                  </div>
-
-                                  {/* Center Circle - Absolute positioned */}
-                                  <div className={`absolute z-10 ${item.imageUrl ? 'left-2 bottom-2' : 'left-1/4 top-1/2 -translate-x-1/2 -translate-y-1/2'}`}>
-                                    {item.discountedPrice ? (
-                                      <div
-                                        className="min-w-20 h-20 rounded-full flex flex-col items-center justify-center shadow-2xl border-4 border-white px-2"
-                                        style={{
-                                          background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`
-                                        }}
-                                      >
-                                        <div className="text-white text-base font-bold leading-none">جــــ</div>
-                                        <div className="text-white text-3xl font-black whitespace-nowrap leading-none">
-                                          {Number(item.discountedPrice) % 1 === 0
-                                            ? Number(item.discountedPrice).toFixed(0)
-                                            : Number(item.discountedPrice).toFixed(2)}
+                                          <div className="text-white text-sm font-bold price-strikethrough opacity-80 whitespace-nowrap leading-none">
+                                            {Number(item.price) % 1 === 0
+                                              ? Number(item.price).toFixed(0)
+                                              : Number(item.price).toFixed(2)}
+                                          </div>
                                         </div>
-                                        <div className="text-white text-sm font-bold price-strikethrough opacity-80 whitespace-nowrap leading-none">
-                                          {Number(item.price) % 1 === 0
-                                            ? Number(item.price).toFixed(0)
-                                            : Number(item.price).toFixed(2)}
+                                      ) : (
+                                        <div
+                                          className="min-w-20 h-20 rounded-full flex flex-col items-center justify-center shadow-2xl border-4 border-white px-2"
+                                          style={{
+                                            background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`
+                                          }}
+                                        >
+                                          <div className="text-white text-base font-bold leading-none">جــــ</div>
+                                          <div className="text-white text-3xl font-black whitespace-nowrap leading-none">
+                                            {Number(item.price) % 1 === 0
+                                              ? Number(item.price).toFixed(0)
+                                              : Number(item.price).toFixed(2)}
+                                          </div>
+                                          <div className="text-white text-sm font-bold opacity-0 whitespace-nowrap leading-none">0</div>
                                         </div>
-                                      </div>
-                                    ) : (
-                                      <div
-                                        className="min-w-20 h-20 rounded-full flex flex-col items-center justify-center shadow-2xl border-4 border-white px-2"
-                                        style={{
-                                          background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`
-                                        }}
-                                      >
-                                        <div className="text-white text-base font-bold leading-none">جــــ</div>
-                                        <div className="text-white text-3xl font-black whitespace-nowrap leading-none">
-                                          {Number(item.price) % 1 === 0
-                                            ? Number(item.price).toFixed(0)
-                                            : Number(item.price).toFixed(2)}
-                                        </div>
-                                        <div className="text-white text-sm font-bold opacity-0 whitespace-nowrap leading-none">0</div>
-                                      </div>
-                                    )}
-                                  </div>
+                                      )}
+                                    </div>
 
-                                  {/* Add to Cart Control */}
-                                  {(() => {
-                                    const cartItem = cart.find(ci => ci.id === item.id);
-                                    const quantity = cartItem?.quantity || 0;
+                                    {/* Add to Cart Control */}
+                                    {(() => {
+                                      const cartItem = cart.find(ci => ci.id === item.id);
+                                      const quantity = cartItem?.quantity || 0;
 
-                                    return (
-                                      <div
-                                        className="absolute bottom-2 right-2 h-7 text-white rounded-full flex items-center shadow-lg z-20"
-                                        style={{
-                                          background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`
-                                        }}
-                                      >
-                                        {quantity > 0 ? (
-                                          <>
-                                            {/* Increase Button */}
+                                      return (
+                                        <div
+                                          className="absolute bottom-2 right-2 h-7 text-white rounded-full flex items-center shadow-lg z-20"
+                                          style={{
+                                            background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`
+                                          }}
+                                        >
+                                          {quantity > 0 ? (
+                                            <>
+                                              {/* Increase Button */}
+                                              <button
+                                                onClick={() => updateQuantity(item.id, quantity + 1)}
+                                                className="w-7 h-7 flex items-center justify-center hover:opacity-80 transition-opacity"
+                                              >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" />
+                                                </svg>
+                                              </button>
+
+                                              {/* Quantity Input */}
+                                              <input
+                                                type="number"
+                                                value={quantity}
+                                                onChange={(e) => {
+                                                  const newQuantity = parseInt(e.target.value) || 0;
+                                                  if (newQuantity > 0) {
+                                                    updateQuantity(item.id, newQuantity);
+                                                  } else if (newQuantity === 0) {
+                                                    removeFromCart(item.id);
+                                                  }
+                                                }}
+                                                min="1"
+                                                className="text-sm font-bold w-8 text-center text-gray-900 border border-white/30 outline-none appearance-none rounded bg-white"
+                                                style={{
+                                                  MozAppearance: 'textfield',
+                                                  WebkitAppearance: 'none',
+                                                }}
+                                              />
+
+                                              {/* Decrease Button */}
+                                              <button
+                                                onClick={() => {
+                                                  if (quantity === 1) {
+                                                    removeFromCart(item.id);
+                                                  } else {
+                                                    updateQuantity(item.id, quantity - 1);
+                                                  }
+                                                }}
+                                                className="w-7 h-7 flex items-center justify-center hover:opacity-80 transition-opacity"
+                                              >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M20 12H4" />
+                                                </svg>
+                                              </button>
+                                            </>
+                                          ) : (
                                             <button
-                                              onClick={() => updateQuantity(item.id, quantity + 1)}
+                                              onClick={() => addToCart({
+                                                id: item.id,
+                                                name: item.name,
+                                                price: item.price,
+                                                discountedPrice: item.discountedPrice,
+                                                imageUrl: item.imageUrl,
+                                              })}
                                               className="w-7 h-7 flex items-center justify-center hover:opacity-80 transition-opacity"
+                                              title="إضافة للسلة"
                                             >
                                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" />
                                               </svg>
                                             </button>
-
-                                            {/* Quantity Input */}
-                                            <input
-                                              type="number"
-                                              value={quantity}
-                                              onChange={(e) => {
-                                                const newQuantity = parseInt(e.target.value) || 0;
-                                                if (newQuantity > 0) {
-                                                  updateQuantity(item.id, newQuantity);
-                                                } else if (newQuantity === 0) {
-                                                  removeFromCart(item.id);
-                                                }
-                                              }}
-                                              min="1"
-                                              className="text-sm font-bold w-8 text-center text-gray-900 border border-white/30 outline-none appearance-none rounded bg-white"
-                                              style={{
-                                                MozAppearance: 'textfield',
-                                                WebkitAppearance: 'none',
-                                              }}
-                                            />
-
-                                            {/* Decrease Button */}
-                                            <button
-                                              onClick={() => {
-                                                if (quantity === 1) {
-                                                  removeFromCart(item.id);
-                                                } else {
-                                                  updateQuantity(item.id, quantity - 1);
-                                                }
-                                              }}
-                                              className="w-7 h-7 flex items-center justify-center hover:opacity-80 transition-opacity"
-                                            >
-                                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M20 12H4" />
-                                              </svg>
-                                            </button>
-                                          </>
-                                        ) : (
-                                          <button
-                                            onClick={() => addToCart({
-                                              id: item.id,
-                                              name: item.name,
-                                              price: item.price,
-                                              discountedPrice: item.discountedPrice,
-                                              imageUrl: item.imageUrl,
-                                            })}
-                                            className="w-7 h-7 flex items-center justify-center hover:opacity-80 transition-opacity"
-                                            title="إضافة للسلة"
-                                          >
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" />
-                                            </svg>
-                                          </button>
-                                        )}
-                                      </div>
-                                    );
-                                  })()}
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {/* Contact Message */}
-                        {admin.contactMessage && (
-                          <div
-                            className={`mt-6 bg-gradient-to-r from-blue-50 to-purple-50 p-5 ${cardStyle.className} ${cardStyle.border} ${cardStyle.shadow}`}
-                            style={{
-                              ...(cardStyle.special === 'theme-border' && { borderColor: theme.primary }),
-                              ...(cardStyle.special === 'theme-border-dashed' && { borderColor: theme.primary }),
-                              ...(cardStyle.special !== 'theme-border' && cardStyle.special !== 'theme-border-dashed' && { borderWidth: '2px', borderColor: '#bfdbfe' })
-                            }}
-                          >
-                            <div className="text-gray-800 text-center whitespace-pre-line leading-relaxed font-medium">
-                              {renderContactMessage(admin.contactMessage)}
-                            </div>
+                              );
+                            })}
                           </div>
-                        )}
+
+                          {/* Contact Message */}
+                          {admin.contactMessage && (
+                            <div
+                              className={`mt-6 bg-gradient-to-r from-blue-50 to-purple-50 p-5 ${cardStyle.className} ${cardStyle.border} ${cardStyle.shadow}`}
+                              style={{
+                                ...(cardStyle.special === 'theme-border' && { borderColor: theme.primary }),
+                                ...(cardStyle.special === 'theme-border-dashed' && { borderColor: theme.primary }),
+                                ...(cardStyle.special !== 'theme-border' && cardStyle.special !== 'theme-border-dashed' && { borderWidth: '2px', borderColor: '#bfdbfe' })
+                              }}
+                            >
+                              <div className="text-gray-800 text-center whitespace-pre-line leading-relaxed font-medium">
+                                {renderContactMessage(admin.contactMessage)}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })
+                    );
+                  })
               )}
             </div>
           </>
@@ -933,7 +931,7 @@ function MenuContent({ tableNumberFromParent }: { tableNumberFromParent?: number
               className="flex items-center justify-center gap-2 text-lg font-bold text-purple-600 hover:text-purple-800 transition-colors"
             >
               <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
               </svg>
               تواصل معي
             </a>

@@ -60,6 +60,32 @@ export async function PUT(
     const body = await request.json();
     const { username, currentPassword, newPassword, logoUrl, backgroundUrl, theme, cardStyle, fontFamily, welcomeMessage, contactMessage, whatsappNumber, isAcceptingOrders, isAcceptingOrdersViaWhatsapp, isAcceptingTableOrders, tablesCount, showDeliveryStaff, showWaiterStaff } = body;
 
+    // دالة مساعدة للتحقق من صلاحية الخطة والميزة
+    const isPlanActiveFor = (requiredPlan: 'basic' | 'pro' | 'business') => {
+      if (!existingAdmin.plan || existingAdmin.plan === 'free') return false;
+      if (!existingAdmin.subscriptionEndsAt) return false;
+
+      const expiryDate = new Date(existingAdmin.subscriptionEndsAt);
+      if (expiryDate < new Date()) return false;
+
+      const planLevels = { free: 0, basic: 1, pro: 2, business: 3 };
+      return planLevels[existingAdmin.plan] >= planLevels[requiredPlan];
+    };
+
+    // التحقق من الصلاحيات عند تفعيل الطلب عبر الموقع
+    if (isAcceptingOrders === true && !isPlanActiveFor('basic')) {
+      return NextResponse.json({
+        error: 'عذراً، ميزة الطلب عبر الموقع تتطلب باقة برو فأعلى واشتراكاً سارياً'
+      }, { status: 403 });
+    }
+
+    // التحقق من الصلاحيات عند تفعيل طلبات الطاولة
+    if (isAcceptingTableOrders === true && !isPlanActiveFor('pro')) {
+      return NextResponse.json({
+        error: 'عذراً، ميزة طلبات الطاولات تتطلب الباقة الاحترافية فأعلى واشتراكاً سارياً'
+      }, { status: 403 });
+    }
+
     // التحقق من كلمة المرور فقط إذا أراد تغيير كلمة المرور
     if (newPassword) {
       if (!currentPassword) {
@@ -110,6 +136,9 @@ export async function PUT(
     const { password: _, ...sanitizedAdmin } = updatedAdmin;
     return NextResponse.json(sanitizedAdmin);
   } catch (error) {
+    if (error instanceof Error && error.message === 'Username already exists') {
+      return NextResponse.json({ error: 'اسم المستخدم مسجل بالفعل، يرجى اختيار اسم آخر' }, { status: 409 });
+    }
     return NextResponse.json({ error: 'Failed to update admin' }, { status: 500 });
   }
 }

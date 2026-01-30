@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getEmployeeByUsername } from '@/lib/db';
+import { getEmployeeByUsername, getAdmin, checkPlanAndAutoDisable } from '@/lib/db';
 import { createSessionToken, comparePassword } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
@@ -22,6 +22,15 @@ export async function POST(request: NextRequest) {
     const isPasswordValid = await comparePassword(password, employee.password);
     if (!isPasswordValid) {
       return NextResponse.json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' }, { status: 401 });
+    }
+
+    // التحقق من أن خطة الأدمن سارية (basic فما فوق) لتسجيل دخول العمال
+    const admin = await getAdmin(employee.adminId);
+    if (admin) {
+      const planActive = await checkPlanAndAutoDisable(admin, 'basic');
+      if (!planActive) {
+        return NextResponse.json({ error: 'اشتراك صاحب المتجر منتهي. لا يمكن تسجيل الدخول حالياً' }, { status: 403 });
+      }
     }
 
     // إنشاء token للعامل

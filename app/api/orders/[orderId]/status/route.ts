@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getOrder, updateOrderStatus, getEmployee, getAdmin } from '@/lib/db';
+import { getOrder, updateOrderStatus, getEmployee, getAdmin, checkPlanAndAutoDisable } from '@/lib/db';
 import { verifySessionToken } from '@/lib/auth';
 
 export async function PATCH(
@@ -46,13 +46,17 @@ export async function PATCH(
     // 3. أي عامل توصيل يمكنه تعديل الطلبات المعينة لـ "ANY_DELIVERY" (إذا كان enableDeliveryEmployees مفعل)
     const isAdmin = payload.adminId && order.adminId === payload.adminId;
 
-    // التحقق من أن عمال التوصيل مفعلين قبل السماح للموظف
+    // التحقق من أن عمال التوصيل مفعلين وأن الخطة سارية قبل السماح للموظف
     if (payload.employeeId && !payload.adminId) {
       const employee = await getEmployee(payload.employeeId);
       if (employee) {
         const admin = await getAdmin(employee.adminId);
-        if (!admin?.enableDeliveryEmployees) {
-          return NextResponse.json({ error: 'عمال التوصيل معطلين حالياً' }, { status: 403 });
+        if (admin) {
+          // Check plan - auto-disable if expired
+          const planActive = await checkPlanAndAutoDisable(admin, 'basic');
+          if (!planActive || !admin.enableDeliveryEmployees) {
+            return NextResponse.json({ error: 'عمال التوصيل معطلين حالياً' }, { status: 403 });
+          }
         }
       }
     }

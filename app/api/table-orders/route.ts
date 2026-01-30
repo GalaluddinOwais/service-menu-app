@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createTableOrder, getTableOrders, getEmployee, getAdmin } from '@/lib/db';
+import { createTableOrder, getTableOrders, getEmployee, getAdmin, checkPlanAndAutoDisable } from '@/lib/db';
 import { verifySessionToken, getAuthHeader } from '@/lib/auth';
 
 export async function POST(request: Request) {
@@ -10,6 +10,16 @@ export async function POST(request: Request) {
     // التحقق من البيانات المطلوبة
     if (!adminId || tableNumber === undefined || !items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    // التحقق من أن طلبات الطاولة مفعلة وأن الخطة سارية
+    const admin = await getAdmin(adminId);
+    if (!admin) {
+      return NextResponse.json({ error: 'المتجر غير موجود' }, { status: 404 });
+    }
+    const planActive = await checkPlanAndAutoDisable(admin, 'pro');
+    if (!planActive || !admin.isAcceptingTableOrders) {
+      return NextResponse.json({ error: 'طلبات الطاولة غير متاحة حالياً' }, { status: 403 });
     }
 
     // إزالة id من العناصر (نحتفظ فقط بالبيانات المهمة)

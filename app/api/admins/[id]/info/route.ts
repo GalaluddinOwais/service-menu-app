@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAdmin } from '@/lib/db';
+import { getAdmin, checkPlanAndAutoDisable } from '@/lib/db';
 import { verifySessionToken, getAuthHeader } from '@/lib/auth';
 
 export async function GET(
@@ -34,8 +34,15 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden: Access denied' }, { status: 403 });
     }
 
+    // تطبيق حالة الخطة وتعطيل الميزات تلقائياً إذا انتهت (نفس سلوك الصفحة العامة)
+    await checkPlanAndAutoDisable(admin, 'basic');
+    const freshAdmin = await getAdmin(id);
+    if (!freshAdmin) {
+      return NextResponse.json({ error: 'Admin not found' }, { status: 404 });
+    }
+
     // لا نرجع كلمة المرور
-    const { password, ...sanitizedAdmin } = admin;
+    const { password, ...sanitizedAdmin } = freshAdmin;
     return NextResponse.json(sanitizedAdmin);
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch admin info' }, { status: 500 });

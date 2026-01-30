@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTableOrder, updateTableOrderStatus, getEmployee, getAdmin } from '@/lib/db';
+import { getTableOrder, updateTableOrderStatus, getEmployee, getAdmin, checkPlanAndAutoDisable } from '@/lib/db';
 import { verifySessionToken } from '@/lib/auth';
 
 export async function PATCH(
@@ -49,10 +49,13 @@ export async function PATCH(
     if (payload.employeeId) {
       const employee = await getEmployee(payload.employeeId);
       if (employee && employee.isWaiter) {
-        // التحقق من أن الندلاء مفعلين
+        // التحقق من أن الندلاء مفعلين وأن الخطة سارية
         const admin = await getAdmin(employee.adminId);
-        if (!admin?.enableWaiters) {
-          return NextResponse.json({ error: 'الندلاء معطلين حالياً' }, { status: 403 });
+        if (admin) {
+          const planActive = await checkPlanAndAutoDisable(admin, 'pro');
+          if (!planActive || !admin.enableWaiters) {
+            return NextResponse.json({ error: 'الندلاء معطلين حالياً' }, { status: 403 });
+          }
         }
         isWaiter = true;
       }

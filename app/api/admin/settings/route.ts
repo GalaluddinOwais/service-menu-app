@@ -23,9 +23,51 @@ export async function PATCH(request: NextRequest) {
 
     const body = await request.json();
 
+    // دالة مساعدة للتحقق من صلاحية الخطة والميزة
+    const isPlanActiveFor = (requiredPlan: 'basic' | 'pro' | 'business') => {
+      if (!admin.plan || admin.plan === 'free') return false;
+      if (!admin.subscriptionEndsAt) return false;
+
+      const expiryDate = new Date(admin.subscriptionEndsAt);
+      if (expiryDate < new Date()) return false;
+
+      const planLevels = { free: 0, basic: 1, pro: 2, business: 3 };
+      return planLevels[admin.plan] >= planLevels[requiredPlan];
+    };
+
+    // التحقق من الصلاحيات عند تفعيل عمال التوصيل
+    if (body.enableDeliveryEmployees === true && !isPlanActiveFor('basic')) {
+      return NextResponse.json({
+        error: 'عذراً، ميزة تفعيل عمال التوصيل تتطلب باقة أساسي فأعلى واشتراكاً سارياً'
+      }, { status: 403 });
+    }
+
+    // التحقق من الصلاحيات عند تفعيل الندلاء
+    if (body.enableWaiters === true && !isPlanActiveFor('pro')) {
+      return NextResponse.json({
+        error: 'عذراً، ميزة تفعيل الندلاء تتطلب الباقة الاحترافية فأعلى واشتراكاً سارياً'
+      }, { status: 403 });
+    }
+
+    // التحقق من الصلاحيات عند تفعيل استقبال الطلبات
+    if (body.isAcceptingOrders === true && !isPlanActiveFor('basic')) {
+      return NextResponse.json({
+        error: 'عذراً، ميزة استقبال الطلبات تتطلب باقة أساسي فأعلى واشتراكاً سارياً'
+      }, { status: 403 });
+    }
+
+    // التحقق من الصلاحيات عند تفعيل طلبات الطاولة
+    if (body.isAcceptingTableOrders === true && !isPlanActiveFor('pro')) {
+      return NextResponse.json({
+        error: 'عذراً، ميزة طلبات الطاولة تتطلب الباقة الاحترافية فأعلى واشتراكاً سارياً'
+      }, { status: 403 });
+    }
+
     // Update only the fields that are provided
     const updatedAdmin = await updateAdmin(payload.adminId, {
       ...admin,
+      ...(body.isAcceptingOrders !== undefined && { isAcceptingOrders: body.isAcceptingOrders }),
+      ...(body.isAcceptingTableOrders !== undefined && { isAcceptingTableOrders: body.isAcceptingTableOrders }),
       ...(body.enableDeliveryEmployees !== undefined && { enableDeliveryEmployees: body.enableDeliveryEmployees }),
       ...(body.enableWaiters !== undefined && { enableWaiters: body.enableWaiters }),
       ...(body.showDeliveryEmployeesAnyway !== undefined && { showDeliveryEmployeesAnyway: body.showDeliveryEmployeesAnyway }),

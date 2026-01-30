@@ -19,6 +19,7 @@ import { kv } from '@vercel/kv';
 // Vercel KV Storage - للنشر على Vercel
 export interface Admin {
   id: string;
+  name?: string; // الاسم الحقيقي
   username: string; // اسم فريد
   password: string;
   logoUrl?: string; // رابط الشعار
@@ -37,9 +38,12 @@ export interface Admin {
   showWaiterStaff?: boolean; // إظهار قائمة الموظفين في طلبات الطاولات
   enableDeliveryEmployees?: boolean; // تفعيل عمال التوصيل
   enableWaiters?: boolean; // تفعيل الندلاء
-  showDeliveryEmployeesAnyway?: boolean; // إظهار عمال التوصيل في الطلبات حتى لو معطلين
   showWaitersAnyway?: boolean; // إظهار الندلاء في الطلبات حتى لو معطلين
   defaultDeliveryAssignment?: 'ANY_DELIVERY' | ''; // القيمة الافتراضية لعامل التوصيل في الطلبات الجديدة
+
+  // Subscription Info
+  plan: 'free' | 'basic' | 'pro' | 'business';
+  subscriptionEndsAt?: string; // ISO Date string
 }
 
 export interface MenuList {
@@ -330,9 +334,59 @@ export async function updateAdmin(id: string, updates: Partial<Admin>): Promise<
   const index = db.admins.findIndex(admin => admin.id === id);
   if (index === -1) return null;
 
+  // Check for username duplication if username is being updated
+  if (updates.username && updates.username !== db.admins[index].username) {
+    const existing = db.admins.find(a => a.username === updates.username && a.id !== id);
+    if (existing) {
+      throw new Error('Username already exists');
+    }
+  }
+
   db.admins[index] = { ...db.admins[index], ...updates, id };
   await writeDB(db);
   return db.admins[index];
+}
+
+/**
+ * Check if admin's subscription plan is active at a given level.
+ * If not, auto-disable the relevant features and save to DB.
+ * Returns true if the plan is active at the required level.
+ */
+export async function checkPlanAndAutoDisable(
+  admin: Admin,
+  requiredPlan: 'basic' | 'pro' | 'business' = 'basic'
+): Promise<boolean> {
+  const planLevels = { free: 0, basic: 1, pro: 2, business: 3 };
+
+  const isPlanActiveAt = (level: 'basic' | 'pro' | 'business') => {
+    if (!admin.plan || admin.plan === 'free') return false;
+    if (!admin.subscriptionEndsAt) return false;
+    const expiryDate = new Date(admin.subscriptionEndsAt);
+    if (expiryDate < new Date()) return false;
+    return planLevels[admin.plan] >= planLevels[level];
+  };
+
+  // Auto-disable features regardless of requiredPlan
+  const disableUpdates: Partial<Admin> = {};
+
+  // basic+ features - disable if not active at basic
+  if (!isPlanActiveAt('basic')) {
+    if (admin.isAcceptingOrders) disableUpdates.isAcceptingOrders = false;
+    if (admin.enableDeliveryEmployees) disableUpdates.enableDeliveryEmployees = false;
+  }
+
+  // pro+ features - disable if not active at pro
+  if (!isPlanActiveAt('pro')) {
+    if (admin.isAcceptingTableOrders) disableUpdates.isAcceptingTableOrders = false;
+    if (admin.enableWaiters) disableUpdates.enableWaiters = false;
+  }
+
+  // Save changes if any features were disabled
+  if (Object.keys(disableUpdates).length > 0) {
+    await updateAdmin(admin.id, disableUpdates);
+  }
+
+  return isPlanActiveAt(requiredPlan);
 }
 
 export async function deleteAdmin(id: string): Promise<boolean> {
@@ -591,9 +645,29 @@ export async function createEmployee(employee: Omit<Employee, 'id' | 'createdAt'
   return newEmployee;
 }
 
-export async function getEmployees(adminId: string): Promise<Employee[]> {
+export async function getEmployees(
+  adminId: string,
+  options?: { page?: number; limit?: number }
+): Promise<{ employees: Employee[]; total: number }> {
   const db = await readDB();
-  return db.employees.filter(e => e.adminId === adminId);
+  let filtered = db.employees.filter(e => e.adminId === adminId);
+
+  // Sort by createdAt descending if it exists, otherwise use id
+  filtered.sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return timeB - timeA;
+  });
+
+  const total = filtered.length;
+
+  if (options?.page && options?.limit) {
+    const startIndex = (options.page - 1) * options.limit;
+    const endIndex = startIndex + options.limit;
+    filtered = filtered.slice(startIndex, endIndex);
+  }
+
+  return { employees: filtered, total };
 }
 
 export async function getEmployee(id: string): Promise<Employee | null> {

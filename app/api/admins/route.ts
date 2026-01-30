@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { username, password, logoUrl, backgroundUrl, theme ,cardStyle} = body;
+    const { name, username, password, logoUrl, backgroundUrl, theme, cardStyle } = body;
 
     if (!username || !password) {
       return NextResponse.json({ error: 'Username and password are required' }, { status: 400 });
@@ -42,12 +42,20 @@ export async function POST(request: Request) {
     const hashedPassword = await hashPassword(password);
 
     const newAdmin = await createAdmin({
+      name,
       username,
       password: hashedPassword,
       logoUrl,
       backgroundUrl,
       theme: theme || 'ocean',
-      cardStyle: cardStyle || 'rounded'
+      cardStyle: cardStyle || 'rounded',
+      plan: 'free',
+      isAcceptingOrders: false,
+      isAcceptingOrdersViaWhatsapp: false,
+      isAcceptingTableOrders: false,
+      enableDeliveryEmployees: false,
+      enableWaiters: false,
+      defaultDeliveryAssignment: '',
     });
 
     // لا نرجع كلمة المرور
