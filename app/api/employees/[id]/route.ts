@@ -2,6 +2,42 @@ import { NextRequest, NextResponse } from 'next/server';
 import { deleteEmployee, getEmployee, updateEmployee, getAdmin } from '@/lib/db';
 import { verifySessionToken, hashPassword } from '@/lib/auth';
 
+/** GET موظف واحد: الأدمن لأي موظف يخصه، الموظف لنفسه فقط */
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    }
+    const payload = verifySessionToken(authHeader.slice(7));
+    if (!payload) {
+      return NextResponse.json({ error: 'رمز غير صالح' }, { status: 401 });
+    }
+    const { id } = await context.params;
+    const employee = await getEmployee(id);
+    if (!employee) {
+      return NextResponse.json({ error: 'العامل غير موجود' }, { status: 404 });
+    }
+    const isAdmin = !!payload.adminId;
+    const isSelf = payload.employeeId === id;
+    if (isAdmin) {
+      if (employee.adminId !== payload.adminId) {
+        return NextResponse.json({ error: 'غير مصرح' }, { status: 403 });
+      }
+    } else if (!isSelf) {
+      return NextResponse.json({ error: 'غير مصرح' }, { status: 403 });
+    }
+    const { password: _, ...safe } = employee;
+    return NextResponse.json({ employee: safe });
+  } catch (error) {
+    console.error('Error fetching employee:', error);
+    return NextResponse.json({ error: 'Failed to fetch employee' }, { status: 500 });
+  }
+}
+
 export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -44,6 +80,12 @@ export async function PATCH(
     }
     if (body.isWaiter !== undefined) {
       updates.isWaiter = body.isWaiter;
+    }
+    if (body.imageUrl !== undefined) {
+      updates.imageUrl = body.imageUrl === '' ? undefined : String(body.imageUrl);
+    }
+    if (body.phone !== undefined) {
+      updates.phone = body.phone === '' ? undefined : String(body.phone).trim();
     }
     if (body.password !== undefined && body.password.trim() !== '') {
       // Hash password before updating

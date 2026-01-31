@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getOrder, updateOrderStatus, getEmployee, getAdmin, checkPlanAndAutoDisable } from '@/lib/db';
+import { getOrder, updateOrderStatus, updateOrderStatusWithLogAndCounters, getEmployee, getAdmin, checkPlanAndAutoDisable } from '@/lib/db';
 import { verifySessionToken } from '@/lib/auth';
 
 export async function PATCH(
@@ -82,24 +82,33 @@ export async function PATCH(
 
     const deliveryOrderLevel: Record<string, number> = { pending: 0, read: 1, delivering: 2, delivered: 3 };
 
-    // باقة البزنس فقط: إذا الحالة المطلوبة = الحالة الحالية، نرجع نجاح مع تنبيه بدون كتابة (وربما تأخير إن أُرسل previousStatus)
     const admin = await getAdmin(order.adminId);
-    if (admin && (await checkPlanAndAutoDisable(admin, 'business'))) {
-      if (currentStatus === status) {
-        const isDowngradeFromUi = previousStatus && validStatuses.includes(previousStatus) &&
-          (deliveryOrderLevel[previousStatus] ?? 0) > (deliveryOrderLevel[status] ?? 0);
-        return NextResponse.json({
-          success: true,
-          status,
-          order,
-          alreadyInState: true,
-          ...(isDowngradeFromUi && { statusDowngrade: true, previousStatus }),
-        });
+    const isBusiness = admin && (await checkPlanAndAutoDisable(admin, 'business'));
+    const actor = payload.adminId
+      ? { adminId: order.adminId, userId: payload.adminId, userType: 'admin' as const }
+      : { adminId: order.adminId, userId: payload.employeeId!, userType: 'employee' as const };
+
+    // باقة البزنس: إذا الحالة المطلوبة = الحالة الحالية، نكتب لوجاً ثم نرجع تنبيهاً (لا نزيد العدّادات)
+    if (isBusiness && currentStatus === status) {
+      const updatedOrder = await updateOrderStatusWithLogAndCounters(orderId, status, actor);
+      if (!updatedOrder) {
+        return NextResponse.json({ error: 'فشل تحديث الحالة' }, { status: 500 });
       }
+      const isDowngradeFromUi = previousStatus && validStatuses.includes(previousStatus) &&
+        (deliveryOrderLevel[previousStatus] ?? 0) > (deliveryOrderLevel[status] ?? 0);
+      return NextResponse.json({
+        success: true,
+        status,
+        order: updatedOrder,
+        alreadyInState: true,
+        ...(isDowngradeFromUi && { statusDowngrade: true, previousStatus }),
+      });
     }
 
-    // Update order status
-    const updatedOrder = await updateOrderStatus(orderId, status);
+    // Update order status (باقة البزنس: لوج + عدّادات)
+    const updatedOrder = isBusiness
+      ? await updateOrderStatusWithLogAndCounters(orderId, status, actor)
+      : await updateOrderStatus(orderId, status);
 
     if (!updatedOrder) {
       console.log('Failed to update order status');
@@ -107,7 +116,7 @@ export async function PATCH(
     }
 
     // باقة البزنس فقط: إذا التحديث كان تأخيراً للحالة (تراجع)، نرجع تنبيه للواجهة
-    const isDowngrade = admin && (await checkPlanAndAutoDisable(admin, 'business')) &&
+    const isDowngrade = isBusiness &&
       (deliveryOrderLevel[currentStatus] ?? 0) > (deliveryOrderLevel[status] ?? 0);
     if (isDowngrade) {
       return NextResponse.json({ success: true, status, order: updatedOrder, statusDowngrade: true, previousStatus: currentStatus });

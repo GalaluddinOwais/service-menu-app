@@ -100,12 +100,12 @@ function AdminPageContent() {
   const [selectedList, setSelectedList] = useState<MenuList | null>(null);
   const [editingList, setEditingList] = useState<MenuList | null>(null);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
-  type TabType = 'lists' | 'settings' | 'delivery' | 'orders' | 'tableOrders' | 'employees';
+  type TabType = 'summary' | 'lists' | 'settings' | 'delivery' | 'orders' | 'tableOrders' | 'employees' | 'workersActivity';
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const tabParam = searchParams.get('tab');
-  const TAB_VALUES: TabType[] = ['lists', 'settings', 'delivery', 'orders', 'tableOrders', 'employees'];
-  const activeTab: TabType = TAB_VALUES.includes(tabParam as TabType) ? (tabParam as TabType) : 'lists';
+  const TAB_VALUES: TabType[] = ['summary', 'lists', 'settings', 'delivery', 'orders', 'tableOrders', 'employees', 'workersActivity'];
+  const activeTab: TabType = TAB_VALUES.includes(tabParam as TabType) ? (tabParam as TabType) : 'summary';
   const setActiveTab = (tab: TabType) => {
     router.push(`${pathname}?tab=${tab}`, { scroll: false });
   };
@@ -114,6 +114,88 @@ function AdminPageContent() {
   const itemFormRef = useRef<HTMLDivElement>(null);
   const itemImageUploadRef = useRef<ImageUploaderRef>(null);
   const employeeFormRef = useRef<HTMLDivElement>(null);
+
+  // ملخص النشاط (باقة البزنس): إحصائيات الفريق للأدمن — استجابة واحدة من عدة قد تكون لاحقاً
+  type TeamStatsUser = { id: string; name: string; userType: 'admin' | 'employee'; stats: Record<string, number> };
+  const [teamStatsUsers, setTeamStatsUsers] = useState<TeamStatsUser[]>([]);
+  const [teamStatsLoading, setTeamStatsLoading] = useState(false);
+  const [teamStatsError, setTeamStatsError] = useState<string | null>(null);
+  const [teamStatsCachedAt, setTeamStatsCachedAt] = useState<string | null>(null);
+
+  // نشاط العمال: كاردات فقط + تفاصيل المُختار في قسم أسفل (باقة البزنس للتفاصيل)
+  type WorkerCard = {
+    id: string;
+    name: string;
+    imageUrl?: string;
+    username?: string;
+    phone?: string;
+    isDelivery?: boolean;
+    isWaiter?: boolean;
+    deliveryForward?: number;
+    deliveryDowngrade?: number;
+    tableForward?: number;
+    tableDowngrade?: number;
+    createdAt?: string;
+  };
+
+  const EMPLOYEE_RATING_STORAGE_KEY = 'admin-employee-rating-settings';
+  const defaultEmployeeRatingSettings = {
+    enableEmployeeRating: false,
+    scaleDeliveryForward: 0 as number,
+    scaleDeliveryBackward: 0 as number,
+    scaleTableForward: 0 as number,
+    scaleTableBackward: 0 as number,
+    tendencyX: 0.5 as number,
+  };
+  const [employeeRatingSettings, setEmployeeRatingSettings] = useState(() => {
+    if (typeof window === 'undefined') return defaultEmployeeRatingSettings;
+    try {
+      const raw = localStorage.getItem(EMPLOYEE_RATING_STORAGE_KEY);
+      if (!raw) return defaultEmployeeRatingSettings;
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      return {
+        enableEmployeeRating: !!parsed.enableEmployeeRating,
+        scaleDeliveryForward: typeof parsed.scaleDeliveryForward === 'number' ? parsed.scaleDeliveryForward : 0,
+        scaleDeliveryBackward: typeof parsed.scaleDeliveryBackward === 'number' ? parsed.scaleDeliveryBackward : 0,
+        scaleTableForward: typeof parsed.scaleTableForward === 'number' ? parsed.scaleTableForward : 0,
+        scaleTableBackward: typeof parsed.scaleTableBackward === 'number' ? parsed.scaleTableBackward : 0,
+        tendencyX: typeof parsed.tendencyX === 'number' && parsed.tendencyX >= 0 && parsed.tendencyX <= 1 ? parsed.tendencyX : 0.5,
+      };
+    } catch {
+      return defaultEmployeeRatingSettings;
+    }
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(EMPLOYEE_RATING_STORAGE_KEY, JSON.stringify(employeeRatingSettings));
+    } catch {}
+  }, [employeeRatingSettings]);
+  const [isSavingRatingSettings, setIsSavingRatingSettings] = useState(false);
+  const [workersActivityList, setWorkersActivityList] = useState<WorkerCard[]>([]);
+  const [workersActivityListLoading, setWorkersActivityListLoading] = useState(false);
+  const [workersActivitySearchQuery, setWorkersActivitySearchQuery] = useState('');
+  const [workersActivityRoleFilter, setWorkersActivityRoleFilter] = useState<'all' | 'delivery' | 'waiter' | 'deliveryOnly' | 'waiterOnly'>('all');
+  const [workersActivityPage, setWorkersActivityPage] = useState(1);
+  const WORKERS_ACTIVITY_PAGE_SIZE = 8;
+  const [expandedWorkerId, setExpandedWorkerId] = useState<string | null>(null);
+  const workerDetailsRef = useRef<HTMLDivElement>(null);
+  const [expandedWorkerProfile, setExpandedWorkerProfile] = useState<Record<string, unknown> | null>(null);
+  const [expandedWorkerStats, setExpandedWorkerStats] = useState<Record<string, number> | null>(null);
+  const [expandedWorkerDeliveryLogs, setExpandedWorkerDeliveryLogs] = useState<{ logs: unknown[]; total: number; page: number; limit: number }>({ logs: [], total: 0, page: 1, limit: 10 });
+  const [expandedWorkerTableLogs, setExpandedWorkerTableLogs] = useState<{ logs: unknown[]; total: number; page: number; limit: number }>({ logs: [], total: 0, page: 1, limit: 10 });
+  const [expandedWorkerLoading, setExpandedWorkerLoading] = useState(false);
+
+  // تقييم الموظف (نقاط، كفاءة، ترتيب عام، ترتيب توصيل، ترتيب ندلاء) — للموظف فقط (باقة البزنس)
+  const [employeeRatingInfo, setEmployeeRatingInfo] = useState<{
+    enabled: boolean;
+    points?: number;
+    efficiency?: number;
+    rank?: number;
+    rankAmongDelivery?: number;
+    rankAmongWaiters?: number;
+  } | null>(null);
+  const [employeeRatingInfoLoading, setEmployeeRatingInfoLoading] = useState(false);
 
   const [listFormData, setListFormData] = useState({
     name: '',
@@ -160,14 +242,27 @@ function AdminPageContent() {
 
   const [employees, setEmployees] = useState<any[]>([]);
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
-  const [employeeFormData, setEmployeeFormData] = useState({
+  const [employeeFormData, setEmployeeFormData] = useState<{
+    name: string;
+    username: string;
+    password: string;
+    confirmPassword: string;
+    isDelivery: boolean;
+    isWaiter: boolean;
+    phone: string;
+    imageUrl?: string;
+  }>({
     name: '',
     username: '',
     password: '',
     confirmPassword: '',
     isDelivery: false,
     isWaiter: false,
+    phone: '',
   });
+  const employeeImageUploadRef = useRef<ImageUploaderRef>(null);
+  const [isUploadingEmployeePhoto, setIsUploadingEmployeePhoto] = useState(false);
+  const [isSubmittingEmployee, setIsSubmittingEmployee] = useState(false);
 
   const [isRefreshingOrders, setIsRefreshingOrders] = useState(false);
   const [isRefreshingTableOrders, setIsRefreshingTableOrders] = useState(false);
@@ -286,6 +381,16 @@ function AdminPageContent() {
             defaultDeliveryAssignment: admin.defaultDeliveryAssignment || '',
             enableWaiters: adminPlanActive('pro') ? (admin.enableWaiters || false) : false,
           });
+          if (adminPlanActive('business') && (admin.employeeRatingEnable !== undefined || admin.employeeRatingTendencyX !== undefined)) {
+            setEmployeeRatingSettings({
+              enableEmployeeRating: !!admin.employeeRatingEnable,
+              scaleDeliveryForward: typeof admin.employeeRatingScaleDeliveryForward === 'number' ? admin.employeeRatingScaleDeliveryForward : 0,
+              scaleDeliveryBackward: typeof admin.employeeRatingScaleDeliveryBackward === 'number' ? admin.employeeRatingScaleDeliveryBackward : 0,
+              scaleTableForward: typeof admin.employeeRatingScaleTableForward === 'number' ? admin.employeeRatingScaleTableForward : 0,
+              scaleTableBackward: typeof admin.employeeRatingScaleTableBackward === 'number' ? admin.employeeRatingScaleTableBackward : 0,
+              tendencyX: typeof admin.employeeRatingTendencyX === 'number' && admin.employeeRatingTendencyX >= 0 && admin.employeeRatingTendencyX <= 1 ? admin.employeeRatingTendencyX : 0.5,
+            });
+          }
           fetchData(admin.id);
         })
         .catch(error => {
@@ -329,6 +434,16 @@ function AdminPageContent() {
             defaultDeliveryAssignment: admin.defaultDeliveryAssignment || '',
             enableWaiters: adminPlanActive('pro') ? (admin.enableWaiters || false) : false,
           });
+          if (adminPlanActive('business') && (admin.employeeRatingEnable !== undefined || admin.employeeRatingTendencyX !== undefined)) {
+            setEmployeeRatingSettings({
+              enableEmployeeRating: !!admin.employeeRatingEnable,
+              scaleDeliveryForward: typeof admin.employeeRatingScaleDeliveryForward === 'number' ? admin.employeeRatingScaleDeliveryForward : 0,
+              scaleDeliveryBackward: typeof admin.employeeRatingScaleDeliveryBackward === 'number' ? admin.employeeRatingScaleDeliveryBackward : 0,
+              scaleTableForward: typeof admin.employeeRatingScaleTableForward === 'number' ? admin.employeeRatingScaleTableForward : 0,
+              scaleTableBackward: typeof admin.employeeRatingScaleTableBackward === 'number' ? admin.employeeRatingScaleTableBackward : 0,
+              tendencyX: typeof admin.employeeRatingTendencyX === 'number' && admin.employeeRatingTendencyX >= 0 && admin.employeeRatingTendencyX <= 1 ? admin.employeeRatingTendencyX : 0.5,
+            });
+          }
           fetchData(admin.id);
         });
       return;
@@ -396,10 +511,10 @@ function AdminPageContent() {
     }
   }, [currentPage, statusFilter, orderTypeFilter, dateFilter, employeeFilter, currentEmployeeId]);
 
-  // Set default active tab for employee only when URL has no valid tab (or tab not allowed for role)
+  // Set default active tab for employee when URL has no valid tab (employees don't see summary)
   useEffect(() => {
     if (userType !== 'employee') return;
-    const allowedTabs: TabType[] = [];
+    const allowedTabs: TabType[] = ['workersActivity'];
     if (isDelivery) allowedTabs.push('orders');
     if (isWaiter) allowedTabs.push('tableOrders');
     const tabFromUrl = tabParam as TabType | null;
@@ -602,6 +717,222 @@ function AdminPageContent() {
     !!currentAdmin.plan &&
     currentAdmin.plan !== 'free' &&
     (!currentAdmin.subscriptionEndsAt || new Date(currentAdmin.subscriptionEndsAt) < new Date());
+
+  // جلب إحصائيات الفريق لتبويب ملخص النشاط (باقة البزنس فقط)
+  const fetchTeamStats = async () => {
+    setTeamStatsLoading(true);
+    setTeamStatsError(null);
+    try {
+      const res = await fetch('/api/admin/stats/team', { headers: getAuthHeaders() });
+      const data = await res.json();
+      if (!res.ok) {
+        setTeamStatsError(data.error || 'فشل جلب الإحصائيات');
+        setTeamStatsUsers([]);
+        setTeamStatsCachedAt(null);
+        return;
+      }
+      setTeamStatsUsers(data.users || []);
+      setTeamStatsCachedAt(typeof data.cachedAt === 'string' ? data.cachedAt : null);
+    } catch (e) {
+      setTeamStatsError('خطأ في الاتصال');
+      setTeamStatsUsers([]);
+      setTeamStatsCachedAt(null);
+    } finally {
+      setTeamStatsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (userType === 'admin' && activeTab === 'summary' && isPlanActive('business')) {
+      fetchTeamStats();
+    }
+  }, [userType, activeTab, currentAdmin?.id, currentAdmin?.plan, currentAdmin?.subscriptionEndsAt]);
+
+  const fetchWorkersActivityList = async () => {
+    setWorkersActivityListLoading(true);
+    try {
+      if (userType === 'admin') {
+        const [empRes, teamRes] = await Promise.all([
+          fetch(`/api/employees?page=1&limit=100`, { headers: getAuthHeaders() }).then(r => r.json()),
+          isPlanActive('business') ? fetch('/api/admin/stats/team', { headers: getAuthHeaders() }).then(r => r.json()) : Promise.resolve({ users: [] }),
+        ]);
+        type Emp = { id: string; name: string; imageUrl?: string; username?: string; phone?: string; isDelivery?: boolean; isWaiter?: boolean; createdAt?: string };
+        const employees: WorkerCard[] = Array.isArray(empRes.employees) ? empRes.employees.map((e: Emp) => ({ id: e.id, name: e.name || e.id, imageUrl: e.imageUrl, username: e.username, phone: e.phone, isDelivery: e.isDelivery, isWaiter: e.isWaiter, createdAt: e.createdAt })) : [];
+        const teamUsers = (teamRes.users || []) as TeamStatsUser[];
+        // الكارد يعرض مجموع (العدد × الوزن)؛ الأسهم تعرض العدد كما هو
+        const forwardWeight = (n: number) => (n % 10) - Math.floor(n / 10); // 12→1, 13→2, 14→3, 23→1, 24→2, 34→1
+        const downgradeWeight = (n: number) => Math.floor(n / 10) - (n % 10); // 43→1, 42→2, 41→3, 32→1, 31→2, 21→1
+        const sumForwardWeighted = (s: Record<string, number>, prefix: string) =>
+          [12, 13, 14, 23, 24, 34].reduce((a, n) => a + (Number(s[`${prefix}Forward${Math.floor(n / 10)}${n % 10}`]) || 0) * forwardWeight(n), 0);
+        const sumDowngradeWeighted = (s: Record<string, number>, prefix: string) =>
+          [43, 42, 41, 32, 31, 21].reduce((a, n) => a + (Number(s[`${prefix}Downgrade${Math.floor(n / 10)}${n % 10}`]) || 0) * downgradeWeight(n), 0);
+        const withStats = employees.map(emp => {
+          const tu = teamUsers.find(u => u.id === emp.id);
+          if (!tu || !tu.stats) return { ...emp };
+          const s = tu.stats;
+          const deliveryForward = sumForwardWeighted(s, 'delivery');
+          const deliveryDowngrade = sumDowngradeWeighted(s, 'delivery');
+          const tableForward = sumForwardWeighted(s, 'table');
+          const tableDowngrade = sumDowngradeWeighted(s, 'table');
+          return { ...emp, deliveryForward, deliveryDowngrade, tableForward, tableDowngrade };
+        });
+        // الأدمن مستخدم أيضاً ويمكنه تغيير الحالات — نضيفه كأول شخص في القائمة
+        const adminTu = teamUsers.find(u => u.userType === 'admin') ?? teamUsers[0];
+        if (currentAdmin) {
+          const adminCard: WorkerCard = {
+            id: currentAdmin.id,
+            name: currentAdmin.name || currentAdmin.username || adminTu?.name || 'الأدمن',
+            imageUrl: currentAdmin.logoUrl,
+            username: currentAdmin.username,
+            phone: undefined,
+            isDelivery: false,
+            isWaiter: false,
+            deliveryForward: adminTu ? sumForwardWeighted(adminTu.stats, 'delivery') : undefined,
+            deliveryDowngrade: adminTu ? sumDowngradeWeighted(adminTu.stats, 'delivery') : undefined,
+            tableForward: adminTu ? sumForwardWeighted(adminTu.stats, 'table') : undefined,
+            tableDowngrade: adminTu ? sumDowngradeWeighted(adminTu.stats, 'table') : undefined,
+            createdAt: undefined,
+          };
+          setWorkersActivityList([adminCard, ...withStats]);
+        } else {
+          setWorkersActivityList(withStats);
+        }
+      } else {
+        if (!currentEmployeeId) { setWorkersActivityList([]); return; }
+        const profileRes = await fetch(`/api/employees/${currentEmployeeId}`, { headers: getAuthHeaders() }).then(r => r.json());
+        const emp = profileRes.employee as Record<string, unknown> | undefined;
+        const name = (emp?.name as string) || 'أنت';
+        const isDelivery = !!emp?.isDelivery;
+        const isWaiter = !!emp?.isWaiter;
+        let deliveryForward: number | undefined;
+        let deliveryDowngrade: number | undefined;
+        let tableForward: number | undefined;
+        let tableDowngrade: number | undefined;
+        if (isPlanActive('business') && emp) {
+          const n = (k: string) => Number(emp[k]) || 0;
+          const fw = (a: number, b: number) => (b % 10) - Math.floor(b / 10);
+          const dw = (a: number, b: number) => Math.floor(b / 10) - (b % 10);
+          const sumF = (p: string) => [12, 13, 14, 23, 24, 34].reduce((a, b) => a + n(`${p}Forward${Math.floor(b / 10)}${b % 10}`) * fw(0, b), 0);
+          const sumD = (p: string) => [43, 42, 41, 32, 31, 21].reduce((a, b) => a + n(`${p}Downgrade${Math.floor(b / 10)}${b % 10}`) * dw(0, b), 0);
+          deliveryForward = sumF('delivery');
+          deliveryDowngrade = sumD('delivery');
+          tableForward = sumF('table');
+          tableDowngrade = sumD('table');
+        }
+        setWorkersActivityList([{ id: currentEmployeeId, name, imageUrl: emp?.imageUrl as string | undefined, username: emp?.username as string | undefined, phone: emp?.phone as string | undefined, isDelivery, isWaiter, deliveryForward, deliveryDowngrade, tableForward, tableDowngrade, createdAt: emp?.createdAt as string | undefined }]);
+      }
+    } catch (e) {
+      console.error(e);
+      setWorkersActivityList([]);
+    } finally {
+      setWorkersActivityListLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'workersActivity') fetchWorkersActivityList();
+  }, [activeTab, userType, currentAdmin?.id, currentEmployeeId, currentAdmin?.plan]);
+
+  // جلب تقييم الموظف (نقاط، كفاءة، ترتيب) عند فتح تبويب نشاطي — للموظف فقط
+  useEffect(() => {
+    if (userType !== 'employee' || activeTab !== 'workersActivity' || !isPlanActive('business')) {
+      setEmployeeRatingInfo(null);
+      return;
+    }
+    setEmployeeRatingInfoLoading(true);
+    fetch('/api/employee/rating-info', { headers: getAuthHeaders() })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error) setEmployeeRatingInfo(null);
+        else setEmployeeRatingInfo({
+          enabled: !!data.enabled,
+          points: data.points,
+          efficiency: data.efficiency,
+          rank: data.rank,
+          rankAmongDelivery: data.rankAmongDelivery,
+          rankAmongWaiters: data.rankAmongWaiters,
+        });
+      })
+      .catch(() => setEmployeeRatingInfo(null))
+      .finally(() => setEmployeeRatingInfoLoading(false));
+  }, [userType, activeTab, currentAdmin?.plan, currentAdmin?.subscriptionEndsAt]);
+
+  /** استخراج أرقام العدادات من أي كائن (موظف/أدمن) — غير موجود = 0 */
+  const countsFrom = (obj: Record<string, unknown> | null | undefined): Record<string, number> => {
+    if (!obj) return {};
+    const keys = ['deliveryAssignedCount', 'deliveryForward12', 'deliveryForward13', 'deliveryForward14', 'deliveryForward23', 'deliveryForward24', 'deliveryForward34', 'deliveryDowngrade43', 'deliveryDowngrade42', 'deliveryDowngrade41', 'deliveryDowngrade32', 'deliveryDowngrade31', 'deliveryDowngrade21', 'tableAssignedCount', 'tableForward12', 'tableForward13', 'tableForward14', 'tableForward23', 'tableForward24', 'tableForward34', 'tableDowngrade43', 'tableDowngrade42', 'tableDowngrade41', 'tableDowngrade32', 'tableDowngrade31', 'tableDowngrade21', 'WithoutDeliveryOrdersCount', 'AnyDeliveryOrdersCount'];
+    return Object.fromEntries(keys.map(k => [k, Number(obj[k]) || 0]));
+  };
+
+  const fetchExpandedWorkerDetails = async (userId: string, pageDelivery = 1, pageTable = 1, logsOnly = false) => {
+    if (!logsOnly) {
+      setExpandedWorkerLoading(true);
+      setExpandedWorkerProfile(null);
+      setExpandedWorkerStats(null);
+      setExpandedWorkerDeliveryLogs({ logs: [], total: 0, page: 1, limit: 10 });
+      setExpandedWorkerTableLogs({ logs: [], total: 0, page: 1, limit: 10 });
+    }
+    try {
+      const limit = 10;
+      let employeeOrAdmin: Record<string, unknown> | null = null;
+      if (!logsOnly) {
+        if (userId === currentAdmin?.id) {
+          employeeOrAdmin = { ...currentAdmin } as Record<string, unknown>;
+          setExpandedWorkerProfile({ name: currentAdmin.name, username: currentAdmin.username, imageUrl: currentAdmin.logoUrl, phone: undefined, createdAt: undefined, isDelivery: false, isWaiter: false } as Record<string, unknown>);
+        } else {
+          const profileRes = await fetch(`/api/employees/${userId}`, { headers: getAuthHeaders() }).then(r => r.json());
+          if (profileRes.employee) {
+            employeeOrAdmin = profileRes.employee as Record<string, unknown>;
+            setExpandedWorkerProfile(profileRes.employee as Record<string, unknown>);
+          }
+        }
+        const [delRes, tblRes] = await Promise.all([
+          fetch(`/api/admin/stats/delivery-logs?userId=${userId}&page=${pageDelivery}&limit=${limit}`, { headers: getAuthHeaders() }).then(r => r.json()),
+          fetch(`/api/admin/stats/table-logs?userId=${userId}&page=${pageTable}&limit=${limit}`, { headers: getAuthHeaders() }).then(r => r.json()),
+        ]);
+        if (delRes.logs) setExpandedWorkerDeliveryLogs({ logs: delRes.logs, total: delRes.total ?? 0, page: delRes.page ?? 1, limit: delRes.limit ?? limit });
+        if (tblRes.logs) setExpandedWorkerTableLogs({ logs: tblRes.logs, total: tblRes.total ?? 0, page: tblRes.page ?? 1, limit: tblRes.limit ?? limit });
+        if (isPlanActive('business')) {
+          const fromTeam = teamStatsUsers.find(u => u.id === userId)?.stats as Record<string, number> | undefined;
+          const counts = fromTeam ?? (employeeOrAdmin ? countsFrom(employeeOrAdmin) : {});
+          if (Object.keys(counts).length) setExpandedWorkerStats(counts);
+        }
+      } else {
+        const [delRes, tblRes] = await Promise.all([
+          fetch(`/api/admin/stats/delivery-logs?userId=${userId}&page=${pageDelivery}&limit=${limit}`, { headers: getAuthHeaders() }).then(r => r.json()),
+          fetch(`/api/admin/stats/table-logs?userId=${userId}&page=${pageTable}&limit=${limit}`, { headers: getAuthHeaders() }).then(r => r.json()),
+        ]);
+        if (delRes.logs) setExpandedWorkerDeliveryLogs({ logs: delRes.logs, total: delRes.total ?? 0, page: delRes.page ?? 1, limit: delRes.limit ?? limit });
+        if (tblRes.logs) setExpandedWorkerTableLogs({ logs: tblRes.logs, total: tblRes.total ?? 0, page: tblRes.page ?? 1, limit: tblRes.limit ?? limit });
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      if (!logsOnly) setExpandedWorkerLoading(false);
+    }
+  };
+
+  // للموظف: عند فتح تبويب نشاطي نعرض تفاصيله فوراً (بدون كاردات)
+  useEffect(() => {
+    if (activeTab === 'workersActivity' && userType === 'employee' && currentEmployeeId) {
+      setExpandedWorkerId(currentEmployeeId);
+    }
+  }, [activeTab, userType, currentEmployeeId]);
+
+  // جلب تفاصيل العامل — للموظف ننتظر currentAdmin حتى isPlanActive والإحصائيات تعمل (خصوصاً بعد ريلود)
+  useEffect(() => {
+    if (activeTab !== 'workersActivity' || !expandedWorkerId) {
+      if (!expandedWorkerId) {
+        setExpandedWorkerProfile(null);
+        setExpandedWorkerStats(null);
+        setExpandedWorkerDeliveryLogs({ logs: [], total: 0, page: 1, limit: 10 });
+        setExpandedWorkerTableLogs({ logs: [], total: 0, page: 1, limit: 10 });
+      }
+      return;
+    }
+    if (userType === 'employee' && !currentAdmin) return;
+    fetchExpandedWorkerDetails(expandedWorkerId);
+  }, [activeTab, expandedWorkerId, userType, currentAdmin]);
 
   const checkPlan = (feature: string, plan: 'basic' | 'pro' | 'business' = 'basic') => {
     if (!isPlanActive(plan)) {
@@ -834,7 +1165,7 @@ function AdminPageContent() {
       name: itemFormData.name,
       price: itemFormData.price,
       discountedPrice: itemFormData.discountedPrice || undefined,
-      imageUrl: imageUrlForItem,
+      imageUrl: imageUrlForItem ?? null,
       description: itemFormData.description,
       listId: selectedList.id,
     };
@@ -880,7 +1211,7 @@ function AdminPageContent() {
       imageUrl: item.imageUrl || '',
       description: item.description || '',
     });
-    itemImageUploadRef.current?.clearPendingFile();
+    itemImageUploadRef.current?.clearPendingFile(false);
     setTimeout(() => itemFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
   };
 
@@ -1083,6 +1414,35 @@ function AdminPageContent() {
     }
   };
 
+  const handleSaveRatingSettings = async () => {
+    if (!currentAdmin || !isPlanActive('business')) return;
+    setIsSavingRatingSettings(true);
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          employeeRatingEnable: employeeRatingSettings.enableEmployeeRating,
+          employeeRatingScaleDeliveryForward: employeeRatingSettings.scaleDeliveryForward,
+          employeeRatingScaleDeliveryBackward: employeeRatingSettings.scaleDeliveryBackward,
+          employeeRatingScaleTableForward: employeeRatingSettings.scaleTableForward,
+          employeeRatingScaleTableBackward: employeeRatingSettings.scaleTableBackward,
+          employeeRatingTendencyX: employeeRatingSettings.tendencyX,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentAdmin(prev => prev ? { ...prev, ...data.admin } : null);
+        alert('تم حفظ إعدادات التقييم بنجاح.');
+      } else {
+        const err = await res.json();
+        if (res.status !== 403) alert(err.error || 'فشل حفظ إعدادات التقييم');
+      }
+    } finally {
+      setIsSavingRatingSettings(false);
+    }
+  };
+
   const handleStatusUpdate = async (orderId: string, newStatus: 'pending' | 'read' | 'delivering' | 'delivered') => {
     try {
       setUpdatingOrderStatus({ orderId, status: newStatus });
@@ -1258,53 +1618,96 @@ function AdminPageContent() {
       }
     }
 
-    if (editingEmployeeId) {
-      // وضع التحديث
-      const updates: Record<string, unknown> = {
-        name: employeeFormData.name,
-        isDelivery: employeeFormData.isDelivery,
-        isWaiter: employeeFormData.isWaiter,
-      };
-      if (employeeFormData.password) {
-        updates.password = employeeFormData.password;
+    // رفع الصورة عند الإرسال فقط (اختياري)
+      let imageUrlToSend: string | undefined;
+      const photoFile = employeeImageUploadRef.current?.getPendingFile();
+      if (photoFile) {
+        setIsUploadingEmployeePhoto(true);
+        try {
+          const formData = new FormData();
+          formData.append('file', photoFile);
+          const token = localStorage.getItem('session_token');
+          const uploadRes = await fetch('/api/upload', {
+            method: 'POST',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            body: formData,
+          });
+          if (!uploadRes.ok) {
+            const err = await uploadRes.json();
+            alert(`فشل رفع الصورة: ${err.error || 'خطأ غير معروف'}`);
+            setIsUploadingEmployeePhoto(false);
+            return;
+          }
+          const { url } = await uploadRes.json();
+          imageUrlToSend = url;
+        } catch {
+          alert('فشل رفع الصورة');
+          setIsUploadingEmployeePhoto(false);
+          return;
+        }
+        setIsUploadingEmployeePhoto(false);
       }
 
-      const res = await fetch(`/api/employees/${editingEmployeeId}`, {
-        method: 'PATCH',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(updates),
-      });
+      setIsSubmittingEmployee(true);
+      try {
 
-      if (res.ok) {
-        await refreshEmployees();
-        setEditingEmployeeId(null);
-        setEmployeeFormData({
-          name: '',
-          username: '',
-          password: '',
-          confirmPassword: '',
-          isDelivery: false,
-          isWaiter: false,
-        });
-        alert('تم تحديث العامل بنجاح!');
-        setTimeout(() => employeeFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
-      } else {
-        const error = await res.json();
-        alert(`فشل تحديث العامل: ${error.error || 'خطأ غير معروف'}`);
-      }
-    } else {
-      // وضع الإنشاء
-      const res = await fetch('/api/employees', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
+      if (editingEmployeeId) {
+        // وضع التحديث
+        const updates: Record<string, unknown> = {
           name: employeeFormData.name,
-          username: employeeFormData.username,
-          password: employeeFormData.password,
           isDelivery: employeeFormData.isDelivery,
           isWaiter: employeeFormData.isWaiter,
-        }),
-      });
+          phone: employeeFormData.phone.trim() || undefined,
+        };
+        if (imageUrlToSend !== undefined) {
+          updates.imageUrl = imageUrlToSend;
+        } else if (editingEmployeeId && employeeFormData.imageUrl !== undefined) {
+          updates.imageUrl = employeeFormData.imageUrl === '' ? '' : employeeFormData.imageUrl;
+        }
+        if (employeeFormData.password) {
+          updates.password = employeeFormData.password;
+        }
+
+        const res = await fetch(`/api/employees/${editingEmployeeId}`, {
+          method: 'PATCH',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(updates),
+        });
+
+        if (res.ok) {
+          await refreshEmployees();
+          setEditingEmployeeId(null);
+          setEmployeeFormData({
+            name: '',
+            username: '',
+            password: '',
+            confirmPassword: '',
+            isDelivery: false,
+            isWaiter: false,
+            phone: '',
+            imageUrl: undefined,
+          });
+          employeeImageUploadRef.current?.clearPendingFile();
+          setTimeout(() => employeeFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
+        } else {
+          const error = await res.json();
+          alert(`فشل تحديث العامل: ${error.error || 'خطأ غير معروف'}`);
+        }
+      } else {
+        // وضع الإنشاء
+        const res = await fetch('/api/employees', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            name: employeeFormData.name,
+            username: employeeFormData.username,
+            password: employeeFormData.password,
+            isDelivery: employeeFormData.isDelivery,
+            isWaiter: employeeFormData.isWaiter,
+            ...(imageUrlToSend && { imageUrl: imageUrlToSend }),
+            ...(employeeFormData.phone.trim() && { phone: employeeFormData.phone.trim() }),
+          }),
+        });
 
       if (res.ok) {
         await refreshEmployees();
@@ -1315,8 +1718,10 @@ function AdminPageContent() {
           confirmPassword: '',
           isDelivery: false,
           isWaiter: false,
+          phone: '',
+          imageUrl: undefined,
         });
-        alert('تم إضافة العامل بنجاح!');
+        employeeImageUploadRef.current?.clearPendingFile();
         setTimeout(() => employeeFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
       } else {
         const error = await res.json();
@@ -1329,6 +1734,9 @@ function AdminPageContent() {
         }
       }
     }
+  } finally {
+        setIsSubmittingEmployee(false);
+      }
   };
 
   const handleDeleteEmployee = async (id: string) => {
@@ -1356,7 +1764,10 @@ function AdminPageContent() {
       confirmPassword: '',
       isDelivery: employee.isDelivery || false,
       isWaiter: employee.isWaiter || false,
+      phone: employee.phone ?? '',
+      imageUrl: employee.imageUrl ?? undefined,
     });
+    employeeImageUploadRef.current?.clearPendingFile(false);
     setTimeout(() => employeeFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
   };
 
@@ -1369,7 +1780,10 @@ function AdminPageContent() {
       confirmPassword: '',
       isDelivery: false,
       isWaiter: false,
+      phone: '',
+      imageUrl: undefined,
     });
+    employeeImageUploadRef.current?.clearPendingFile();
   };
 
 
@@ -1463,6 +1877,19 @@ function AdminPageContent() {
           </div>
 
           <nav className="p-2 space-y-1">
+            {/* ملخص النشاط - للأدمن فقط، أول تبويب افتراضي */}
+            {userType === 'admin' && (
+              <button
+                onClick={() => { setActiveTab('summary'); setIsSidebarOpen(false); }}
+                className={`w-full text-right px-4 py-3 rounded-lg font-bold transition-colors ${activeTab === 'summary'
+                  ? 'bg-gray-800 text-white'
+                  : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+              >
+                ملخص النشاط
+              </button>
+            )}
+
             {/* إدارة القوائم - للأدمن فقط */}
             {userType === 'admin' && (
               <button
@@ -1473,6 +1900,19 @@ function AdminPageContent() {
                   }`}
               >
                 إدارة القوائم
+              </button>
+            )}
+
+            {/* نشاط العاملين - للأدمن والموظف (باقة البزنس للتفاصيل) */}
+            {(userType === 'admin' || userType === 'employee') && (
+              <button
+                onClick={() => { setActiveTab('workersActivity'); setIsSidebarOpen(false); }}
+                className={`w-full text-right px-4 py-3 rounded-lg font-bold transition-colors ${activeTab === 'workersActivity'
+                  ? 'bg-gray-800 text-white'
+                  : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+              >
+                {userType === 'admin' ? 'نشاط العاملين' : 'نشاطي'}
               </button>
             )}
 
@@ -1553,6 +1993,843 @@ function AdminPageContent() {
         </div>
 
         {/* Content */}
+        {activeTab === 'summary' && (
+          <div className="w-full max-w-6xl mx-auto p-4">
+            {userType !== 'admin' ? (
+              <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+                لا يوجد محتوى لملخص النشاط لهذا الحساب.
+              </div>
+            ) : !isPlanActive('business') ? (
+              <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+                ملخص النشاط متاح ضمن باقة البزنس فقط.
+              </div>
+            ) : teamStatsLoading ? (
+              <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+                جاري تحميل الإحصائيات...
+              </div>
+            ) : teamStatsError ? (
+              <div className="bg-white rounded-lg shadow p-8 text-center text-red-600">
+                {teamStatsError}
+              </div>
+            ) : (
+              (() => {
+                const PIE_COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'];
+
+                const getSegments = (keyOrKeys: string | string[]) => {
+                  const keys = Array.isArray(keyOrKeys) ? keyOrKeys : [keyOrKeys];
+                  if (keys.length === 1 && keys[0] === 'deliveryAssignedCount') {
+                    const out: { name: string; value: number; color: string }[] = [];
+                    teamStatsUsers.forEach((u, i) => {
+                      const v = Number(u.stats.deliveryAssignedCount) || 0;
+                      if (v > 0) out.push({ name: u.name, value: v, color: PIE_COLORS[i % PIE_COLORS.length] });
+                    });
+                    const adminUser = teamStatsUsers.find(u => u.userType === 'admin');
+                    if (adminUser) {
+                      const w = Number((adminUser.stats as Record<string, number>).WithoutDeliveryOrdersCount) || 0;
+                      const a = Number((adminUser.stats as Record<string, number>).AnyDeliveryOrdersCount) || 0;
+                      if (w > 0) out.push({ name: 'بدون عامل', value: w, color: PIE_COLORS[teamStatsUsers.length % PIE_COLORS.length] });
+                      if (a > 0) out.push({ name: 'أي عامل', value: a, color: PIE_COLORS[(teamStatsUsers.length + 1) % PIE_COLORS.length] });
+                    }
+                    return out;
+                  }
+                  return teamStatsUsers
+                    .map((u, i) => ({
+                      name: u.name,
+                      value: keys.reduce((sum, k) => sum + (Number((u.stats as Record<string, number>)[k]) || 0), 0),
+                      color: PIE_COLORS[i % PIE_COLORS.length],
+                    }))
+                    .filter(s => s.value > 0);
+                };
+
+                const PieCard = ({ statKey, statKeys, label }: { statKey?: string; statKeys?: string[]; label: string }) => {
+                  const segments = getSegments(statKeys ?? statKey ?? '');
+                  const total = segments.reduce((sum, s) => sum + s.value, 0);
+                  let cumulative = 0;
+                  const conicParts = segments.map(s => {
+                    const pct = total ? (s.value / total) * 100 : 0;
+                    const part = `${s.color} ${cumulative}% ${cumulative + pct}%`;
+                    cumulative += pct;
+                    return part;
+                  });
+                  return (
+                    <div className="bg-white rounded-xl shadow-md p-4 border border-gray-100">
+                      <h3 className="text-sm font-bold text-gray-700 mb-3 text-center">{label}</h3>
+                      <div className="flex flex-col items-center">
+                        {total === 0 ? (
+                          <div className="w-40 h-40 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-sm">لا نشاط</div>
+                        ) : (
+                          <>
+                            <div
+                              className="w-40 h-40 rounded-full flex-shrink-0"
+                              style={{ background: `conic-gradient(${conicParts.join(', ')})` }}
+                              title={segments.map(s => `${s.name}: ${s.value}`).join('\n')}
+                            />
+                            <p className="mt-2 text-xs text-gray-500">المجموع: {total}</p>
+                            <ul className="mt-2 w-full space-y-1 text-xs">
+                              {segments.map((s, i) => (
+                                <li key={i} className="flex items-center gap-2">
+                                  <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                                  <span className="truncate">{s.name}</span>
+                                  <span className="text-gray-600 font-medium">{s.value}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                };
+
+                const DELIVERY_ASSIGNMENT = [{ key: 'deliveryAssignedCount', label: 'تعيين عمال التوصيل للطلبات' }];
+                /** تقديم: تجميع حسب الحالة الهدف (إلى 2، إلى 3، إلى 4) */
+                const DELIVERY_PIES_FORWARD = [
+                  { statKeys: ['deliveryForward12'] as const, label: 'تقديم إلى 2' },
+                  { statKeys: ['deliveryForward13', 'deliveryForward23'] as const, label: 'تقديم إلى 3' },
+                  { statKeys: ['deliveryForward14', 'deliveryForward24', 'deliveryForward34'] as const, label: 'تقديم إلى 4' },
+                ];
+                /** تأخير: تجميع حسب الحالة الهدف (إلى 1، إلى 2، إلى 3) */
+                const DELIVERY_PIES_DOWNGRADE = [
+                  { statKeys: ['deliveryDowngrade41', 'deliveryDowngrade31', 'deliveryDowngrade21'] as const, label: 'تأخير إلى 1' },
+                  { statKeys: ['deliveryDowngrade42', 'deliveryDowngrade32'] as const, label: 'تأخير إلى 2' },
+                  { statKeys: ['deliveryDowngrade43'] as const, label: 'تأخير إلى 3' },
+                ];
+                const TABLE_PIES_FORWARD = [
+                  { statKeys: ['tableForward12'] as const, label: 'تقديم إلى 2' },
+                  { statKeys: ['tableForward13', 'tableForward23'] as const, label: 'تقديم إلى 3' },
+                  { statKeys: ['tableForward14', 'tableForward24', 'tableForward34'] as const, label: 'تقديم إلى 4' },
+                ];
+                const TABLE_PIES_DOWNGRADE = [
+                  { statKeys: ['tableDowngrade41', 'tableDowngrade31', 'tableDowngrade21'] as const, label: 'تأخير إلى 1' },
+                  { statKeys: ['tableDowngrade42', 'tableDowngrade32'] as const, label: 'تأخير إلى 2' },
+                  { statKeys: ['tableDowngrade43'] as const, label: 'تأخير إلى 3' },
+                ];
+
+                const formatCachedAt = (iso: string) => {
+                  try {
+                    const d = new Date(iso);
+                    return d.toLocaleDateString('ar-SA', { dateStyle: 'short' }) + ' ' + d.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+                  } catch {
+                    return iso;
+                  }
+                };
+
+                return (
+                  <div className="space-y-10">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h2 className="text-2xl font-bold text-gray-800">ملخص النشاط</h2>
+                      {teamStatsCachedAt && (
+                        <span className="text-sm text-gray-500">
+                          آخر تحديث: {formatCachedAt(teamStatsCachedAt)}
+                        </span>
+                      )}
+                    </div>
+
+                    <section>
+                      <h3 className="text-lg font-bold text-gray-700 mb-4">تعيين عمال التوصيل للطلبات</h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {DELIVERY_ASSIGNMENT.map(({ key, label }) => (
+                          <PieCard key={key} statKey={key} label={label} />
+                        ))}
+                      </div>
+                    </section>
+
+                    <section>
+                      <h3 className="text-lg font-bold text-gray-700 mb-4">التوصيل</h3>
+                      <h4 className="text-base font-bold text-gray-600 mb-3">التقديم</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-6">
+                        {DELIVERY_PIES_FORWARD.map(({ statKeys, label }, i) => (
+                          <PieCard key={i} statKeys={[...statKeys]} label={label} />
+                        ))}
+                      </div>
+                      <h4 className="text-base font-bold text-gray-600 mb-3">التأخير</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {DELIVERY_PIES_DOWNGRADE.map(({ statKeys, label }, i) => (
+                          <PieCard key={i} statKeys={[...statKeys]} label={label} />
+                        ))}
+                      </div>
+                    </section>
+
+                    <section>
+                      <h3 className="text-lg font-bold text-gray-700 mb-4">الطاولة</h3>
+                      <h4 className="text-base font-bold text-gray-600 mb-3">التقديم</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-6">
+                        {TABLE_PIES_FORWARD.map(({ statKeys, label }, i) => (
+                          <PieCard key={i} statKeys={[...statKeys]} label={label} />
+                        ))}
+                      </div>
+                      <h4 className="text-base font-bold text-gray-600 mb-3">التأخير</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {TABLE_PIES_DOWNGRADE.map(({ statKeys, label }, i) => (
+                          <PieCard key={i} statKeys={[...statKeys]} label={label} />
+                        ))}
+                      </div>
+                    </section>
+                  </div>
+                );
+              })()
+            )}
+          </div>
+        )}
+        {activeTab === 'workersActivity' && (
+          <div className="w-full max-w-5xl mx-auto p-4 space-y-8">
+            {userType === 'admin' && (
+              <>
+                <h2 className="text-2xl font-bold text-gray-800">نشاط العاملين</h2>
+                {!isPlanActive('business') && (
+                  <p className="text-gray-500 text-sm">تفاصيل النشاط والإحصائيات واللوجات متاحة ضمن باقة البزنس فقط.</p>
+                )}
+                {workersActivityListLoading ? (
+                  <p className="text-gray-500">جاري تحميل القائمة...</p>
+                ) : (
+                  <>
+                    <div className="flex flex-col gap-3">
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <span className="text-sm font-medium text-gray-600">الفئة:</span>
+                        {([
+                          { value: 'all', label: 'الكل' },
+                          { value: 'delivery', label: 'عامل توصيل' },
+                          { value: 'deliveryOnly', label: 'عامل توصيل فقط' },
+                          { value: 'waiter', label: 'نادل' },
+                          { value: 'waiterOnly', label: 'نادل فقط' },
+                        ] as const).map(({ value: role, label }) => (
+                          <button
+                            key={role}
+                            type="button"
+                            onClick={() => {
+                              setWorkersActivityRoleFilter(role);
+                              setWorkersActivityPage(1);
+                            }}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                              workersActivityRoleFilter === role
+                                ? role === 'all'
+                                  ? 'bg-gray-800 text-white'
+                                  : role === 'delivery' || role === 'deliveryOnly'
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-amber-600 text-white'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+                        <input
+                          type="search"
+                          placeholder="بحث بالاسم أو اسم المستخدم أو رقم الهاتف..."
+                          value={workersActivitySearchQuery}
+                          onChange={(e) => {
+                            setWorkersActivitySearchQuery(e.target.value);
+                            setWorkersActivityPage(1);
+                          }}
+                          className="flex-1 min-w-0 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800"
+                        />
+                      </div>
+                    </div>
+                    {(() => {
+                      const q = workersActivitySearchQuery.trim().toLowerCase();
+                      const byRole =
+                        workersActivityRoleFilter === 'all'
+                          ? workersActivityList
+                          : workersActivityRoleFilter === 'delivery'
+                            ? workersActivityList.filter((w) => w.isDelivery)
+                            : workersActivityRoleFilter === 'deliveryOnly'
+                              ? workersActivityList.filter((w) => w.isDelivery && !w.isWaiter)
+                              : workersActivityRoleFilter === 'waiterOnly'
+                                ? workersActivityList.filter((w) => w.isWaiter && !w.isDelivery)
+                                : workersActivityList.filter((w) => w.isWaiter);
+                      const filtered = q
+                        ? byRole.filter(
+                            (w) =>
+                              (w.name || '').toLowerCase().includes(q) ||
+                              (w.username || '').toLowerCase().includes(q) ||
+                              (w.phone || '').toLowerCase().includes(q)
+                          )
+                        : byRole;
+                      type CardWithRank = WorkerCard & { _rank?: number };
+                      let ordered: CardWithRank[] = filtered.map((w) => ({ ...w, _rank: undefined as number | undefined }));
+                      if (employeeRatingSettings.enableEmployeeRating && filtered.length > 0) {
+                        const rs = employeeRatingSettings;
+                        const roleFilter = workersActivityRoleFilter;
+                        const withScore = filtered.map((w): CardWithRank & { _S: number; _R: number; _S_norm: number; _R_norm: number; _FinalScoreToRank: number } => {
+                          const pointsDelivery = (rs.scaleDeliveryForward ?? 0) * (w.deliveryForward ?? 0) + (rs.scaleDeliveryBackward ?? 0) * (w.deliveryDowngrade ?? 0);
+                          const pointsTable = (rs.scaleTableForward ?? 0) * (w.tableForward ?? 0) + (rs.scaleTableBackward ?? 0) * (w.tableDowngrade ?? 0);
+                          const days = w.createdAt ? Math.max(1, Math.ceil((Date.now() - new Date(w.createdAt).getTime()) / 86400000)) : 1;
+                          const STotal = pointsDelivery + pointsTable;
+                          const RTotal = STotal / days;
+                          const SDelivery = pointsDelivery;
+                          const RDelivery = pointsDelivery / days;
+                          const STable = pointsTable;
+                          const RTable = pointsTable / days;
+                          const useDelivery = roleFilter === 'delivery' || roleFilter === 'deliveryOnly';
+                          const useWaiter = roleFilter === 'waiter' || roleFilter === 'waiterOnly';
+                          const S = useDelivery ? SDelivery : useWaiter ? STable : STotal;
+                          const R = useDelivery ? RDelivery : useWaiter ? RTable : RTotal;
+                          return { ...w, _S: S, _R: R, _S_norm: 0, _R_norm: 0, _FinalScoreToRank: 0, _rank: undefined };
+                        });
+                        const maxS = Math.max(...withScore.map((x) => x._S), 1);
+                        const maxR = Math.max(...withScore.map((x) => x._R), 1);
+                        withScore.forEach((x) => {
+                          x._S_norm = x._S / maxS;
+                          x._R_norm = x._R / maxR;
+                          x._FinalScoreToRank = (1 - rs.tendencyX) * x._S_norm + rs.tendencyX * x._R_norm;
+                        });
+                        const adminId = currentAdmin?.id;
+                        const sorted = [...withScore].sort((a, b) => {
+                          if (a.id === adminId) return -1;
+                          if (b.id === adminId) return 1;
+                          return b._FinalScoreToRank - a._FinalScoreToRank;
+                        });
+                        let rank = 0;
+                        ordered = sorted.map((w) => (w.id === adminId ? { ...w, _rank: 0 } : { ...w, _rank: ++rank }));
+                      }
+                      const totalPages = Math.max(1, Math.ceil(ordered.length / WORKERS_ACTIVITY_PAGE_SIZE));
+                      const page = Math.min(workersActivityPage, totalPages);
+                      const start = (page - 1) * WORKERS_ACTIVITY_PAGE_SIZE;
+                      const paginated = ordered.slice(start, start + WORKERS_ACTIVITY_PAGE_SIZE);
+                      return (
+                        <>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {paginated.map((w) => (
+                              <button
+                                key={w.id}
+                                type="button"
+                                onClick={() => {
+                                  setExpandedWorkerId(w.id);
+                                  setTimeout(() => workerDetailsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+                                }}
+                                className="bg-white rounded-xl shadow border border-gray-100 p-4 text-center hover:bg-gray-50 transition-colors relative"
+                              >
+                                <div className="relative inline-block mb-3">
+                                  {w.imageUrl ? (
+                                    <img src={w.imageUrl} alt="" className="w-20 h-20 rounded-full object-cover border border-gray-200" />
+                                  ) : (
+                                    <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 text-2xl font-bold border border-gray-200">
+                                      {(w.name || w.id).charAt(0)}
+                                    </div>
+                                  )}
+                                  {w.id === currentAdmin?.id ? (
+                                    <span className="absolute bottom-0 left-0 w-6 h-6 rounded-full bg-amber-500 text-white flex items-center justify-center ring-2 ring-white shadow">
+                                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M5 16L3 5l5.5 5.5L12 4l3.5 6.5L21 5l-2 11H5zm14 2c0 .55-.45 1-1 1H6c-.55 0-1-.45-1-1s.45-1 1-1h12c.55 0 1 .45 1 1z"/></svg>
+                                    </span>
+                                  ) : (w as CardWithRank)._rank != null && workersActivityRoleFilter !== 'deliveryOnly' && workersActivityRoleFilter !== 'waiterOnly' && (() => {
+                                    const r = (w as CardWithRank)._rank!;
+                                    const bg = r === 1 ? 'bg-amber-400' : r === 2 ? 'bg-gray-300' : r === 3 ? 'bg-amber-700' : 'bg-gray-800';
+                                    const textColor = r === 2 ? 'text-gray-800' : 'text-white';
+                                    return (
+                                      <span className={`absolute bottom-0 left-0 w-6 h-6 rounded-full ${bg} ${textColor} text-xs font-bold flex items-center justify-center ring-2 ring-white shadow`}>
+                                        {r}
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
+                                <p className="font-bold text-gray-800 truncate mb-3 block w-full text-center">{w.name || w.id}</p>
+                                {employeeRatingSettings.enableEmployeeRating && (w as CardWithRank & { _S?: number; _R?: number })._S != null ? (() => {
+                                  const rs = employeeRatingSettings;
+                                  const pointsDelivery = (rs.scaleDeliveryForward ?? 0) * (w.deliveryForward ?? 0) + (rs.scaleDeliveryBackward ?? 0) * (w.deliveryDowngrade ?? 0);
+                                  const pointsTable = (rs.scaleTableForward ?? 0) * (w.tableForward ?? 0) + (rs.scaleTableBackward ?? 0) * (w.tableDowngrade ?? 0);
+                                  const days = w.createdAt ? Math.max(1, Math.ceil((Date.now() - new Date(w.createdAt).getTime()) / 86400000)) : 1;
+                                  const efficiencyDelivery = pointsDelivery / days;
+                                  const efficiencyTable = pointsTable / days;
+                                  const fmt = (n: number) => (n % 1 === 0 ? String(n) : n.toFixed(1));
+                                  const S = (w as CardWithRank & { _S: number })._S;
+                                  const R = (w as CardWithRank & { _R: number })._R;
+                                  return (
+                                    <div className="space-y-3 text-center">
+                                      <div className="flex flex-wrap gap-1.5 justify-center">
+                                        <span className={`inline-flex flex-col items-center px-2 py-1 rounded-lg text-[10px] font-medium min-w-[3.5rem] leading-tight ${w.isDelivery ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-400'}`}>
+                                          <span>توصيل</span>
+                                          <span className="text-sm font-bold mt-0.5">{w.deliveryForward ?? '—'}</span>
+                                          <span className="text-[9px] text-gray-500 mt-0">{w.deliveryDowngrade ?? '—'}</span>
+                                        </span>
+                                        <span className={`inline-flex flex-col items-center px-2 py-1 rounded-lg text-[10px] font-medium min-w-[3.5rem] leading-tight ${w.isWaiter ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-400'}`}>
+                                          <span>نادل</span>
+                                          <span className="text-sm font-bold mt-0.5">{w.tableForward ?? '—'}</span>
+                                          <span className="text-[9px] text-gray-500 mt-0">{w.tableDowngrade ?? '—'}</span>
+                                        </span>
+                                      </div>
+                                      <div className="space-y-1 text-xs text-gray-600">
+                                        <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5">
+                                          <span className="text-gray-500 font-medium">النقاط:</span>
+                                          <span className="font-semibold text-gray-800">{fmt(S)}</span>
+                                          <span className="text-gray-400">·</span>
+                                          <span className="font-semibold text-blue-700">{fmt(pointsDelivery)}</span>
+                                          <span className="text-gray-400">·</span>
+                                          <span className="font-semibold text-amber-700">{fmt(pointsTable)}</span>
+                                        </p>
+                                        <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5">
+                                          <span className="text-gray-500 font-medium">الكفاءة:</span>
+                                          <span className="font-semibold text-gray-800">{Math.round(R)}</span>
+                                          <span className="text-gray-400">·</span>
+                                          <span className="font-semibold text-blue-700">{Math.round(efficiencyDelivery)}</span>
+                                          <span className="text-gray-400">·</span>
+                                          <span className="font-semibold text-amber-700">{Math.round(efficiencyTable)}</span>
+                                        </p>
+                                      </div>
+                                    </div>
+                                  );
+                                })() : (
+                                  <div className="flex flex-wrap gap-1 justify-center">
+                                    <span className={`inline-flex flex-col items-center px-1 py-0.5 rounded text-[10px] font-medium min-w-[3rem] leading-tight ${w.isWaiter ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-400'}`}>
+                                      <span>نادل</span>
+                                      <span className="text-sm font-bold mt-0">{w.tableForward ?? '—'}</span>
+                                      <span className="text-[9px] text-left w-full text-gray-500 mt-0">{w.tableDowngrade ?? '—'}</span>
+                                    </span>
+                                    <span className={`inline-flex flex-col items-center px-1 py-0.5 rounded text-[10px] font-medium min-w-[3rem] leading-tight ${w.isDelivery ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-400'}`}>
+                                      <span>توصيل</span>
+                                      <span className="text-sm font-bold mt-0">{w.deliveryForward ?? '—'}</span>
+                                      <span className="text-[9px] text-left w-full text-gray-500 mt-0">{w.deliveryDowngrade ?? '—'}</span>
+                                    </span>
+                                  </div>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                          {ordered.length > WORKERS_ACTIVITY_PAGE_SIZE && (
+                            <div className="mt-6 flex justify-center items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setWorkersActivityPage((p) => Math.max(1, p - 1))}
+                                disabled={page <= 1}
+                                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                السابق
+                              </button>
+                              <div className="flex gap-1 overflow-x-auto max-w-[200px] md:max-w-none scrollbar-hide">
+                                {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                                  <button
+                                    key={p}
+                                    type="button"
+                                    onClick={() => setWorkersActivityPage(p)}
+                                    className={`px-3 py-2 rounded-lg font-semibold transition flex-shrink-0 ${page === p ? 'bg-gray-800 text-white shadow-md' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+                                  >
+                                    {p}
+                                  </button>
+                                ))}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setWorkersActivityPage((p) => Math.min(totalPages, p + 1))}
+                                disabled={page >= totalPages}
+                                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                التالي
+                              </button>
+                            </div>
+                          )}
+                          {/* فورم تقييم وترتيب العاملين - أسفل الليست، باقة البزنس فقط */}
+                          {isPlanActive('business') && (
+                            <div className="border-2 border-amber-200 bg-amber-50/50 rounded-xl p-6 mt-8">
+                              <label className="flex items-center gap-3 cursor-pointer mb-4">
+                                <input
+                                  type="checkbox"
+                                  checked={employeeRatingSettings.enableEmployeeRating}
+                                  onChange={(e) => setEmployeeRatingSettings({ ...employeeRatingSettings, enableEmployeeRating: e.target.checked })}
+                                  className="w-5 h-5 text-gray-600 border-gray-300 rounded focus:ring-gray-500"
+                                />
+                                <span className="font-bold text-gray-800">تفعيل تقييم العاملين</span>
+                              </label>
+                              {employeeRatingSettings.enableEmployeeRating && (
+                                <div className="space-y-6 mr-2">
+                                  <p className="text-sm text-gray-600">كيف ترى كل نوع من التحويلات؟</p>
+                                  {[
+                                    { key: 'scaleDeliveryForward' as const, label: 'تقديم حالة طلب التوصيل للأمام' },
+                                    { key: 'scaleDeliveryBackward' as const, label: 'تأخير حالة طلب التوصيل للخلف' },
+                                    { key: 'scaleTableForward' as const, label: 'تقديم حالة طلب الطاولة للأمام' },
+                                    { key: 'scaleTableBackward' as const, label: 'تأخير حالة طلب الطاولة للخلف' },
+                                  ].map(({ key, label }) => {
+                                    const opts = [{ v: 2, l: 'جيد جداً' }, { v: 1, l: 'جيد' }, { v: 0, l: 'شيء عادي' }, { v: -1, l: 'سئ' }, { v: -2, l: 'سئ جداً' }] as const;
+                                    return (
+                                      <div key={key} className="space-y-1">
+                                        <label className="block text-sm font-bold text-gray-700">{label}</label>
+                                        <div className="flex px-1">
+                                          {opts.map(({ l }) => (
+                                            <span key={l} className="flex-1 text-center text-xs text-gray-600">{l}</span>
+                                          ))}
+                                        </div>
+                                        <div className="relative flex px-1 py-3">
+                                          <div className="absolute left-[10%] right-[10%] top-1/2 h-0.5 bg-gray-200 rounded -translate-y-1/2" aria-hidden />
+                                          {opts.map(({ v, l }) => (
+                                            <div key={v} className="flex-1 flex justify-center">
+                                              <button
+                                                type="button"
+                                                onClick={() => setEmployeeRatingSettings({ ...employeeRatingSettings, [key]: v })}
+                                                className={`relative z-10 w-5 h-5 rounded-full shrink-0 transition ${employeeRatingSettings[key] === v ? 'bg-gray-800 ring-2 ring-gray-800 ring-offset-2' : 'bg-white ring-2 ring-gray-300 hover:ring-gray-400'}`}
+                                                title={l}
+                                              />
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                  <div className="pt-4 mt-4 border-t border-amber-200/80 space-y-1">
+                                    <label className="block text-sm font-bold text-gray-700">إلى من تميل أكثر؟</label>
+                                    <div className="flex px-1 mb-1">
+                                      <span className="flex-1 text-center text-xs text-gray-500">موظف قديم راكد  (النقاط)</span>
+                                      <span className="flex-1 text-center text-xs text-gray-500" />
+                                      <span className="flex-1 text-center text-xs text-gray-500" />
+                                      <span className="flex-1 text-center text-xs text-gray-500" />
+                                      <span className="flex-1 text-center text-xs text-gray-500">موظف جديد نشيط (الكفاءة)</span>
+                                    </div>
+                                    <div className="relative flex px-1 py-3">
+                                      <div className="absolute left-[10%] right-[10%] top-1/2 h-0.5 bg-amber-200 rounded -translate-y-1/2" aria-hidden />
+                                      {([{ v: 0, l: 'قديم' }, { v: 0.25, l: 'أقرب لقديم' }, { v: 0.5, l: 'متوسط' }, { v: 0.75, l: 'أقرب لجديد' }, { v: 1, l: 'جديد' }] as const).map(({ v, l }) => (
+                                        <div key={v} className="flex-1 flex justify-center">
+                                          <button
+                                            type="button"
+                                            onClick={() => setEmployeeRatingSettings({ ...employeeRatingSettings, tendencyX: v })}
+                                            className={`relative z-10 w-5 h-5 rounded-full shrink-0 transition ${employeeRatingSettings.tendencyX === v ? 'bg-amber-600 ring-2 ring-amber-600 ring-offset-2' : 'bg-white ring-2 ring-amber-200 hover:ring-amber-300'}`}
+                                            title={l}
+                                          />
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                              <button
+                                type="button"
+                                onClick={handleSaveRatingSettings}
+                                disabled={isSavingRatingSettings}
+                                className="mt-6 w-full py-3 px-4 rounded-xl font-bold bg-gray-800 text-white hover:bg-gray-900 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {isSavingRatingSettings ? 'جاري الحفظ...' : 'حفظ إعدادات التقييم'}
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </>
+                )}
+              </>
+            )}
+
+            {userType === 'employee' && !isPlanActive('business') && (
+              <p className="text-gray-500 text-sm">تفاصيل النشاط والإحصائيات واللوجات متاحة ضمن باقة البزنس فقط.</p>
+            )}
+
+            {/* شريط النقاط / الكفاءة / الترتيب — للموظف فقط، 3 دوائر في المنتصف */}
+            {userType === 'employee' && (
+              <div className="pt-2 pb-2 flex justify-center">
+                {employeeRatingInfoLoading ? (
+                  <p className="text-gray-500 text-sm">جاري تحميل التقييم...</p>
+                ) : employeeRatingInfo?.enabled ? (
+                  <div className="flex flex-wrap gap-6 sm:gap-8 items-center justify-center">
+                    {(() => {
+                      const rankCircleClass = (r: number) =>
+                        r === 1
+                          ? 'bg-gradient-to-br from-amber-300 via-amber-400 to-amber-600 text-amber-950 ring-2 ring-amber-200/90 shadow-md'
+                          : r === 2
+                            ? 'bg-gradient-to-br from-slate-200 via-slate-300 to-slate-500 text-slate-800 ring-2 ring-slate-200/80 shadow-md'
+                            : r === 3
+                              ? 'bg-gradient-to-br from-amber-600 via-amber-700 to-amber-800 text-amber-50 ring-2 ring-amber-500/50 shadow-md'
+                              : 'bg-slate-600 text-white ring-2 ring-slate-400/50 shadow-sm';
+                      return (
+                        <>
+                          {/* النقاط — دائرة */}
+                          <div className="flex flex-col items-center">
+                            <span className="text-slate-500 text-xs font-medium mb-2">النقاط</span>
+                            <div className="w-14 h-14 rounded-full flex items-center justify-center bg-slate-100 border border-slate-200/80 shadow-sm">
+                              <span className="text-lg font-bold text-slate-800 tabular-nums">
+                                {typeof employeeRatingInfo.points === 'number'
+                                  ? (employeeRatingInfo.points % 1 === 0 ? employeeRatingInfo.points : employeeRatingInfo.points.toFixed(1))
+                                  : '—'}
+                              </span>
+                            </div>
+                          </div>
+                          {/* الكفاءة — دائرة */}
+                          <div className="flex flex-col items-center">
+                            <span className="text-slate-500 text-xs font-medium mb-2">الكفاءة</span>
+                            <div className="w-14 h-14 rounded-full flex items-center justify-center bg-slate-100 border border-slate-200/80 shadow-sm">
+                              <span className="text-lg font-bold text-slate-800 tabular-nums">
+                                {typeof employeeRatingInfo.efficiency === 'number' ? Math.round(employeeRatingInfo.efficiency) : '—'}
+                              </span>
+                            </div>
+                          </div>
+                          {/* الترتيب العام — دائرة # */}
+                          <div className="flex flex-col items-center">
+                            <span className="text-slate-500 text-xs font-medium mb-2">الترتيب</span>
+                            {typeof employeeRatingInfo.rank === 'number' ? (
+                              <div className={`w-14 h-14 rounded-full flex items-center justify-center text-base font-bold ${rankCircleClass(employeeRatingInfo.rank)}`}>
+                                #{employeeRatingInfo.rank}
+                              </div>
+                            ) : (
+                              <div className="w-14 h-14 rounded-full flex items-center justify-center bg-slate-100 border border-slate-200/80">
+                                <span className="text-slate-400 font-semibold">—</span>
+                              </div>
+                            )}
+                          </div>
+                          {/* ترتيب التوصيل — دائرة # (إن وُجد) */}
+                          {typeof employeeRatingInfo.rankAmongDelivery === 'number' && (
+                            <div className="flex flex-col items-center">
+                              <span className="text-slate-500 text-xs font-medium mb-2">ترتيب التوصيل</span>
+                              <div className={`w-14 h-14 rounded-full flex items-center justify-center text-base font-bold ${rankCircleClass(employeeRatingInfo.rankAmongDelivery)}`}>
+                                #{employeeRatingInfo.rankAmongDelivery}
+                              </div>
+                            </div>
+                          )}
+                          {/* ترتيب الندلاء — دائرة # (إن وُجد) */}
+                          {typeof employeeRatingInfo.rankAmongWaiters === 'number' && (
+                            <div className="flex flex-col items-center">
+                              <span className="text-slate-500 text-xs font-medium mb-2">ترتيب الندلاء</span>
+                              <div className={`w-14 h-14 rounded-full flex items-center justify-center text-base font-bold ${rankCircleClass(employeeRatingInfo.rankAmongWaiters)}`}>
+                                #{employeeRatingInfo.rankAmongWaiters}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            <div ref={workerDetailsRef} className="min-h-[200px] pt-4">
+              {expandedWorkerId && (
+                <div className="bg-white rounded-xl shadow border border-gray-100 p-6 space-y-6">
+                  {expandedWorkerLoading ? (
+                    <p className="text-gray-500">جاري تحميل التفاصيل...</p>
+                  ) : (
+                    <>
+                      {expandedWorkerProfile && (
+                        <div className="border-b border-gray-100 pb-4">
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                            {/* الصورة أولاً */}
+                            <div className="flex items-center justify-center shrink-0">
+                              {(expandedWorkerProfile.imageUrl as string) ? (
+                                <img src={expandedWorkerProfile.imageUrl as string} alt="" className="w-20 h-20 rounded-full object-cover border-2 border-gray-200" />
+                              ) : (
+                                <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center border-2 border-gray-200">
+                                  <svg className="w-10 h-10 text-gray-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex flex-col gap-2 min-w-0">
+                              {/* الاسم (اسم المستخدم بين قوسين) */}
+                              <div className="flex items-center gap-2">
+                                <svg className="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                                <span className="text-lg font-bold text-gray-800">{String(expandedWorkerProfile.name ?? expandedWorkerId)} <span className="text-gray-500 font-normal">({String(expandedWorkerProfile.username ?? '—')})</span></span>
+                              </div>
+                              {/* رقم الهاتف إن وجد */}
+                              {expandedWorkerProfile.phone ? (
+                                <div className="flex items-center gap-2">
+                                  <svg className="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                                  <span className="text-sm text-gray-600">{String(expandedWorkerProfile.phone)}</span>
+                                </div>
+                              ) : null}
+                              {/* منذ + التاريخ */}
+                              {expandedWorkerProfile.createdAt ? (
+                                <div className="flex items-center gap-2">
+                                  <svg className="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                  <span className="text-sm text-gray-600">منذ {new Date(String(expandedWorkerProfile.createdAt)).toLocaleDateString('ar-SA', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                                </div>
+                              ) : null}
+                              {/* طلبات التوصيل المعينة إن وجدت وليست صفراً */}
+                              {isPlanActive('business') && expandedWorkerStats != null && Number(expandedWorkerStats.deliveryAssignedCount) > 0 && (
+                                <div className="flex items-center gap-2">
+                                  <svg className="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                                  <span className="text-sm text-gray-600">طلبات توصيل معينة: <span className="font-semibold text-gray-800">{Number(expandedWorkerStats.deliveryAssignedCount)}</span></span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {isPlanActive('business') && expandedWorkerStats && (
+                        <>
+                          {(() => {
+                            const DEL_LABELS = ['جديد', 'مقروء', 'قيد التوصيل', 'تم'];
+                            const TBL_LABELS = ['جديد', 'مقروء', 'تم التقديم', 'تم'];
+                            const forwardPairs: [number, number][] = [[1, 2], [1, 3], [1, 4], [2, 3], [2, 4], [3, 4]];
+                            const downgradePairs: [number, number][] = [[4, 3], [4, 2], [4, 1], [3, 2], [3, 1], [2, 1]];
+                            const forwardKeys = ['Forward12', 'Forward13', 'Forward14', 'Forward23', 'Forward24', 'Forward34'];
+                            const downgradeKeys = ['Downgrade43', 'Downgrade42', 'Downgrade41', 'Downgrade32', 'Downgrade31', 'Downgrade21'];
+                            const stateX = (i: number) => 12.5 + (4 - i) * 25;
+                            const ArrowDiagram = ({ title, labels, prefix }: { title: string; labels: string[]; prefix: 'delivery' | 'table' }) => {
+                              const w = 100;
+                              const hTop = 38;
+                              const hBottom = 38;
+                              const yBaseTop = 38;
+                              const yBaseBottom = 52;
+                              const totalH = 100;
+                              const viewY = 2;
+                              const viewH = 84;
+                              const strokeWidth = 0.45;
+                              const circleR = 2;
+                              const bulge1 = 8;
+                              const bulge2 = 19;
+                              const bulge3 = 30;
+                              const getYCurveTop = (dist: number) => {
+                                if (dist === 1) return yBaseTop - bulge1;
+                                if (dist === 2) return yBaseTop - bulge2;
+                                return yBaseTop - bulge3;
+                              };
+                              const getYCurveBottom = (dist: number) => {
+                                if (dist === 1) return yBaseBottom + bulge1;
+                                if (dist === 2) return yBaseBottom + bulge2;
+                                return yBaseBottom + bulge3;
+                              };
+                              const colorForward = '#0d9488';
+                              const colorDowngrade = '#64748b';
+                              return (
+                                <div className="rounded-xl bg-slate-50/80 border border-slate-200/90 overflow-hidden shadow-sm">
+                                  <h4 className="text-slate-600 font-semibold text-sm mb-1 px-3 pt-2">{title}</h4>
+                                  <div className="relative w-full px-1 pb-1" style={{ minHeight: 130 }}>
+                                    <svg className="w-full block" viewBox={`0 ${viewY} ${w} ${viewH}`} preserveAspectRatio="xMidYMid meet" style={{ minHeight: 130 }}>
+                                      <defs>
+                                        <marker id={`arrow-${prefix}-f`} markerWidth="4" markerHeight="4" refX="3" refY="2" orient="auto">
+                                          <path d="M0,0 L4,2 L0,4 Z" fill={colorForward} />
+                                        </marker>
+                                        <marker id={`arrow-${prefix}-d`} markerWidth="4" markerHeight="4" refX="3" refY="2" orient="auto">
+                                          <path d="M0,0 L4,2 L0,4 Z" fill={colorDowngrade} />
+                                        </marker>
+                                      </defs>
+                                      {forwardPairs.map(([from, to], idx) => {
+                                        const key = `${prefix}${forwardKeys[idx]}`;
+                                        const value = Number(expandedWorkerStats[key]) || 0;
+                                        const dist = to - from;
+                                        const x1 = stateX(from);
+                                        const x2 = stateX(to);
+                                        const xm = (x1 + x2) / 2;
+                                        const yCurve = getYCurveTop(dist);
+                                        const yBase = yBaseTop;
+                                        const path = `M ${x1} ${yBase} Q ${xm} ${yCurve} ${x2} ${yBase}`;
+                                        const yCircle = (yBase + yCurve) / 2;
+                                        return (
+                                          <g key={key}>
+                                            <path d={path} fill="none" stroke={colorForward} strokeWidth={strokeWidth} markerEnd={`url(#arrow-${prefix}-f)`} />
+                                            <circle cx={xm} cy={yCircle} r={circleR} fill="white" stroke={colorForward} strokeWidth={0.4} opacity={0.95} />
+                                            <text x={xm} y={yCircle} textAnchor="middle" dominantBaseline="central" fontSize="2.3" fill="#475569" fontWeight="600">{value}</text>
+                                          </g>
+                                        );
+                                      })}
+                                      {downgradePairs.map(([from, to], idx) => {
+                                        const key = `${prefix}${downgradeKeys[idx]}`;
+                                        const value = Number(expandedWorkerStats[key]) || 0;
+                                        const dist = from - to;
+                                        const x1 = stateX(from);
+                                        const x2 = stateX(to);
+                                        const xm = (x1 + x2) / 2;
+                                        const yCurve = getYCurveBottom(dist);
+                                        const yBase = yBaseBottom;
+                                        const path = `M ${x1} ${yBase} Q ${xm} ${yCurve} ${x2} ${yBase}`;
+                                        const yCircle = (yBase + yCurve) / 2;
+                                        return (
+                                          <g key={key}>
+                                            <path d={path} fill="none" stroke={colorDowngrade} strokeWidth={strokeWidth} markerEnd={`url(#arrow-${prefix}-d)`} />
+                                            <circle cx={xm} cy={yCircle} r={circleR} fill="white" stroke={colorDowngrade} strokeWidth={0.4} opacity={0.95} />
+                                            <text x={xm} y={yCircle} textAnchor="middle" dominantBaseline="central" fontSize="2.3" fill="#475569" fontWeight="600">{value}</text>
+                                          </g>
+                                        );
+                                      })}
+                                    </svg>
+                                    <div className="absolute inset-x-0 flex justify-between px-[8%] gap-1" dir="rtl" style={{ top: '50%', transform: 'translateY(-50%)', marginTop: '-2px' }}>
+                                      {labels.map((name, i) => (
+                                        <span key={i} className="text-center text-[15px] font-medium text-slate-600 flex-1 bg-white/95 rounded-md px-2 py-1 border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.04)]" style={{ maxWidth: '24%' }}>{name}</span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            };
+                            return (
+                              <>
+                                <div className="space-y-4">
+                                  <ArrowDiagram title="التوصيل" labels={DEL_LABELS} prefix="delivery" />
+                                  <h4 className="font-bold text-gray-700 mb-2">لوجات التوصيل</h4>
+                                  <div className="overflow-x-auto rounded-lg border border-slate-200/90 bg-white/80 shadow-sm">
+                                    {(expandedWorkerDeliveryLogs.logs as { orderId?: string; fromStatus?: number; toStatus?: number; createdAt?: string }[])?.length ? (
+                                      <table className="w-full text-sm">
+                                        <thead><tr className="bg-slate-50/90 border-b border-slate-200"><th className="p-2 text-right">الطلب</th><th className="p-2 text-right">من</th><th className="p-2 text-right">إلى</th><th className="p-2 text-right">الوقت</th></tr></thead>
+                                        <tbody>
+                                          {(expandedWorkerDeliveryLogs.logs as { orderId?: string; fromStatus?: number; toStatus?: number; createdAt?: string }[]).map((log, i) => {
+                                            const DEL_L: Record<number, string> = { 1: 'جديد', 2: 'مقروء', 3: 'قيد التوصيل', 4: 'تم' };
+                                            const fromL = DEL_L[log.fromStatus ?? 1] ?? String(log.fromStatus);
+                                            const toL = DEL_L[log.toStatus ?? 1] ?? String(log.toStatus);
+                                            const isForward = (log.toStatus ?? 0) > (log.fromStatus ?? 0);
+                                            return (
+                                              <tr key={i} className={`border-b border-slate-100 last:border-0 ${isForward ? 'bg-teal-200/85' : 'bg-slate-300/80'}`}>
+                                                <td className="p-2 text-sm text-gray-700">{String(log.orderId || '').replace('order_', '')}</td>
+                                                <td className="p-2 text-sm text-gray-700">{fromL}</td>
+                                                <td className="p-2 text-sm text-gray-700">{toL}</td>
+                                                <td className="p-2 text-sm text-slate-500">{log.createdAt ? new Date(log.createdAt).toLocaleString('ar-SA') : ''}</td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    ) : (
+                                      <p className="p-4 text-center text-slate-500 text-sm">لا يوجد</p>
+                                    )}
+                                  </div>
+                                  {expandedWorkerDeliveryLogs.total > expandedWorkerDeliveryLogs.limit && (
+                                    <div className="mt-6 flex justify-center items-center gap-2">
+                                      <button type="button" disabled={expandedWorkerDeliveryLogs.page <= 1} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => fetchExpandedWorkerDetails(expandedWorkerId!, expandedWorkerDeliveryLogs.page - 1, expandedWorkerTableLogs.page, true)}>السابق</button>
+                                      <div className="flex gap-1 overflow-x-auto max-w-[200px] md:max-w-none scrollbar-hide">
+                                        {Array.from({ length: Math.ceil(expandedWorkerDeliveryLogs.total / expandedWorkerDeliveryLogs.limit) || 1 }, (_, i) => i + 1).map(page => (
+                                          <button key={page} type="button" onClick={() => fetchExpandedWorkerDetails(expandedWorkerId!, page, expandedWorkerTableLogs.page, true)} className={`px-3 py-2 rounded-lg font-semibold transition flex-shrink-0 ${expandedWorkerDeliveryLogs.page === page ? 'bg-gray-800 text-white shadow-md' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>{page}</button>
+                                        ))}
+                                      </div>
+                                      <button type="button" disabled={expandedWorkerDeliveryLogs.page >= Math.ceil(expandedWorkerDeliveryLogs.total / expandedWorkerDeliveryLogs.limit)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => fetchExpandedWorkerDetails(expandedWorkerId!, expandedWorkerDeliveryLogs.page + 1, expandedWorkerTableLogs.page, true)}>التالي</button>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="space-y-4">
+                                  <ArrowDiagram title="الطاولة" labels={TBL_LABELS} prefix="table" />
+                                  <h4 className="font-bold text-gray-700 mb-2">لوجات الطاولة</h4>
+                                  <div className="overflow-x-auto rounded-lg border border-slate-200/90 bg-white/80 shadow-sm">
+                                    {(expandedWorkerTableLogs.logs as { orderId?: string; fromStatus?: number; toStatus?: number; createdAt?: string }[])?.length ? (
+                                      <table className="w-full text-sm">
+                                        <thead><tr className="bg-slate-50/90 border-b border-slate-200"><th className="p-2 text-right">الطلب</th><th className="p-2 text-right">من</th><th className="p-2 text-right">إلى</th><th className="p-2 text-right">الوقت</th></tr></thead>
+                                        <tbody>
+                                          {(expandedWorkerTableLogs.logs as { orderId?: string; fromStatus?: number; toStatus?: number; createdAt?: string }[]).map((log, i) => {
+                                            const TBL_L: Record<number, string> = { 1: 'جديد', 2: 'مقروء', 3: 'تم التقديم', 4: 'تم' };
+                                            const fromL = TBL_L[log.fromStatus ?? 1] ?? String(log.fromStatus);
+                                            const toL = TBL_L[log.toStatus ?? 1] ?? String(log.toStatus);
+                                            const isForward = (log.toStatus ?? 0) > (log.fromStatus ?? 0);
+                                            return (
+                                              <tr key={i} className={`border-b border-slate-100 last:border-0 ${isForward ? 'bg-teal-200/85' : 'bg-slate-300/80'}`}>
+                                                <td className="p-2 text-sm text-gray-700">{String(log.orderId || '').replace('table_order_', '')}</td>
+                                                <td className="p-2 text-sm text-gray-700">{fromL}</td>
+                                                <td className="p-2 text-sm text-gray-700">{toL}</td>
+                                                <td className="p-2 text-sm text-slate-500">{log.createdAt ? new Date(log.createdAt).toLocaleString('ar-SA') : ''}</td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    ) : (
+                                      <p className="p-4 text-center text-slate-500 text-sm">لا يوجد</p>
+                                    )}
+                                  </div>
+                                  {expandedWorkerTableLogs.total > expandedWorkerTableLogs.limit && (
+                                    <div className="mt-6 flex justify-center items-center gap-2">
+                                      <button type="button" disabled={expandedWorkerTableLogs.page <= 1} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => fetchExpandedWorkerDetails(expandedWorkerId!, expandedWorkerDeliveryLogs.page, expandedWorkerTableLogs.page - 1, true)}>السابق</button>
+                                      <div className="flex gap-1 overflow-x-auto max-w-[200px] md:max-w-none scrollbar-hide">
+                                        {Array.from({ length: Math.ceil(expandedWorkerTableLogs.total / expandedWorkerTableLogs.limit) || 1 }, (_, i) => i + 1).map(page => (
+                                          <button key={page} type="button" onClick={() => fetchExpandedWorkerDetails(expandedWorkerId!, expandedWorkerDeliveryLogs.page, page, true)} className={`px-3 py-2 rounded-lg font-semibold transition flex-shrink-0 ${expandedWorkerTableLogs.page === page ? 'bg-gray-800 text-white shadow-md' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>{page}</button>
+                                        ))}
+                                      </div>
+                                      <button type="button" disabled={expandedWorkerTableLogs.page >= Math.ceil(expandedWorkerTableLogs.total / expandedWorkerTableLogs.limit)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => fetchExpandedWorkerDetails(expandedWorkerId!, expandedWorkerDeliveryLogs.page, expandedWorkerTableLogs.page + 1, true)}>التالي</button>
+                                    </div>
+                                  )}
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         {activeTab === 'lists' && (
           <div className="grid md:grid-cols-3 gap-6">
             {/* قسم إدارة القوائم */}
@@ -2864,6 +4141,28 @@ function AdminPageContent() {
                   </p>
                 </div>
 
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    رقم الهاتف <span className="text-gray-400 font-normal">(اختياري)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={employeeFormData.phone}
+                    onChange={(e) => setEmployeeFormData({ ...employeeFormData, phone: e.target.value })}
+                    className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingEmployeeId ? 'focus:border-blue-500' : 'focus:border-green-500'}`}
+                    placeholder="مثال: 05xxxxxxxx"
+                  />
+                </div>
+
+                <ImageUploader
+                  ref={employeeImageUploadRef}
+                  deferUpload
+                  currentImageUrl={editingEmployeeId ? (employeeFormData.imageUrl !== undefined ? employeeFormData.imageUrl : (employees.find(e => e.id === editingEmployeeId) as any)?.imageUrl) : (employeeFormData.imageUrl ?? undefined)}
+                  onImageUploaded={(url) => setEmployeeFormData(prev => ({ ...prev, imageUrl: url }))}
+                  onUploadStateChange={setIsUploadingEmployeePhoto}
+                  label="صورة العامل (اختياري)"
+                />
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-2">
@@ -2929,17 +4228,19 @@ function AdminPageContent() {
                 <div className="flex gap-3">
                   <button
                     type="submit"
-                    className={`flex-1 py-3 px-4 rounded-lg font-bold text-lg transition-all duration-200 transform hover:scale-[1.02] shadow-lg text-white ${editingEmployeeId
+                    disabled={isUploadingEmployeePhoto || isSubmittingEmployee}
+                    className={`flex-1 py-3 px-4 rounded-lg font-bold text-lg transition-all duration-200 transform hover:scale-[1.02] shadow-lg text-white disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none ${editingEmployeeId
                       ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
                       : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700'
                       }`}
                   >
-                    {editingEmployeeId ? 'تحديث' : 'إضافة العامل'}
+                    {isUploadingEmployeePhoto ? 'جاري رفع الصورة...' : isSubmittingEmployee ? 'جاري الحفظ...' : editingEmployeeId ? 'تحديث' : 'إضافة العامل'}
                   </button>
                   {editingEmployeeId && (
                     <button
                       type="button"
                       onClick={handleCancelEditEmployee}
+                      disabled={isUploadingEmployeePhoto || isSubmittingEmployee}
                       className="px-6 py-3 rounded-lg font-bold text-lg transition-all duration-200 bg-gray-200 hover:bg-gray-300 text-gray-700"
                     >
                       إلغاء
@@ -2966,7 +4267,9 @@ function AdminPageContent() {
                     <table className="w-full">
                       <thead className="bg-gray-50">
                         <tr>
+                          <th className="text-center px-4 py-3 text-sm font-bold text-gray-700">الصورة</th>
                           <th className="text-right px-4 py-3 text-sm font-bold text-gray-700">الاسم</th>
+                          <th className="text-right px-4 py-3 text-sm font-bold text-gray-700">رقم الهاتف</th>
                           <th className="text-right px-4 py-3 text-sm font-bold text-gray-700">اسم المستخدم</th>
                           <th className="text-right px-4 py-3 text-sm font-bold text-gray-700">النوع</th>
                           <th className="text-center px-4 py-3 text-sm font-bold text-gray-700">إجراءات</th>
@@ -2975,7 +4278,15 @@ function AdminPageContent() {
                       <tbody>
                         {Array.from(new Map(employees.map(emp => [emp.id, emp])).values()).map((employee) => (
                           <tr key={employee.id} className={`border-t hover:bg-gray-50 ${editingEmployeeId === employee.id ? 'bg-blue-50' : ''}`}>
+                            <td className="px-4 py-3 text-center">
+                              {employee.imageUrl ? (
+                                <img src={employee.imageUrl} alt="" className="w-10 h-10 rounded-full object-cover border border-gray-200 mx-auto" />
+                              ) : (
+                                <span className="inline-flex w-10 h-10 rounded-full bg-gray-200 items-center justify-center text-gray-400 text-xs">—</span>
+                              )}
+                            </td>
                             <td className="px-4 py-3 text-gray-800 font-medium">{employee.name}</td>
+                            <td className="px-4 py-3 text-gray-500 text-sm">{employee.phone ?? '—'}</td>
                             <td className="px-4 py-3 text-gray-500 text-sm">{employee.username}</td>
                             <td className="px-4 py-3">
                               <div className="flex gap-2 flex-wrap">

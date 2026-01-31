@@ -44,6 +44,57 @@ export interface Admin {
   // Subscription Info
   plan: 'free' | 'basic' | 'pro' | 'business';
   subscriptionEndsAt?: string; // ISO Date string
+
+  // عدّادات الطلبات حسب المصدر والتعيين (لجميع الباقات)
+  websiteOrdersCount?: number;
+  whatsappOrdersCount?: number;
+  AnyDeliveryOrdersCount?: number;
+  WithoutDeliveryOrdersCount?: number;
+
+  // إحصائيات طلبات التوصيل والطاولة (باقة البزنس فقط): عدّادات انتقال من→إلى (القيمة = مجموع الأوزان)
+  deliveryAssignedCount?: number;
+  deliveryForward12?: number;
+  deliveryForward13?: number;
+  deliveryForward14?: number;
+  deliveryForward23?: number;
+  deliveryForward24?: number;
+  deliveryForward34?: number;
+  deliveryDowngrade43?: number;
+  deliveryDowngrade42?: number;
+  deliveryDowngrade41?: number;
+  deliveryDowngrade32?: number;
+  deliveryDowngrade31?: number;
+  deliveryDowngrade21?: number;
+  tableAssignedCount?: number;
+  tableForward12?: number;
+  tableForward13?: number;
+  tableForward14?: number;
+  tableForward23?: number;
+  tableForward24?: number;
+  tableForward34?: number;
+  tableDowngrade43?: number;
+  tableDowngrade42?: number;
+  tableDowngrade41?: number;
+  tableDowngrade32?: number;
+  tableDowngrade31?: number;
+  tableDowngrade21?: number;
+
+  // إعدادات تقييم العاملين (باقة البزنس فقط)
+  employeeRatingEnable?: boolean;
+  employeeRatingScaleDeliveryForward?: number;
+  employeeRatingScaleDeliveryBackward?: number;
+  employeeRatingScaleTableForward?: number;
+  employeeRatingScaleTableBackward?: number;
+  employeeRatingTendencyX?: number;
+
+  /** كاش الإحصائيات — استجابات متعددة (team، وغيرها لاحقاً)، كل منها مع توقيت وبياناته */
+  adminCachedStats?: {
+    team?: {
+      cachedAt: string; // ISO
+      users: Array<{ id: string; name: string; userType: 'admin' | 'employee'; stats: UserStats }>;
+    };
+    // يمكن إضافة المزيد لاحقاً، مثلاً: otherStat?: { cachedAt: string; data: ... };
+  };
 }
 
 export interface MenuList {
@@ -108,6 +159,73 @@ export interface Employee {
   isDelivery: boolean; // موصل - يظهر في طلبات التوصيل
   isWaiter: boolean; // نادل - يظهر في طلبات الطاولات
   createdAt: string;
+  /** صورة العامل (اختياري) - يُرفع عند الإضافة/التحديث */
+  imageUrl?: string;
+  /** رقم العامل (اختياري) */
+  employeeNumber?: string;
+  /** رقم الهاتف (اختياري) */
+  phone?: string;
+
+  // إحصائيات طلبات التوصيل والطاولة (باقة البزنس فقط): عدّادات انتقال من→إلى (القيمة = مجموع الأوزان)
+  deliveryAssignedCount?: number;
+  deliveryForward12?: number;
+  deliveryForward13?: number;
+  deliveryForward14?: number;
+  deliveryForward23?: number;
+  deliveryForward24?: number;
+  deliveryForward34?: number;
+  deliveryDowngrade43?: number;
+  deliveryDowngrade42?: number;
+  deliveryDowngrade41?: number;
+  deliveryDowngrade32?: number;
+  deliveryDowngrade31?: number;
+  deliveryDowngrade21?: number;
+  tableAssignedCount?: number;
+  tableForward12?: number;
+  tableForward13?: number;
+  tableForward14?: number;
+  tableForward23?: number;
+  tableForward24?: number;
+  tableForward34?: number;
+  tableDowngrade43?: number;
+  tableDowngrade42?: number;
+  tableDowngrade41?: number;
+  tableDowngrade32?: number;
+  tableDowngrade31?: number;
+  tableDowngrade21?: number;
+
+  /** كاش تقييم الموظف (نقاط، كفاءة، ترتيبات) — يُحدَّث عند طلب rating-info إذا تجاوز 24 ساعة */
+  ratingInfoCache?: {
+    cachedAt: string; // ISO
+    points: number;
+    efficiency: number;
+    rank?: number;
+    rankAmongDelivery?: number;
+    rankAmongWaiters?: number;
+  };
+}
+
+// لوجز تغيير حالة الطلبات (باقة البزنس فقط)
+export interface DeliveryOrderStatusLog {
+  id: string;
+  adminId: string;
+  userId: string; // معرف من قام بالتغيير (adminId أو employeeId)
+  userType: 'admin' | 'employee';
+  orderId: string;
+  fromStatus: number; // 1-4: جديد=1، مقروء=2، قيد التوصيل=3، تم=4
+  toStatus: number;
+  createdAt: string;
+}
+
+export interface TableOrderStatusLog {
+  id: string;
+  adminId: string;
+  userId: string;
+  userType: 'admin' | 'employee';
+  orderId: string;
+  fromStatus: number; // 1-4: جديد=1، مقروء=2، تم التقديم=3، مكتمل=4
+  toStatus: number;
+  createdAt: string;
 }
 
 interface Database {
@@ -117,6 +235,8 @@ interface Database {
   orders: Order[];
   tableOrders: TableOrder[];
   employees: Employee[];
+  deliveryOrderStatusLogs: DeliveryOrderStatusLog[];
+  tableOrderStatusLogs: TableOrderStatusLog[];
 }
 
 // السمات المتاحة
@@ -181,19 +301,16 @@ async function readDB(): Promise<Database> {
   try {
     const data = await kv.get<Database>(KV_KEY);
     if (!data) {
-      return { admins: [], lists: [], items: [], orders: [], tableOrders: [], employees: [] };
+      return { admins: [], lists: [], items: [], orders: [], tableOrders: [], employees: [], deliveryOrderStatusLogs: [], tableOrderStatusLogs: [] };
     }
-    // للتوافق مع البيانات القديمة التي لا تحتوي على tableOrders أو employees
-    if (!data.tableOrders) {
-      data.tableOrders = [];
-    }
-    if (!data.employees) {
-      data.employees = [];
-    }
+    if (!data.tableOrders) data.tableOrders = [];
+    if (!data.employees) data.employees = [];
+    if (!data.deliveryOrderStatusLogs) data.deliveryOrderStatusLogs = [];
+    if (!data.tableOrderStatusLogs) data.tableOrderStatusLogs = [];
     return data;
   } catch (error) {
     console.error('Error reading from KV:', error);
-    return { admins: [], lists: [], items: [], orders: [], tableOrders: [], employees: [] };
+    return { admins: [], lists: [], items: [], orders: [], tableOrders: [], employees: [], deliveryOrderStatusLogs: [], tableOrderStatusLogs: [] };
   }
 }
 
@@ -517,9 +634,39 @@ export async function createOrder(order: Omit<Order, 'id' | 'createdAt'>): Promi
     status: order.status || 'pending', // Default status is 'pending'
   };
   db.orders.push(newOrder);
+
+  // عدّادات الأدمن (باقة البزنس فقط): مصدر الطلب + نوع التعيين عند الإنشاء
+  const adminIndex = db.admins.findIndex(a => a.id === order.adminId);
+  if (adminIndex !== -1) {
+    const admin = db.admins[adminIndex];
+    const isBusiness = admin.plan === 'business' && admin.subscriptionEndsAt && new Date(admin.subscriptionEndsAt) >= new Date();
+    if (isBusiness) {
+      if (order.orderType === 'website') admin.websiteOrdersCount = (admin.websiteOrdersCount ?? 0) + 1;
+      else if (order.orderType === 'whatsapp') admin.whatsappOrdersCount = (admin.whatsappOrdersCount ?? 0) + 1;
+
+      const assignedTo = order.assignedTo;
+      if (!assignedTo || assignedTo === '') {
+        admin.WithoutDeliveryOrdersCount = (admin.WithoutDeliveryOrdersCount ?? 0) + 1;
+      } else if (assignedTo === 'ANY_DELIVERY') {
+        admin.AnyDeliveryOrdersCount = (admin.AnyDeliveryOrdersCount ?? 0) + 1;
+      } else {
+        const empIndex = db.employees.findIndex(emp => emp.id === assignedTo);
+        if (empIndex !== -1) {
+          const e = db.employees[empIndex];
+          e.deliveryAssignedCount = (e.deliveryAssignedCount ?? 0) + 1;
+          db.employees[empIndex] = e;
+        }
+      }
+      db.admins[adminIndex] = admin;
+    }
+  }
+
   await writeDB(db);
   return newOrder;
 }
+
+const DELIVERY_STATUS_NUM: Record<string, number> = { pending: 1, read: 2, delivering: 3, delivered: 4 };
+const TABLE_STATUS_NUM: Record<string, number> = { pending: 1, read: 2, served: 3, completed: 4 };
 
 export async function updateOrderStatus(id: string, status: 'pending' | 'read' | 'delivering' | 'delivered'): Promise<Order | null> {
   try {
@@ -541,12 +688,87 @@ export async function updateOrderStatus(id: string, status: 'pending' | 'read' |
   }
 }
 
+/** تحديث حالة طلب توصيل + لوج + عدّاد (باقة البزنس، atomic) */
+export async function updateOrderStatusWithLogAndCounters(
+  orderId: string,
+  status: 'pending' | 'read' | 'delivering' | 'delivered',
+  actor: { adminId: string; userId: string; userType: 'admin' | 'employee' }
+): Promise<Order | null> {
+  const db = await readDB();
+  const orderIndex = db.orders.findIndex(o => o.id === orderId);
+  if (orderIndex === -1) return null;
+
+  const order = db.orders[orderIndex];
+  const fromStatus = DELIVERY_STATUS_NUM[order.status || 'pending'] ?? 1;
+  const toStatus = DELIVERY_STATUS_NUM[status] ?? 1;
+
+  db.orders[orderIndex] = { ...order, status };
+  const log: DeliveryOrderStatusLog = {
+    id: `log_del_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+    adminId: order.adminId,
+    userId: actor.userId,
+    userType: actor.userType,
+    orderId,
+    fromStatus,
+    toStatus,
+    createdAt: new Date().toISOString(),
+  };
+  db.deliveryOrderStatusLogs.push(log);
+
+  if (fromStatus !== toStatus) {
+    const list = actor.userType === 'admin' ? db.admins : db.employees;
+    const userIndex = list.findIndex((u: { id: string }) => u.id === actor.userId);
+    if (userIndex !== -1) {
+      const u = list[userIndex] as Admin | Employee;
+      // تخزين بعدد النقلات فقط (+1)، الوزن يُطبّق عند العرض في الكارد
+      const rec = u as unknown as Record<string, number>;
+      if (toStatus > fromStatus) {
+        const key = `deliveryForward${fromStatus}${toStatus}`;
+        rec[key] = (rec[key] ?? 0) + 1;
+      } else {
+        const key = `deliveryDowngrade${fromStatus}${toStatus}`;
+        rec[key] = (rec[key] ?? 0) + 1;
+      }
+      list[userIndex] = u;
+    }
+  }
+
+  await writeDB(db);
+  return db.orders[orderIndex];
+}
+
 export async function deleteOrder(id: string): Promise<boolean> {
   const db = await readDB();
-  const filteredOrders = db.orders.filter(order => order.id !== id);
-  if (filteredOrders.length === db.orders.length) return false;
+  const orderToDelete = db.orders.find(order => order.id === id);
+  if (!orderToDelete) return false;
 
-  db.orders = filteredOrders;
+  // عدّادات الأدمن (باقة البزنس فقط): إنقاص عند المسح
+  const adminIndex = db.admins.findIndex(a => a.id === orderToDelete.adminId);
+  if (adminIndex !== -1) {
+    const admin = db.admins[adminIndex];
+    const isBusiness = admin.plan === 'business' && admin.subscriptionEndsAt && new Date(admin.subscriptionEndsAt) >= new Date();
+    if (isBusiness) {
+      if (orderToDelete.orderType === 'website') admin.websiteOrdersCount = Math.max(0, (admin.websiteOrdersCount ?? 0) - 1);
+      else if (orderToDelete.orderType === 'whatsapp') admin.whatsappOrdersCount = Math.max(0, (admin.whatsappOrdersCount ?? 0) - 1);
+
+      const assignedTo = orderToDelete.assignedTo;
+      if (!assignedTo || assignedTo === '') {
+        admin.WithoutDeliveryOrdersCount = Math.max(0, (admin.WithoutDeliveryOrdersCount ?? 0) - 1);
+      } else if (assignedTo === 'ANY_DELIVERY') {
+        admin.AnyDeliveryOrdersCount = Math.max(0, (admin.AnyDeliveryOrdersCount ?? 0) - 1);
+      } else {
+        const empIndex = db.employees.findIndex(emp => emp.id === assignedTo);
+        if (empIndex !== -1) {
+          const e = db.employees[empIndex];
+          e.deliveryAssignedCount = Math.max(0, (e.deliveryAssignedCount ?? 0) - 1);
+          db.employees[empIndex] = e;
+        }
+      }
+      db.admins[adminIndex] = admin;
+    }
+  }
+
+  db.orders = db.orders.filter(order => order.id !== id);
   await writeDB(db);
   return true;
 }
@@ -621,6 +843,55 @@ export async function updateTableOrderStatus(
   order.status = status;
   await writeDB(db);
   return order;
+}
+
+/** تحديث حالة طلب طاولة + لوج + عدّاد (باقة البزنس، atomic) */
+export async function updateTableOrderStatusWithLogAndCounters(
+  orderId: string,
+  status: 'pending' | 'read' | 'served' | 'completed',
+  actor: { adminId: string; userId: string; userType: 'admin' | 'employee' }
+): Promise<TableOrder | null> {
+  const db = await readDB();
+  const orderIndex = db.tableOrders.findIndex(o => o.id === orderId);
+  if (orderIndex === -1) return null;
+
+  const order = db.tableOrders[orderIndex];
+  const fromStatus = TABLE_STATUS_NUM[order.status || 'pending'] ?? 1;
+  const toStatus = TABLE_STATUS_NUM[status] ?? 1;
+
+  db.tableOrders[orderIndex] = { ...order, status };
+  const log: TableOrderStatusLog = {
+    id: `log_tbl_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+    adminId: order.adminId,
+    userId: actor.userId,
+    userType: actor.userType,
+    orderId,
+    fromStatus,
+    toStatus,
+    createdAt: new Date().toISOString(),
+  };
+  db.tableOrderStatusLogs.push(log);
+
+  if (fromStatus !== toStatus) {
+    const list = actor.userType === 'admin' ? db.admins : db.employees;
+    const userIndex = list.findIndex((u: { id: string }) => u.id === actor.userId);
+    if (userIndex !== -1) {
+      const u = list[userIndex] as Admin | Employee;
+      // تخزين بعدد النقلات فقط (+1)، الوزن يُطبّق عند العرض في الكارد
+      const rec = u as unknown as Record<string, number>;
+      if (toStatus > fromStatus) {
+        const key = `tableForward${fromStatus}${toStatus}`;
+        rec[key] = (rec[key] ?? 0) + 1;
+      } else {
+        const key = `tableDowngrade${fromStatus}${toStatus}`;
+        rec[key] = (rec[key] ?? 0) + 1;
+      }
+      list[userIndex] = u;
+    }
+  }
+
+  await writeDB(db);
+  return db.tableOrders[orderIndex];
 }
 
 // ==================== Employee Functions ====================
@@ -707,16 +978,99 @@ export async function updateEmployee(id: string, updates: Partial<Omit<Employee,
 
 // ==================== Order Assignment Functions ====================
 
-export async function assignOrderToEmployee(orderId: string, employeeId: string | null): Promise<Order | null> {
+export async function assignOrderToEmployee(
+  orderId: string,
+  employeeId: string | null,
+  options?: { incrementAssignedCount?: boolean }
+): Promise<Order | null> {
   const db = await readDB();
   const order = db.orders.find(o => o.id === orderId);
 
   if (!order) return null;
 
-  order.assignedTo = employeeId || undefined;
+  const previousAssignedTo = order.assignedTo;
+  const newAssignedTo = employeeId || undefined;
+
+  const adminIndex = db.admins.findIndex(a => a.id === order.adminId);
+  const admin = adminIndex !== -1 ? db.admins[adminIndex] : null;
+  const isBusiness = admin?.plan === 'business' && admin?.subscriptionEndsAt && new Date(admin.subscriptionEndsAt) >= new Date();
+
+  if (isBusiness && adminIndex !== -1) {
+    // طرح 1 من العداد السابق (باقة البزنس فقط)
+    const a = db.admins[adminIndex];
+    if (!previousAssignedTo || previousAssignedTo === '') {
+      a.WithoutDeliveryOrdersCount = Math.max(0, (a.WithoutDeliveryOrdersCount ?? 0) - 1);
+    } else if (previousAssignedTo === 'ANY_DELIVERY') {
+      a.AnyDeliveryOrdersCount = Math.max(0, (a.AnyDeliveryOrdersCount ?? 0) - 1);
+    } else {
+      const prevEmpIndex = db.employees.findIndex(emp => emp.id === previousAssignedTo);
+      if (prevEmpIndex !== -1) {
+        const e = db.employees[prevEmpIndex];
+        e.deliveryAssignedCount = Math.max(0, (e.deliveryAssignedCount ?? 0) - 1);
+        db.employees[prevEmpIndex] = e;
+      }
+    }
+    db.admins[adminIndex] = a;
+  }
+
+  order.assignedTo = newAssignedTo;
+
+  if (isBusiness && adminIndex !== -1) {
+    // إضافة 1 للتعيين الجديد (باقة البزنس فقط)
+    const a = db.admins[adminIndex];
+    if (!newAssignedTo || newAssignedTo === '') {
+      a.WithoutDeliveryOrdersCount = (a.WithoutDeliveryOrdersCount ?? 0) + 1;
+    } else if (newAssignedTo === 'ANY_DELIVERY') {
+      a.AnyDeliveryOrdersCount = (a.AnyDeliveryOrdersCount ?? 0) + 1;
+    } else {
+      const empIndex = db.employees.findIndex(emp => emp.id === newAssignedTo);
+      if (empIndex !== -1) {
+        const e = db.employees[empIndex];
+        e.deliveryAssignedCount = (e.deliveryAssignedCount ?? 0) + 1;
+        db.employees[empIndex] = e;
+      }
+    }
+    db.admins[adminIndex] = a;
+  }
+
   await writeDB(db);
 
-  // Add employee data if assigned
+  if (newAssignedTo) {
+    const employee = db.employees.find(emp => emp.id === newAssignedTo);
+    if (employee) {
+      return {
+        ...order,
+        assignedEmployee: { id: employee.id, name: employee.name }
+      };
+    }
+  }
+
+  return order;
+}
+
+export async function assignTableOrderToEmployee(
+  orderId: string,
+  employeeId: string | null,
+  options?: { incrementAssignedCount?: boolean }
+): Promise<TableOrder | null> {
+  const db = await readDB();
+  const order = db.tableOrders.find(o => o.id === orderId);
+
+  if (!order) return null;
+
+  order.assignedTo = employeeId || undefined;
+
+  if (options?.incrementAssignedCount && employeeId) {
+    const empIndex = db.employees.findIndex(emp => emp.id === employeeId);
+    if (empIndex !== -1) {
+      const e = db.employees[empIndex];
+      e.tableAssignedCount = (e.tableAssignedCount ?? 0) + 1;
+      db.employees[empIndex] = e;
+    }
+  }
+
+  await writeDB(db);
+
   if (employeeId) {
     const employee = db.employees.find(emp => emp.id === employeeId);
     if (employee) {
@@ -730,25 +1084,95 @@ export async function assignOrderToEmployee(orderId: string, employeeId: string 
   return order;
 }
 
-export async function assignTableOrderToEmployee(orderId: string, employeeId: string | null): Promise<TableOrder | null> {
+// ==================== لوجز وإحصائيات (باقة البزنس) ====================
+
+export async function getDeliveryOrderStatusLogsByUser(adminId: string, userId: string): Promise<DeliveryOrderStatusLog[]> {
   const db = await readDB();
-  const order = db.tableOrders.find(o => o.id === orderId);
+  return db.deliveryOrderStatusLogs
+    .filter(log => log.adminId === adminId && log.userId === userId)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
 
-  if (!order) return null;
+export async function getTableOrderStatusLogsByUser(adminId: string, userId: string): Promise<TableOrderStatusLog[]> {
+  const db = await readDB();
+  return db.tableOrderStatusLogs
+    .filter(log => log.adminId === adminId && log.userId === userId)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
 
-  order.assignedTo = employeeId || undefined;
-  await writeDB(db);
+/** قائمة مفاتيح العدادات حسب الانتقال (تقديم/تأخير) — القيمة = مجموع الأوزان */
+const DELIVERY_FORWARD_KEYS = ['deliveryForward12', 'deliveryForward13', 'deliveryForward14', 'deliveryForward23', 'deliveryForward24', 'deliveryForward34'] as const;
+const DELIVERY_DOWNGRADE_KEYS = ['deliveryDowngrade43', 'deliveryDowngrade42', 'deliveryDowngrade41', 'deliveryDowngrade32', 'deliveryDowngrade31', 'deliveryDowngrade21'] as const;
+const TABLE_FORWARD_KEYS = ['tableForward12', 'tableForward13', 'tableForward14', 'tableForward23', 'tableForward24', 'tableForward34'] as const;
+const TABLE_DOWNGRADE_KEYS = ['tableDowngrade43', 'tableDowngrade42', 'tableDowngrade41', 'tableDowngrade32', 'tableDowngrade31', 'tableDowngrade21'] as const;
 
-  // Add employee data if assigned
-  if (employeeId) {
-    const employee = db.employees.find(emp => emp.id === employeeId);
-    if (employee) {
-      return {
-        ...order,
-        assignedEmployee: { id: employee.id, name: employee.name }
-      };
-    }
+export type UserStats = {
+  deliveryAssignedCount: number;
+  deliveryForward12: number;
+  deliveryForward13: number;
+  deliveryForward14: number;
+  deliveryForward23: number;
+  deliveryForward24: number;
+  deliveryForward34: number;
+  deliveryDowngrade43: number;
+  deliveryDowngrade42: number;
+  deliveryDowngrade41: number;
+  deliveryDowngrade32: number;
+  deliveryDowngrade31: number;
+  deliveryDowngrade21: number;
+  tableAssignedCount: number;
+  tableForward12: number;
+  tableForward13: number;
+  tableForward14: number;
+  tableForward23: number;
+  tableForward24: number;
+  tableForward34: number;
+  tableDowngrade43: number;
+  tableDowngrade42: number;
+  tableDowngrade41: number;
+  tableDowngrade32: number;
+  tableDowngrade31: number;
+  tableDowngrade21: number;
+  /** للأدمن فقط: طلبات بدون عامل توصيل / أي عامل يمكنه التوصيل */
+  WithoutDeliveryOrdersCount?: number;
+  AnyDeliveryOrdersCount?: number;
+};
+
+const ZERO_STATS: UserStats = {
+  deliveryAssignedCount: 0,
+  deliveryForward12: 0, deliveryForward13: 0, deliveryForward14: 0, deliveryForward23: 0, deliveryForward24: 0, deliveryForward34: 0,
+  deliveryDowngrade43: 0, deliveryDowngrade42: 0, deliveryDowngrade41: 0, deliveryDowngrade32: 0, deliveryDowngrade31: 0, deliveryDowngrade21: 0,
+  tableAssignedCount: 0,
+  tableForward12: 0, tableForward13: 0, tableForward14: 0, tableForward23: 0, tableForward24: 0, tableForward34: 0,
+  tableDowngrade43: 0, tableDowngrade42: 0, tableDowngrade41: 0, tableDowngrade32: 0, tableDowngrade31: 0, tableDowngrade21: 0,
+};
+
+export async function getUserStats(userId: string, userType: 'admin' | 'employee'): Promise<UserStats> {
+  const db = await readDB();
+  const u = userType === 'admin'
+    ? db.admins.find(a => a.id === userId)
+    : db.employees.find(e => e.id === userId);
+  if (!u) return ZERO_STATS;
+  const raw = u as Admin | Employee;
+  const base: UserStats = {
+    deliveryAssignedCount: raw.deliveryAssignedCount ?? 0,
+    deliveryForward12: raw.deliveryForward12 ?? 0, deliveryForward13: raw.deliveryForward13 ?? 0, deliveryForward14: raw.deliveryForward14 ?? 0,
+    deliveryForward23: raw.deliveryForward23 ?? 0, deliveryForward24: raw.deliveryForward24 ?? 0, deliveryForward34: raw.deliveryForward34 ?? 0,
+    deliveryDowngrade43: raw.deliveryDowngrade43 ?? 0, deliveryDowngrade42: raw.deliveryDowngrade42 ?? 0, deliveryDowngrade41: raw.deliveryDowngrade41 ?? 0,
+    deliveryDowngrade32: raw.deliveryDowngrade32 ?? 0, deliveryDowngrade31: raw.deliveryDowngrade31 ?? 0, deliveryDowngrade21: raw.deliveryDowngrade21 ?? 0,
+    tableAssignedCount: raw.tableAssignedCount ?? 0,
+    tableForward12: raw.tableForward12 ?? 0, tableForward13: raw.tableForward13 ?? 0, tableForward14: raw.tableForward14 ?? 0,
+    tableForward23: raw.tableForward23 ?? 0, tableForward24: raw.tableForward24 ?? 0, tableForward34: raw.tableForward34 ?? 0,
+    tableDowngrade43: raw.tableDowngrade43 ?? 0, tableDowngrade42: raw.tableDowngrade42 ?? 0, tableDowngrade41: raw.tableDowngrade41 ?? 0,
+    tableDowngrade32: raw.tableDowngrade32 ?? 0, tableDowngrade31: raw.tableDowngrade31 ?? 0, tableDowngrade21: raw.tableDowngrade21 ?? 0,
+  };
+  if (userType === 'admin') {
+    const admin = raw as Admin;
+    return {
+      ...base,
+      WithoutDeliveryOrdersCount: admin.WithoutDeliveryOrdersCount ?? 0,
+      AnyDeliveryOrdersCount: admin.AnyDeliveryOrdersCount ?? 0,
+    };
   }
-
-  return order;
+  return base;
 }

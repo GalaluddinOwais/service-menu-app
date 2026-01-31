@@ -63,7 +63,24 @@ export async function PATCH(request: NextRequest) {
       }, { status: 403 });
     }
 
+    // إعدادات تقييم العاملين — باقة البزنس فقط
+    const ratingKeys = ['employeeRatingEnable', 'employeeRatingScaleDeliveryForward', 'employeeRatingScaleDeliveryBackward', 'employeeRatingScaleTableForward', 'employeeRatingScaleTableBackward', 'employeeRatingTendencyX'] as const;
+    const hasRatingBody = ratingKeys.some(k => body[k] !== undefined);
+    if (hasRatingBody && !isPlanActiveFor('business')) {
+      return NextResponse.json({ error: 'إعدادات تقييم العاملين متاحة ضمن باقة البزنس فقط' }, { status: 403 });
+    }
+
     // Update only the fields that are provided
+    const ratingUpdates: Partial<typeof admin> = {};
+    if (hasRatingBody) {
+      if (body.employeeRatingEnable !== undefined) ratingUpdates.employeeRatingEnable = !!body.employeeRatingEnable;
+      if (body.employeeRatingScaleDeliveryForward !== undefined) ratingUpdates.employeeRatingScaleDeliveryForward = Number(body.employeeRatingScaleDeliveryForward);
+      if (body.employeeRatingScaleDeliveryBackward !== undefined) ratingUpdates.employeeRatingScaleDeliveryBackward = Number(body.employeeRatingScaleDeliveryBackward);
+      if (body.employeeRatingScaleTableForward !== undefined) ratingUpdates.employeeRatingScaleTableForward = Number(body.employeeRatingScaleTableForward);
+      if (body.employeeRatingScaleTableBackward !== undefined) ratingUpdates.employeeRatingScaleTableBackward = Number(body.employeeRatingScaleTableBackward);
+      if (body.employeeRatingTendencyX !== undefined) ratingUpdates.employeeRatingTendencyX = Math.max(0, Math.min(1, Number(body.employeeRatingTendencyX)));
+    }
+
     const updatedAdmin = await updateAdmin(payload.adminId, {
       ...admin,
       ...(body.isAcceptingOrders !== undefined && { isAcceptingOrders: body.isAcceptingOrders }),
@@ -73,6 +90,7 @@ export async function PATCH(request: NextRequest) {
       ...(body.showDeliveryEmployeesAnyway !== undefined && { showDeliveryEmployeesAnyway: body.showDeliveryEmployeesAnyway }),
       ...(body.showWaitersAnyway !== undefined && { showWaitersAnyway: body.showWaitersAnyway }),
       ...(body.defaultDeliveryAssignment !== undefined && { defaultDeliveryAssignment: body.defaultDeliveryAssignment }),
+      ...ratingUpdates,
     });
 
     if (!updatedAdmin) {

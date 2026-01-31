@@ -13,7 +13,8 @@ interface ImageUploaderProps {
 
 export interface ImageUploaderRef {
   getPendingFile: () => File | null;
-  clearPendingFile: () => void;
+  /** امسح الملف المعلّق فقط. إذا clearParentUrl=false لا نستدعي onImageUploaded('') (مثلاً عند فتح تعديل عنصر لئلا تُمسح الصورة الحالية). */
+  clearPendingFile: (clearParentUrl?: boolean) => void;
 }
 
 const ImageUploader = forwardRef<ImageUploaderRef, ImageUploaderProps>(function ImageUploader({
@@ -33,13 +34,17 @@ const ImageUploader = forwardRef<ImageUploaderRef, ImageUploaderProps>(function 
 
   useImperativeHandle(ref, () => ({
     getPendingFile: () => pendingFile,
-    clearPendingFile: () => {
+    clearPendingFile: (clearParentUrl = true) => {
       setPendingFile(null);
-      setPreviewUrl(undefined);
-      onImageUploaded('');
+      if (clearParentUrl) {
+        setPreviewUrl(undefined);
+        onImageUploaded('');
+      } else {
+        setPreviewUrl(currentImageUrl);
+      }
       if (fileInputRef.current) fileInputRef.current.value = '';
     },
-  }), [pendingFile, onImageUploaded]);
+  }), [pendingFile, onImageUploaded, currentImageUrl]);
 
   // Update preview when currentImageUrl changes (e.g., when editing an item)
   useEffect(() => {

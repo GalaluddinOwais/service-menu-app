@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { assignOrderToEmployee, getOrder } from '@/lib/db';
+import { assignOrderToEmployee, getAdmin, checkPlanAndAutoDisable } from '@/lib/db';
 import { verifySessionToken } from '@/lib/auth';
 
 export async function PATCH(
@@ -27,7 +27,11 @@ export async function PATCH(
     const { orderId } = await context.params;
     const { employeeId } = await request.json();
 
-    const updatedOrder = await assignOrderToEmployee(orderId, employeeId);
+    const admin = await getAdmin(payload.adminId);
+    const isBusiness = admin && (await checkPlanAndAutoDisable(admin, 'business'));
+    const incrementAssigned = isBusiness && employeeId && employeeId !== 'ANY_DELIVERY';
+
+    const updatedOrder = await assignOrderToEmployee(orderId, employeeId, { incrementAssignedCount: incrementAssigned });
     if (!updatedOrder) {
       return NextResponse.json({ error: 'فشل تعيين العامل' }, { status: 500 });
     }
