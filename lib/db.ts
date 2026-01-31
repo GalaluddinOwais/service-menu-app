@@ -95,6 +95,30 @@ export interface Admin {
     };
     // يمكن إضافة المزيد لاحقاً، مثلاً: otherStat?: { cachedAt: string; data: ... };
   };
+
+  /** إحصائيات الطلبات للباقة Pro: عدادات وجوامع (تُحدَّث عند الإنشاء/الحذف/تغيير الحالة النهائية) */
+  proOrderStats?: {
+    countWhatsapp: number;
+    countWebsite: number;
+    countTable: number;
+    sumPriceWhatsapp: number;
+    sumPriceWebsite: number;
+    sumPriceTable: number;
+    sumDiscountWhatsapp: number;
+    sumDiscountWebsite: number;
+    sumDiscountTable: number;
+    completedDeliveryWhatsapp: number;
+    completedDeliveryWebsite: number;
+    completedTable: number;
+    /** الأسعار التامة (باقة Pro فقط) — تُزاد عند إتمام الطلب، تُطرح عند التأخير أو المسح */
+    sumCompletedPriceWhatsapp: number;
+    sumCompletedPriceWebsite: number;
+    sumCompletedPriceTable: number;
+    /** الخصومات التامة (باقة Pro فقط) */
+    sumCompletedDiscountWhatsapp: number;
+    sumCompletedDiscountWebsite: number;
+    sumCompletedDiscountTable: number;
+  };
 }
 
 export interface MenuList {
@@ -639,8 +663,7 @@ export async function createOrder(order: Omit<Order, 'id' | 'createdAt'>): Promi
   const adminIndex = db.admins.findIndex(a => a.id === order.adminId);
   if (adminIndex !== -1) {
     const admin = db.admins[adminIndex];
-    const isBusiness = admin.plan === 'business' && admin.subscriptionEndsAt && new Date(admin.subscriptionEndsAt) >= new Date();
-    if (isBusiness) {
+    if (isBusinessPlanActive(admin)) {
       if (order.orderType === 'website') admin.websiteOrdersCount = (admin.websiteOrdersCount ?? 0) + 1;
       else if (order.orderType === 'whatsapp') admin.whatsappOrdersCount = (admin.whatsappOrdersCount ?? 0) + 1;
 
@@ -659,6 +682,21 @@ export async function createOrder(order: Omit<Order, 'id' | 'createdAt'>): Promi
       }
       db.admins[adminIndex] = admin;
     }
+
+    // عداد طلبات التوصيل وجامع السعر والخصم (واتساب/موقع) — باقة Basic فأعلى
+    if (isBasicPlanActive(admin)) {
+      const stats = getOrInitProOrderStats(admin);
+      if (order.orderType === 'whatsapp') {
+        stats.countWhatsapp += 1;
+        stats.sumPriceWhatsapp += order.totalPrice ?? 0;
+        stats.sumDiscountWhatsapp += order.totalDiscount ?? 0;
+      } else if (order.orderType === 'website') {
+        stats.countWebsite += 1;
+        stats.sumPriceWebsite += order.totalPrice ?? 0;
+        stats.sumDiscountWebsite += order.totalDiscount ?? 0;
+      }
+      db.admins[adminIndex].proOrderStats = stats;
+    }
   }
 
   await writeDB(db);
@@ -667,6 +705,63 @@ export async function createOrder(order: Omit<Order, 'id' | 'createdAt'>): Promi
 
 const DELIVERY_STATUS_NUM: Record<string, number> = { pending: 1, read: 2, delivering: 3, delivered: 4 };
 const TABLE_STATUS_NUM: Record<string, number> = { pending: 1, read: 2, served: 3, completed: 4 };
+
+/** الباقة Basic فأعلى نشطة (عدّ وجمع طلبات التوصيل واتساب/موقع) */
+function isBasicPlanActive(admin: Admin): boolean {
+  if (!admin.plan || admin.plan === 'free') return false;
+  if (!admin.subscriptionEndsAt) return false;
+  return new Date(admin.subscriptionEndsAt) >= new Date();
+}
+
+/** الباقة Pro فأعلى نشطة (عدّ الطاولة وجوامعها وعدادات "تمت") */
+function isProPlanActive(admin: Admin): boolean {
+  if (!admin.plan || admin.plan === 'free' || admin.plan === 'basic') return false;
+  if (!admin.subscriptionEndsAt) return false;
+  return new Date(admin.subscriptionEndsAt) >= new Date();
+}
+
+/** الباقة البزنس نشطة (للتحقق قبل تحديث عدادات نقل الحالات والتعيين) */
+function isBusinessPlanActive(admin: Admin): boolean {
+  return admin.plan === 'business' && !!admin.subscriptionEndsAt && new Date(admin.subscriptionEndsAt) >= new Date();
+}
+
+function getOrInitProOrderStats(admin: Admin): NonNullable<Admin['proOrderStats']> {
+  const s = admin.proOrderStats;
+  const def = {
+    countWhatsapp: 0,
+    countWebsite: 0,
+    countTable: 0,
+    sumPriceWhatsapp: 0,
+    sumPriceWebsite: 0,
+    sumPriceTable: 0,
+    sumDiscountWhatsapp: 0,
+    sumDiscountWebsite: 0,
+    sumDiscountTable: 0,
+    completedDeliveryWhatsapp: 0,
+    completedDeliveryWebsite: 0,
+    completedTable: 0,
+    sumCompletedPriceWhatsapp: 0,
+    sumCompletedPriceWebsite: 0,
+    sumCompletedPriceTable: 0,
+    sumCompletedDiscountWhatsapp: 0,
+    sumCompletedDiscountWebsite: 0,
+    sumCompletedDiscountTable: 0,
+  };
+  if (!s) return def;
+  return {
+    ...def,
+    ...s,
+    sumDiscountWhatsapp: s.sumDiscountWhatsapp ?? 0,
+    sumDiscountWebsite: s.sumDiscountWebsite ?? 0,
+    sumDiscountTable: s.sumDiscountTable ?? 0,
+    sumCompletedPriceWhatsapp: s.sumCompletedPriceWhatsapp ?? 0,
+    sumCompletedPriceWebsite: s.sumCompletedPriceWebsite ?? 0,
+    sumCompletedPriceTable: s.sumCompletedPriceTable ?? 0,
+    sumCompletedDiscountWhatsapp: s.sumCompletedDiscountWhatsapp ?? 0,
+    sumCompletedDiscountWebsite: s.sumCompletedDiscountWebsite ?? 0,
+    sumCompletedDiscountTable: s.sumCompletedDiscountTable ?? 0,
+  };
+}
 
 export async function updateOrderStatus(id: string, status: 'pending' | 'read' | 'delivering' | 'delivered'): Promise<Order | null> {
   try {
@@ -715,12 +810,13 @@ export async function updateOrderStatusWithLogAndCounters(
   };
   db.deliveryOrderStatusLogs.push(log);
 
-  if (fromStatus !== toStatus) {
+  // عدادات نقل الحالات (باقة البزنس فقط) — لا نعد إن لم تكن الباقة مفعلة
+  const adminForPlan = db.admins.find(a => a.id === order.adminId);
+  if (adminForPlan && isBusinessPlanActive(adminForPlan) && fromStatus !== toStatus) {
     const list = actor.userType === 'admin' ? db.admins : db.employees;
     const userIndex = list.findIndex((u: { id: string }) => u.id === actor.userId);
     if (userIndex !== -1) {
       const u = list[userIndex] as Admin | Employee;
-      // تخزين بعدد النقلات فقط (+1)، الوزن يُطبّق عند العرض في الكارد
       const rec = u as unknown as Record<string, number>;
       if (toStatus > fromStatus) {
         const key = `deliveryForward${fromStatus}${toStatus}`;
@@ -732,6 +828,40 @@ export async function updateOrderStatusWithLogAndCounters(
       list[userIndex] = u;
     }
   }
+
+    // إحصائيات Pro: عدّاد طلبات التوصيل التي "تمت" + الأسعار والخصومات التامة (باقة Pro فقط)
+    const adminIndex = db.admins.findIndex(a => a.id === order.adminId);
+    if (adminIndex !== -1) {
+      const admin = db.admins[adminIndex];
+      if (isProPlanActive(admin)) {
+        const stats = getOrInitProOrderStats(admin);
+        const FINAL_DELIVERY = 4;
+        const price = order.totalPrice ?? 0;
+        const discount = order.totalDiscount ?? 0;
+        if (toStatus === FINAL_DELIVERY && fromStatus !== FINAL_DELIVERY) {
+          if (order.orderType === 'whatsapp') {
+            stats.completedDeliveryWhatsapp += 1;
+            stats.sumCompletedPriceWhatsapp += price;
+            stats.sumCompletedDiscountWhatsapp += discount;
+          } else if (order.orderType === 'website') {
+            stats.completedDeliveryWebsite += 1;
+            stats.sumCompletedPriceWebsite += price;
+            stats.sumCompletedDiscountWebsite += discount;
+          }
+        } else if (fromStatus === FINAL_DELIVERY && toStatus !== FINAL_DELIVERY) {
+          if (order.orderType === 'whatsapp') {
+            stats.completedDeliveryWhatsapp = Math.max(0, stats.completedDeliveryWhatsapp - 1);
+            stats.sumCompletedPriceWhatsapp = Math.max(0, stats.sumCompletedPriceWhatsapp - price);
+            stats.sumCompletedDiscountWhatsapp = Math.max(0, stats.sumCompletedDiscountWhatsapp - discount);
+          } else if (order.orderType === 'website') {
+            stats.completedDeliveryWebsite = Math.max(0, stats.completedDeliveryWebsite - 1);
+            stats.sumCompletedPriceWebsite = Math.max(0, stats.sumCompletedPriceWebsite - price);
+            stats.sumCompletedDiscountWebsite = Math.max(0, stats.sumCompletedDiscountWebsite - discount);
+          }
+        }
+        db.admins[adminIndex].proOrderStats = stats;
+      }
+    }
 
   await writeDB(db);
   return db.orders[orderIndex];
@@ -746,8 +876,7 @@ export async function deleteOrder(id: string): Promise<boolean> {
   const adminIndex = db.admins.findIndex(a => a.id === orderToDelete.adminId);
   if (adminIndex !== -1) {
     const admin = db.admins[adminIndex];
-    const isBusiness = admin.plan === 'business' && admin.subscriptionEndsAt && new Date(admin.subscriptionEndsAt) >= new Date();
-    if (isBusiness) {
+    if (isBusinessPlanActive(admin)) {
       if (orderToDelete.orderType === 'website') admin.websiteOrdersCount = Math.max(0, (admin.websiteOrdersCount ?? 0) - 1);
       else if (orderToDelete.orderType === 'whatsapp') admin.whatsappOrdersCount = Math.max(0, (admin.whatsappOrdersCount ?? 0) - 1);
 
@@ -765,6 +894,34 @@ export async function deleteOrder(id: string): Promise<boolean> {
         }
       }
       db.admins[adminIndex] = admin;
+    }
+
+    // إنقاص عداد وجامع وخصم التوصيل (واتساب/موقع) — باقة Basic فأعلى؛ إنقاص "تمت" والأسعار/الخصومات التامة — باقة Pro فأعلى
+    if (isBasicPlanActive(admin)) {
+      const stats = getOrInitProOrderStats(admin);
+      const price = orderToDelete.totalPrice ?? 0;
+      const discount = orderToDelete.totalDiscount ?? 0;
+      const wasDelivered = (orderToDelete.status || '') === 'delivered';
+      if (orderToDelete.orderType === 'whatsapp') {
+        stats.countWhatsapp = Math.max(0, stats.countWhatsapp - 1);
+        stats.sumPriceWhatsapp = Math.max(0, stats.sumPriceWhatsapp - price);
+        stats.sumDiscountWhatsapp = Math.max(0, stats.sumDiscountWhatsapp - discount);
+        if (isProPlanActive(admin) && wasDelivered) {
+          stats.completedDeliveryWhatsapp = Math.max(0, stats.completedDeliveryWhatsapp - 1);
+          stats.sumCompletedPriceWhatsapp = Math.max(0, stats.sumCompletedPriceWhatsapp - price);
+          stats.sumCompletedDiscountWhatsapp = Math.max(0, stats.sumCompletedDiscountWhatsapp - discount);
+        }
+      } else if (orderToDelete.orderType === 'website') {
+        stats.countWebsite = Math.max(0, stats.countWebsite - 1);
+        stats.sumPriceWebsite = Math.max(0, stats.sumPriceWebsite - price);
+        stats.sumDiscountWebsite = Math.max(0, stats.sumDiscountWebsite - discount);
+        if (isProPlanActive(admin) && wasDelivered) {
+          stats.completedDeliveryWebsite = Math.max(0, stats.completedDeliveryWebsite - 1);
+          stats.sumCompletedPriceWebsite = Math.max(0, stats.sumCompletedPriceWebsite - price);
+          stats.sumCompletedDiscountWebsite = Math.max(0, stats.sumCompletedDiscountWebsite - discount);
+        }
+      }
+      db.admins[adminIndex].proOrderStats = stats;
     }
   }
 
@@ -817,16 +974,49 @@ export async function createTableOrder(order: Omit<TableOrder, 'id' | 'createdAt
     status: order.status || 'pending', // Default status is 'pending'
   };
   db.tableOrders.push(newOrder);
+
+  const adminIndex = db.admins.findIndex(a => a.id === order.adminId);
+  if (adminIndex !== -1) {
+    const admin = db.admins[adminIndex];
+    if (isProPlanActive(admin)) {
+      const stats = getOrInitProOrderStats(admin);
+      stats.countTable += 1;
+      stats.sumPriceTable += order.totalPrice ?? 0;
+      stats.sumDiscountTable += order.totalDiscount ?? 0;
+      db.admins[adminIndex].proOrderStats = stats;
+    }
+  }
+
   await writeDB(db);
   return newOrder;
 }
 
 export async function deleteTableOrder(id: string): Promise<boolean> {
   const db = await readDB();
-  const filteredOrders = db.tableOrders.filter(order => order.id !== id);
-  if (filteredOrders.length === db.tableOrders.length) return false;
+  const orderToDelete = db.tableOrders.find(order => order.id === id);
+  if (!orderToDelete) return false;
 
-  db.tableOrders = filteredOrders;
+  const adminIndex = db.admins.findIndex(a => a.id === orderToDelete.adminId);
+  if (adminIndex !== -1) {
+    const admin = db.admins[adminIndex];
+    if (isProPlanActive(admin)) {
+      const stats = getOrInitProOrderStats(admin);
+      const price = orderToDelete.totalPrice ?? 0;
+      const discount = orderToDelete.totalDiscount ?? 0;
+      const wasCompleted = (orderToDelete.status || '') === 'completed';
+      stats.countTable = Math.max(0, stats.countTable - 1);
+      stats.sumPriceTable = Math.max(0, stats.sumPriceTable - price);
+      stats.sumDiscountTable = Math.max(0, stats.sumDiscountTable - discount);
+      if (wasCompleted) {
+        stats.completedTable = Math.max(0, stats.completedTable - 1);
+        stats.sumCompletedPriceTable = Math.max(0, stats.sumCompletedPriceTable - price);
+        stats.sumCompletedDiscountTable = Math.max(0, stats.sumCompletedDiscountTable - discount);
+      }
+      db.admins[adminIndex].proOrderStats = stats;
+    }
+  }
+
+  db.tableOrders = db.tableOrders.filter(order => order.id !== id);
   await writeDB(db);
   return true;
 }
@@ -872,12 +1062,13 @@ export async function updateTableOrderStatusWithLogAndCounters(
   };
   db.tableOrderStatusLogs.push(log);
 
-  if (fromStatus !== toStatus) {
+  // عدادات نقل الحالات (باقة البزنس فقط) — لا نعد إن لم تكن الباقة مفعلة
+  const adminForPlan = db.admins.find(a => a.id === order.adminId);
+  if (adminForPlan && isBusinessPlanActive(adminForPlan) && fromStatus !== toStatus) {
     const list = actor.userType === 'admin' ? db.admins : db.employees;
     const userIndex = list.findIndex((u: { id: string }) => u.id === actor.userId);
     if (userIndex !== -1) {
       const u = list[userIndex] as Admin | Employee;
-      // تخزين بعدد النقلات فقط (+1)، الوزن يُطبّق عند العرض في الكارد
       const rec = u as unknown as Record<string, number>;
       if (toStatus > fromStatus) {
         const key = `tableForward${fromStatus}${toStatus}`;
@@ -887,6 +1078,28 @@ export async function updateTableOrderStatusWithLogAndCounters(
         rec[key] = (rec[key] ?? 0) + 1;
       }
       list[userIndex] = u;
+    }
+  }
+
+  // إحصائيات Pro: عدّاد طلبات الطاولة التي "تمت" + الأسعار والخصومات التامة (باقة Pro فقط)
+  const adminIndex = db.admins.findIndex(a => a.id === order.adminId);
+  if (adminIndex !== -1) {
+    const admin = db.admins[adminIndex];
+    if (isProPlanActive(admin)) {
+      const stats = getOrInitProOrderStats(admin);
+      const FINAL_TABLE = 4;
+      const price = order.totalPrice ?? 0;
+      const discount = order.totalDiscount ?? 0;
+      if (toStatus === FINAL_TABLE && fromStatus !== FINAL_TABLE) {
+        stats.completedTable += 1;
+        stats.sumCompletedPriceTable += price;
+        stats.sumCompletedDiscountTable += discount;
+      } else if (fromStatus === FINAL_TABLE && toStatus !== FINAL_TABLE) {
+        stats.completedTable = Math.max(0, stats.completedTable - 1);
+        stats.sumCompletedPriceTable = Math.max(0, stats.sumCompletedPriceTable - price);
+        stats.sumCompletedDiscountTable = Math.max(0, stats.sumCompletedDiscountTable - discount);
+      }
+      db.admins[adminIndex].proOrderStats = stats;
     }
   }
 
@@ -993,9 +1206,8 @@ export async function assignOrderToEmployee(
 
   const adminIndex = db.admins.findIndex(a => a.id === order.adminId);
   const admin = adminIndex !== -1 ? db.admins[adminIndex] : null;
-  const isBusiness = admin?.plan === 'business' && admin?.subscriptionEndsAt && new Date(admin.subscriptionEndsAt) >= new Date();
 
-  if (isBusiness && adminIndex !== -1) {
+  if (admin && isBusinessPlanActive(admin) && adminIndex !== -1) {
     // طرح 1 من العداد السابق (باقة البزنس فقط)
     const a = db.admins[adminIndex];
     if (!previousAssignedTo || previousAssignedTo === '') {
@@ -1015,7 +1227,7 @@ export async function assignOrderToEmployee(
 
   order.assignedTo = newAssignedTo;
 
-  if (isBusiness && adminIndex !== -1) {
+  if (admin && isBusinessPlanActive(admin) && adminIndex !== -1) {
     // إضافة 1 للتعيين الجديد (باقة البزنس فقط)
     const a = db.admins[adminIndex];
     if (!newAssignedTo || newAssignedTo === '') {
@@ -1060,7 +1272,9 @@ export async function assignTableOrderToEmployee(
 
   order.assignedTo = employeeId || undefined;
 
-  if (options?.incrementAssignedCount && employeeId) {
+  // عدّاد تعيين الطاولة (باقة البزنس فقط)
+  const admin = db.admins.find(a => a.id === order.adminId);
+  if (admin && isBusinessPlanActive(admin) && options?.incrementAssignedCount && employeeId) {
     const empIndex = db.employees.findIndex(emp => emp.id === employeeId);
     if (empIndex !== -1) {
       const e = db.employees[empIndex];

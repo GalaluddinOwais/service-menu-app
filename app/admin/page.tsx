@@ -122,6 +122,31 @@ function AdminPageContent() {
   const [teamStatsError, setTeamStatsError] = useState<string | null>(null);
   const [teamStatsCachedAt, setTeamStatsCachedAt] = useState<string | null>(null);
 
+  // إحصائيات الطلبات (باقة Pro): عدادات وجوامع وتمت — للعرض في ملخص النشاط
+  type OrderStats = {
+    countWhatsapp: number;
+    countWebsite: number;
+    countTable: number;
+    sumPriceWhatsapp: number;
+    sumPriceWebsite: number;
+    sumPriceTable: number;
+    sumDiscountWhatsapp: number;
+    sumDiscountWebsite: number;
+    sumDiscountTable: number;
+    completedDeliveryWhatsapp: number;
+    completedDeliveryWebsite: number;
+    completedTable: number;
+    sumCompletedPriceWhatsapp?: number;
+    sumCompletedPriceWebsite?: number;
+    sumCompletedPriceTable?: number;
+    sumCompletedDiscountWhatsapp?: number;
+    sumCompletedDiscountWebsite?: number;
+    sumCompletedDiscountTable?: number;
+  };
+  const [orderStats, setOrderStats] = useState<OrderStats | null>(null);
+  const [orderStatsLoading, setOrderStatsLoading] = useState(false);
+  const [orderStatsError, setOrderStatsError] = useState<string | null>(null);
+
   // نشاط العمال: كاردات فقط + تفاصيل المُختار في قسم أسفل (باقة البزنس للتفاصيل)
   type WorkerCard = {
     id: string;
@@ -514,15 +539,21 @@ function AdminPageContent() {
   // Set default active tab for employee when URL has no valid tab (employees don't see summary)
   useEffect(() => {
     if (userType !== 'employee') return;
-    const allowedTabs: TabType[] = ['workersActivity'];
+    const allowedTabs: TabType[] = isPlanActive('business') ? ['workersActivity'] : [];
     if (isDelivery) allowedTabs.push('orders');
     if (isWaiter) allowedTabs.push('tableOrders');
     const tabFromUrl = tabParam as TabType | null;
     const urlTabAllowed = tabFromUrl && TAB_VALUES.includes(tabFromUrl) && allowedTabs.includes(tabFromUrl);
     if (urlTabAllowed) return; // احترام التبويب في الرابط
-    const defaultTab = isDelivery ? 'orders' : isWaiter ? 'tableOrders' : undefined;
+    const defaultTab = isDelivery ? 'orders' : isWaiter ? 'tableOrders' : allowedTabs[0];
     if (defaultTab) setActiveTab(defaultTab);
   }, [userType, isDelivery, isWaiter, tabParam]);
+
+  // إذا فُتح تبويب نشاط العاملين دون باقة البزنس (مثلاً من الرابط) — إعادة التوجيه
+  useEffect(() => {
+    if (activeTab !== 'workersActivity' || isPlanActive('business')) return;
+    setActiveTab(userType === 'admin' ? 'summary' : isDelivery ? 'orders' : isWaiter ? 'tableOrders' : 'orders');
+  }, [activeTab, userType, isDelivery, isWaiter, currentAdmin?.plan]);
 
   const handleLogout = () => {
     localStorage.removeItem('admin_data');
@@ -745,6 +776,32 @@ function AdminPageContent() {
   useEffect(() => {
     if (userType === 'admin' && activeTab === 'summary' && isPlanActive('business')) {
       fetchTeamStats();
+    }
+  }, [userType, activeTab, currentAdmin?.id, currentAdmin?.plan, currentAdmin?.subscriptionEndsAt]);
+
+  const fetchOrderStats = async () => {
+    setOrderStatsLoading(true);
+    setOrderStatsError(null);
+    try {
+      const res = await fetch('/api/admin/stats/orders', { headers: getAuthHeaders() });
+      const data = await res.json();
+      if (!res.ok) {
+        setOrderStatsError(data.error || 'فشل جلب إحصائيات الطلبات');
+        setOrderStats(null);
+        return;
+      }
+      setOrderStats(data);
+    } catch (e) {
+      setOrderStatsError('خطأ في الاتصال');
+      setOrderStats(null);
+    } finally {
+      setOrderStatsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (userType === 'admin' && activeTab === 'summary' && isPlanActive('basic')) {
+      fetchOrderStats();
     }
   }, [userType, activeTab, currentAdmin?.id, currentAdmin?.plan, currentAdmin?.subscriptionEndsAt]);
 
@@ -1890,6 +1947,19 @@ function AdminPageContent() {
               </button>
             )}
 
+            {/* نشاط العاملين / نشاطي — يظهر للبزنس فقط، مباشرة بعد ملخص النشاط */}
+            {(userType === 'admin' || userType === 'employee') && isPlanActive('business') && (
+              <button
+                onClick={() => { setActiveTab('workersActivity'); setIsSidebarOpen(false); }}
+                className={`w-full text-right px-4 py-3 rounded-lg font-bold transition-colors ${activeTab === 'workersActivity'
+                  ? 'bg-gray-800 text-white'
+                  : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+              >
+                {userType === 'admin' ? 'نشاط العاملين' : 'نشاطي'}
+              </button>
+            )}
+
             {/* إدارة القوائم - للأدمن فقط */}
             {userType === 'admin' && (
               <button
@@ -1900,19 +1970,6 @@ function AdminPageContent() {
                   }`}
               >
                 إدارة القوائم
-              </button>
-            )}
-
-            {/* نشاط العاملين - للأدمن والموظف (باقة البزنس للتفاصيل) */}
-            {(userType === 'admin' || userType === 'employee') && (
-              <button
-                onClick={() => { setActiveTab('workersActivity'); setIsSidebarOpen(false); }}
-                className={`w-full text-right px-4 py-3 rounded-lg font-bold transition-colors ${activeTab === 'workersActivity'
-                  ? 'bg-gray-800 text-white'
-                  : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-              >
-                {userType === 'admin' ? 'نشاط العاملين' : 'نشاطي'}
               </button>
             )}
 
@@ -1999,19 +2056,283 @@ function AdminPageContent() {
               <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
                 لا يوجد محتوى لملخص النشاط لهذا الحساب.
               </div>
-            ) : !isPlanActive('business') ? (
-              <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
-                ملخص النشاط متاح ضمن باقة البزنس فقط.
-              </div>
-            ) : teamStatsLoading ? (
-              <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
-                جاري تحميل الإحصائيات...
-              </div>
-            ) : teamStatsError ? (
-              <div className="bg-white rounded-lg shadow p-8 text-center text-red-600">
-                {teamStatsError}
-              </div>
             ) : (
+              <div className="space-y-10">
+                {/* عدد المنتجات وتوزيع العدد على كل قائمة — تظهر للجميع بما فيها Free، أول واحدة في الأعلى */}
+                <section>
+                  <h2 className="text-2xl font-bold text-gray-800 mb-4">عدد المنتجات وتوزيع العدد على كل قائمة</h2>
+                  {(() => {
+                    const listIds = lists.map(l => l.id);
+                    const adminItems = items.filter(i => listIds.includes(i.listId));
+                    const segments = lists.map(list => ({
+                      name: list.name,
+                      value: adminItems.filter(item => item.listId === list.id).length,
+                    })).filter(s => s.value > 0);
+                    const total = segments.reduce((sum, s) => sum + s.value, 0);
+                    const PIE_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+                    let cumulative = 0;
+                    const conicParts = segments.map((s, i) => {
+                      const pct = total ? (s.value / total) * 100 : 0;
+                      const part = `${PIE_COLORS[i % PIE_COLORS.length]} ${cumulative}% ${cumulative + pct}%`;
+                      cumulative += pct;
+                      return part;
+                    });
+                    return (
+                      <div className="bg-white rounded-xl shadow-md p-4 border border-gray-100 max-w-md">
+                        <div className="flex flex-col items-center">
+                          {total === 0 ? (
+                            <div className="w-44 h-44 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-sm">لا منتجات بعد</div>
+                          ) : (
+                            <>
+                              <div className="w-44 h-44 rounded-full flex-shrink-0" style={{ background: `conic-gradient(${conicParts.join(', ')})` }} title={segments.map(s => `${s.name}: ${s.value}`).join('\n')} />
+                              <p className="mt-3 text-sm font-bold text-gray-700">المجموع: {total} منتج</p>
+                              <ul className="mt-3 w-full space-y-2 text-sm">
+                                {segments.map((s, i) => (
+                                  <li key={i} className="flex items-center gap-2">
+                                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
+                                    <span className="truncate">{s.name}</span>
+                                    <span className="text-gray-600 font-medium flex-shrink-0">{s.value}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </section>
+
+                {!isPlanActive('basic') ? (
+                  <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+                    ملخص النشاط متاح ضمن باقة Basic أو أعلى.
+                  </div>
+                ) : (
+                  <>
+                {/* إحصائيات الطلبات — أشرطة مقسومة (Pro+) وأشرطة كاملة تحت كل واحد (Basic+ للموقع/واتساب، Pro+ للطاولة/المجموع) */}
+                <section>
+                  <h2 className="text-2xl font-bold text-gray-800 mb-4">إحصائيات الطلبات</h2>
+                  {orderStatsLoading ? (
+                    <p className="text-gray-500">جاري تحميل إحصائيات الطلبات...</p>
+                  ) : orderStatsError ? (
+                    <p className="text-red-600">{orderStatsError}</p>
+                  ) : orderStats ? (
+                    <div className="space-y-6">
+                      {(() => {
+                        const isPro = isPlanActive('pro');
+                        const OrderProgressBar = ({
+                          label,
+                          totalCount,
+                          completedCount,
+                          sumPrice,
+                          sumDiscount,
+                          sumCompletedPrice,
+                          sumCompletedDiscount,
+                        }: {
+                          label: string;
+                          totalCount: number;
+                          completedCount: number;
+                          sumPrice: number;
+                          sumDiscount: number;
+                          sumCompletedPrice: number;
+                          sumCompletedDiscount: number;
+                        }) => {
+                          if (totalCount < 1) return null;
+                          const remainingCount = totalCount - completedCount;
+                          const completedPct = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+                          const remainingPct = 100 - completedPct;
+                          const remainingPrice = Math.max(0, sumPrice - sumCompletedPrice);
+                          const remainingDiscount = Math.max(0, sumDiscount - sumCompletedDiscount);
+                          return (
+                            <div>
+                              <p className="text-sm font-medium text-gray-700 mb-2">{label}</p>
+                              <div className="flex w-full overflow-hidden rounded-lg border border-gray-300" dir="ltr">
+                                {remainingPct > 0 && (
+                                  <div
+                                    className="flex flex-col items-center justify-center min-w-0 py-3 px-2 bg-amber-400 text-gray-900"
+                                    style={{ width: `${remainingPct}%` }}
+                                  >
+                                    <span className="font-bold text-sm">{remainingCount} طلب</span>
+                                    <span className="text-xs mt-1">المبلغ: {remainingPrice}</span>
+                                    <span className="text-xs">سيوفر المشتري: {remainingDiscount}</span>
+                                  </div>
+                                )}
+                                {completedPct > 0 && (
+                                  <div
+                                    className="flex flex-col items-center justify-center min-w-0 py-3 px-2 bg-emerald-500 text-white"
+                                    style={{ width: `${completedPct}%` }}
+                                  >
+                                    <span className="font-bold text-sm">{completedCount} طلب</span>
+                                    <span className="text-xs mt-1 opacity-95">المبلغ: {sumCompletedPrice}</span>
+                                    <span className="text-xs opacity-95">وفر المشتري: {sumCompletedDiscount}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        };
+                        const FullBar = ({ count, sumPrice, sumDiscount }: { count: number; sumPrice: number; sumDiscount: number }) => {
+                          if (count < 1) return null;
+                          return (
+                            <div className="flex w-full overflow-hidden rounded-lg border border-gray-300 bg-slate-200 mt-2" dir="ltr">
+                              <div className="flex flex-col items-center justify-center flex-1 py-3 px-2 text-gray-900">
+                                <span className="font-bold text-sm">{count} طلب</span>
+                                <span className="text-xs mt-1">المبلغ: {sumPrice}</span>
+                                <span className="text-xs">وفر المشتري: {sumDiscount}</span>
+                              </div>
+                            </div>
+                          );
+                        };
+                        const totalCount = (orderStats.countWebsite ?? 0) + (orderStats.countWhatsapp ?? 0) + (orderStats.countTable ?? 0);
+                        const totalPrice = (orderStats.sumPriceWebsite ?? 0) + (orderStats.sumPriceWhatsapp ?? 0) + (orderStats.sumPriceTable ?? 0);
+                        const totalDiscount = (orderStats.sumDiscountWebsite ?? 0) + (orderStats.sumDiscountWhatsapp ?? 0) + (orderStats.sumDiscountTable ?? 0);
+                        const totalCompletedPrice = (orderStats.sumCompletedPriceWebsite ?? 0) + (orderStats.sumCompletedPriceWhatsapp ?? 0) + (orderStats.sumCompletedPriceTable ?? 0);
+                        const totalCompletedDiscount = (orderStats.sumCompletedDiscountWebsite ?? 0) + (orderStats.sumCompletedDiscountWhatsapp ?? 0) + (orderStats.sumCompletedDiscountTable ?? 0);
+                        const totalCompletedCount = (orderStats.completedDeliveryWebsite ?? 0) + (orderStats.completedDeliveryWhatsapp ?? 0) + (orderStats.completedTable ?? 0);
+                        const cWeb = orderStats.countWebsite ?? 0;
+                        const cWa = orderStats.countWhatsapp ?? 0;
+                        const cTbl = orderStats.countTable ?? 0;
+                        return (
+                          <>
+                            <div>
+                              {isPro && (
+                                <OrderProgressBar
+                                  label="طلبات الموقع"
+                                  totalCount={cWeb}
+                                  completedCount={orderStats.completedDeliveryWebsite ?? 0}
+                                  sumPrice={orderStats.sumPriceWebsite ?? 0}
+                                  sumDiscount={orderStats.sumDiscountWebsite ?? 0}
+                                  sumCompletedPrice={orderStats.sumCompletedPriceWebsite ?? 0}
+                                  sumCompletedDiscount={orderStats.sumCompletedDiscountWebsite ?? 0}
+                                />
+                              )}
+                              {!isPro && cWeb >= 1 && <p className="text-sm font-medium text-gray-700 mb-2">طلبات الموقع</p>}
+                              <FullBar count={cWeb} sumPrice={orderStats.sumPriceWebsite ?? 0} sumDiscount={orderStats.sumDiscountWebsite ?? 0} />
+                            </div>
+                            <div>
+                              {isPro && (
+                                <OrderProgressBar
+                                  label="طلبات واتساب"
+                                  totalCount={cWa}
+                                  completedCount={orderStats.completedDeliveryWhatsapp ?? 0}
+                                  sumPrice={orderStats.sumPriceWhatsapp ?? 0}
+                                  sumDiscount={orderStats.sumDiscountWhatsapp ?? 0}
+                                  sumCompletedPrice={orderStats.sumCompletedPriceWhatsapp ?? 0}
+                                  sumCompletedDiscount={orderStats.sumCompletedDiscountWhatsapp ?? 0}
+                                />
+                              )}
+                              {!isPro && cWa >= 1 && <p className="text-sm font-medium text-gray-700 mb-2">طلبات واتساب</p>}
+                              <FullBar count={cWa} sumPrice={orderStats.sumPriceWhatsapp ?? 0} sumDiscount={orderStats.sumDiscountWhatsapp ?? 0} />
+                            </div>
+                            <div>
+                              {isPro && (
+                                <OrderProgressBar
+                                  label="طلبات الطاولة"
+                                  totalCount={cTbl}
+                                  completedCount={orderStats.completedTable ?? 0}
+                                  sumPrice={orderStats.sumPriceTable ?? 0}
+                                  sumDiscount={orderStats.sumDiscountTable ?? 0}
+                                  sumCompletedPrice={orderStats.sumCompletedPriceTable ?? 0}
+                                  sumCompletedDiscount={orderStats.sumCompletedDiscountTable ?? 0}
+                                />
+                              )}
+                              {isPro && <FullBar count={cTbl} sumPrice={orderStats.sumPriceTable ?? 0} sumDiscount={orderStats.sumDiscountTable ?? 0} />}
+                            </div>
+                            {isPro && totalCount >= 1 && (
+                              <div>
+                                <OrderProgressBar
+                                  label="المجموع"
+                                  totalCount={totalCount}
+                                  completedCount={totalCompletedCount}
+                                  sumPrice={totalPrice}
+                                  sumDiscount={totalDiscount}
+                                  sumCompletedPrice={totalCompletedPrice}
+                                  sumCompletedDiscount={totalCompletedDiscount}
+                                />
+                                <FullBar count={totalCount} sumPrice={totalPrice} sumDiscount={totalDiscount} />
+                              </div>
+                            )}
+                            {!isPro && (cWeb + cWa) >= 1 && (
+                              <div>
+                                <p className="text-sm font-medium text-gray-700 mb-2">المجموع</p>
+                                <FullBar count={cWeb + cWa} sumPrice={(orderStats.sumPriceWebsite ?? 0) + (orderStats.sumPriceWhatsapp ?? 0)} sumDiscount={(orderStats.sumDiscountWebsite ?? 0) + (orderStats.sumDiscountWhatsapp ?? 0)} />
+                              </div>
+                            )}
+                            {/* Pies: Basic+ (موقع + واتساب)، Pro+ (موقع + واتساب + طاولة) */}
+                            {(() => {
+                              const PIE_COLORS_ORDER = { موقع: '#3b82f6', واتساب: '#22c55e', طاولة: '#f59e0b' };
+                              const OrderPie = ({ label, segments }: { label: string; segments: { name: string; value: number }[] }) => {
+                                const withColor = segments.filter(s => s.value > 0).map(s => ({ ...s, color: PIE_COLORS_ORDER[s.name as keyof typeof PIE_COLORS_ORDER] ?? '#94a3b8' }));
+                                const total = withColor.reduce((sum, s) => sum + s.value, 0);
+                                let cumulative = 0;
+                                const conicParts = withColor.map(s => {
+                                  const pct = total ? (s.value / total) * 100 : 0;
+                                  const part = `${s.color} ${cumulative}% ${cumulative + pct}%`;
+                                  cumulative += pct;
+                                  return part;
+                                });
+                                return (
+                                  <div className="bg-white rounded-xl shadow-md p-4 border border-gray-100">
+                                    <h3 className="text-sm font-bold text-gray-700 mb-3 text-center">{label}</h3>
+                                    <div className="flex flex-col items-center">
+                                      {total === 0 ? (
+                                        <div className="w-36 h-36 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs">لا نشاط</div>
+                                      ) : (
+                                        <>
+                                          <div className="w-36 h-36 rounded-full flex-shrink-0" style={{ background: `conic-gradient(${conicParts.join(', ')})` }} title={withColor.map(s => `${s.name}: ${s.value}`).join('\n')} />
+                                          <p className="mt-2 text-xs text-gray-500">المجموع: {total}</p>
+                                          <ul className="mt-2 w-full space-y-1 text-xs">
+                                            {withColor.map((s, i) => (
+                                              <li key={i} className="flex items-center gap-2">
+                                                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                                                <span>{s.name}</span>
+                                                <span className="text-gray-600 font-medium">{s.value}</span>
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              };
+                              const segBasicCount = [{ name: 'موقع', value: cWeb }, { name: 'واتساب', value: cWa }];
+                              const segBasicPrice = [{ name: 'موقع', value: orderStats.sumPriceWebsite ?? 0 }, { name: 'واتساب', value: orderStats.sumPriceWhatsapp ?? 0 }];
+                              const segBasicDiscount = [{ name: 'موقع', value: orderStats.sumDiscountWebsite ?? 0 }, { name: 'واتساب', value: orderStats.sumDiscountWhatsapp ?? 0 }];
+                              const segProCount = [{ name: 'موقع', value: cWeb }, { name: 'واتساب', value: cWa }, { name: 'طاولة', value: cTbl }];
+                              const segProPrice = [{ name: 'موقع', value: orderStats.sumPriceWebsite ?? 0 }, { name: 'واتساب', value: orderStats.sumPriceWhatsapp ?? 0 }, { name: 'طاولة', value: orderStats.sumPriceTable ?? 0 }];
+                              const segProDiscount = [{ name: 'موقع', value: orderStats.sumDiscountWebsite ?? 0 }, { name: 'واتساب', value: orderStats.sumDiscountWhatsapp ?? 0 }, { name: 'طاولة', value: orderStats.sumDiscountTable ?? 0 }];
+                              return (
+                                <div className="mt-8 space-y-6">
+                                  <h3 className="text-lg font-bold text-gray-700">توزيع حسب المصدر</h3>
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                    <OrderPie label="العدد (موقع + واتساب)" segments={segBasicCount} />
+                                    <OrderPie label="المبلغ (موقع + واتساب)" segments={segBasicPrice} />
+                                    <OrderPie label="وفر المشتري (موقع + واتساب)" segments={segBasicDiscount} />
+                                  </div>
+                                  {isPro && (
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                      <OrderPie label="العدد (مع الطاولة)" segments={segProCount} />
+                                      <OrderPie label="المبلغ (مع الطاولة)" segments={segProPrice} />
+                                      <OrderPie label="وفر المشتري (مع الطاولة)" segments={segProDiscount} />
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  ) : null}
+                </section>
+
+                {/* إحصائيات الفريق (Business فقط) */}
+                {!isPlanActive('business') ? null : teamStatsLoading ? (
+                  <p className="text-gray-500">جاري تحميل إحصائيات الفريق...</p>
+                ) : teamStatsError ? (
+                  <p className="text-red-600">{teamStatsError}</p>
+                ) : (
               (() => {
                 const PIE_COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'];
 
@@ -2168,6 +2489,10 @@ function AdminPageContent() {
                   </div>
                 );
               })()
+            )}
+                  </>
+                )}
+              </div>
             )}
           </div>
         )}
