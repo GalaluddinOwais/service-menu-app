@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     }
 
     const isSelf = userId === payload.adminId || userId === payload.employeeId;
-    let adminId: string;
+    let adminId: string | undefined;
     let allowed = false;
 
     if (isSelf) {
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       allowed = !!(admin && (await checkPlanAndAutoDisable(admin, 'business')));
     }
 
-    if (!allowed) {
+    if (!allowed || adminId == null) {
       return NextResponse.json({ error: 'غير مصرح أو الباقة لا تدعم إحصائيات الطلبات' }, { status: 403 });
     }
 
