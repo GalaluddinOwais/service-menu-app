@@ -87,15 +87,6 @@ export interface Admin {
   employeeRatingScaleTableBackward?: number;
   employeeRatingTendencyX?: number;
 
-  /** كاش الإحصائيات — استجابات متعددة (team، وغيرها لاحقاً)، كل منها مع توقيت وبياناته */
-  adminCachedStats?: {
-    team?: {
-      cachedAt: string; // ISO
-      users: Array<{ id: string; name: string; userType: 'admin' | 'employee'; stats: UserStats }>;
-    };
-    // يمكن إضافة المزيد لاحقاً، مثلاً: otherStat?: { cachedAt: string; data: ... };
-  };
-
   /** إحصائيات الطلبات للباقة Pro: عدادات وجوامع (تُحدَّث عند الإنشاء/الحذف/تغيير الحالة النهائية) */
   proOrderStats?: {
     countWhatsapp: number;
@@ -118,6 +109,24 @@ export interface Admin {
     sumCompletedDiscountWhatsapp: number;
     sumCompletedDiscountWebsite: number;
     sumCompletedDiscountTable: number;
+  };
+
+  /** أكثر المنتجات طلباً (باقة البزنس فقط): كميات وإيرادات تُحدَّث عند إنشاء/حذف الطلبات */
+  itemSalesStats?: Record<string, { quantity: number; revenue: number }>;
+
+  /** كاش الطلبات والإيراد عبر الزمن (باقة Basic+): إتمام فقط، يُحدَّث بالإلحاق عند انتهاء صلاحية الكاش، ويُطرح عند الحذف أو تراجع الحالة */
+  ordersOverTimeCache?: {
+    cachedAt: string; // ISO
+    delivery: Record<string, { completedCount: number; revenue: number; customerSaved: number }>; // key = YYYY-MM-DD
+    table: Record<string, { completedCount: number; revenue: number; customerSaved: number }>;
+  };
+
+  /** كاش إحصائيات الفريق (سكشن العاملين في ملخص النشاط) — يُحدَّث كل 24 ساعة */
+  adminCachedStats?: {
+    team?: {
+      cachedAt: string; // ISO
+      users: Array<{ id: string; name: string; userType: 'admin' | 'employee'; stats: UserStats }>;
+    };
   };
 }
 
@@ -680,6 +689,8 @@ export async function createOrder(order: Omit<Order, 'id' | 'createdAt'>): Promi
           db.employees[empIndex] = e;
         }
       }
+      const itemStats = getOrInitItemSalesStats(admin);
+      applyItemSalesDelta(itemStats, order.items, 1);
       db.admins[adminIndex] = admin;
     }
 
@@ -723,6 +734,236 @@ function isProPlanActive(admin: Admin): boolean {
 /** الباقة البزنس نشطة (للتحقق قبل تحديث عدادات نقل الحالات والتعيين) */
 function isBusinessPlanActive(admin: Admin): boolean {
   return admin.plan === 'business' && !!admin.subscriptionEndsAt && new Date(admin.subscriptionEndsAt) >= new Date();
+}
+
+function getOrInitItemSalesStats(admin: Admin): NonNullable<Admin['itemSalesStats']> {
+  if (!admin.itemSalesStats) admin.itemSalesStats = {};
+  return admin.itemSalesStats;
+}
+
+function applyItemSalesDelta(
+  stats: Record<string, { quantity: number; revenue: number }>,
+  items: OrderItem[],
+  sign: 1 | -1
+): void {
+  for (const item of items) {
+    const key = (item.name || '').trim() || '__unknown__';
+    const q = item.quantity * sign;
+    const rev = (item.discountedPrice ?? item.price ?? 0) * item.quantity * sign;
+    const cur = stats[key] ?? { quantity: 0, revenue: 0 };
+    const quantity = Math.max(0, cur.quantity + q);
+    const revenue = Math.max(0, cur.revenue + rev);
+    if (quantity === 0 && revenue === 0) delete stats[key];
+    else stats[key] = { quantity, revenue };
+  }
+}
+
+const DELIVERY_FINAL_STATUS = 4;
+const TABLE_FINAL_STATUS = 4;
+
+function toDateKey(iso: string): string {
+  return iso.slice(0, 10);
+}
+
+function getOrInitOrdersOverTimeCache(admin: Admin): NonNullable<Admin['ordersOverTimeCache']> {
+  if (!admin.ordersOverTimeCache) {
+    admin.ordersOverTimeCache = {
+      cachedAt: new Date(0).toISOString(),
+      delivery: {},
+      table: {},
+    };
+    return admin.ordersOverTimeCache;
+  }
+  if (!admin.ordersOverTimeCache.delivery) admin.ordersOverTimeCache.delivery = {};
+  if (!admin.ordersOverTimeCache.table) admin.ordersOverTimeCache.table = {};
+  return admin.ordersOverTimeCache;
+}
+
+/** لكل يوم: نعد كل طلب مرة واحدة فقط (آخر إكمال للطلب في ذلك اليوم). */
+function appendDeliveryCompletionsToOrdersOverTime(
+  db: Database,
+  adminIndex: number,
+  fromDate: Date,
+  toDate: Date
+): void {
+  const admin = db.admins[adminIndex];
+  const cache = getOrInitOrdersOverTimeCache(admin);
+  const fromTime = fromDate.getTime();
+  const toTime = toDate.getTime();
+  const logs = db.deliveryOrderStatusLogs.filter(
+    (log) => log.adminId === admin.id && log.toStatus === DELIVERY_FINAL_STATUS && log.createdAt
+  );
+  const orderById = new Map(db.orders.map((o) => [o.id, o]));
+
+  const byDateThenOrder = new Map<string, Map<string, { createdAt: string }>>();
+  for (const log of logs) {
+    const t = new Date(log.createdAt).getTime();
+    if (t < fromTime || t > toTime) continue;
+    const dateKey = toDateKey(log.createdAt);
+    if (!byDateThenOrder.has(dateKey)) byDateThenOrder.set(dateKey, new Map());
+    const byOrder = byDateThenOrder.get(dateKey)!;
+    const existing = byOrder.get(log.orderId);
+    if (!existing || new Date(log.createdAt).getTime() > new Date(existing.createdAt).getTime()) {
+      byOrder.set(log.orderId, { createdAt: log.createdAt });
+    }
+  }
+
+  for (const [dateKey, byOrder] of byDateThenOrder) {
+    for (const orderId of byOrder.keys()) {
+      const order = orderById.get(orderId);
+      if (!order) continue;
+      const revenue = order.totalPrice ?? 0;
+      const customerSaved = order.totalDiscount ?? 0;
+      const cur = cache.delivery[dateKey] ?? { completedCount: 0, revenue: 0, customerSaved: 0 };
+      cache.delivery[dateKey] = {
+        completedCount: cur.completedCount + 1,
+        revenue: cur.revenue + revenue,
+        customerSaved: cur.customerSaved + customerSaved,
+      };
+    }
+  }
+  db.admins[adminIndex] = admin;
+}
+
+/** لكل يوم: نعد كل طلب طاولة مرة واحدة فقط (آخر إكمال للطلب في ذلك اليوم). */
+function appendTableCompletionsToOrdersOverTime(
+  db: Database,
+  adminIndex: number,
+  fromDate: Date,
+  toDate: Date
+): void {
+  const admin = db.admins[adminIndex];
+  const cache = getOrInitOrdersOverTimeCache(admin);
+  const fromTime = fromDate.getTime();
+  const toTime = toDate.getTime();
+  const logs = db.tableOrderStatusLogs.filter(
+    (log) => log.adminId === admin.id && log.toStatus === TABLE_FINAL_STATUS && log.createdAt
+  );
+  const orderById = new Map(db.tableOrders.map((o) => [o.id, o]));
+
+  const byDateThenOrder = new Map<string, Map<string, { createdAt: string }>>();
+  for (const log of logs) {
+    const t = new Date(log.createdAt).getTime();
+    if (t < fromTime || t > toTime) continue;
+    const dateKey = toDateKey(log.createdAt);
+    if (!byDateThenOrder.has(dateKey)) byDateThenOrder.set(dateKey, new Map());
+    const byOrder = byDateThenOrder.get(dateKey)!;
+    const existing = byOrder.get(log.orderId);
+    if (!existing || new Date(log.createdAt).getTime() > new Date(existing.createdAt).getTime()) {
+      byOrder.set(log.orderId, { createdAt: log.createdAt });
+    }
+  }
+
+  for (const [dateKey, byOrder] of byDateThenOrder) {
+    for (const orderId of byOrder.keys()) {
+      const order = orderById.get(orderId);
+      if (!order) continue;
+      const revenue = order.totalPrice ?? 0;
+      const customerSaved = order.totalDiscount ?? 0;
+      const cur = cache.table[dateKey] ?? { completedCount: 0, revenue: 0, customerSaved: 0 };
+      cache.table[dateKey] = {
+        completedCount: cur.completedCount + 1,
+        revenue: cur.revenue + revenue,
+        customerSaved: cur.customerSaved + customerSaved,
+      };
+    }
+  }
+  db.admins[adminIndex] = admin;
+}
+
+/** إذا مرّ يوم على cachedAt يُلحَق التمام منذ آخر تاريخ كاش حتى أمس (استبعاد اليوم). باقة Business فقط. */
+export function ensureOrdersOverTimeCacheRecomputed(db: Database, adminIndex: number): void {
+  const admin = db.admins[adminIndex];
+  if (!isBusinessPlanActive(admin)) return;
+  const cache = getOrInitOrdersOverTimeCache(admin);
+  const now = new Date();
+  const cachedAt = new Date(cache.cachedAt);
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  if (now.getTime() - cachedAt.getTime() < oneDayMs) return;
+  const start = new Date(cachedAt);
+  start.setUTCDate(start.getUTCDate() + 1);
+  start.setUTCHours(0, 0, 0, 0);
+  const end = new Date(now);
+  end.setUTCDate(end.getUTCDate() - 1);
+  end.setUTCHours(23, 59, 59, 999);
+  if (start.getTime() > end.getTime()) {
+    cache.cachedAt = now.toISOString();
+    db.admins[adminIndex] = admin;
+    return;
+  }
+  appendDeliveryCompletionsToOrdersOverTime(db, adminIndex, start, end);
+  appendTableCompletionsToOrdersOverTime(db, adminIndex, start, end);
+  const admin2 = db.admins[adminIndex];
+  if (admin2.ordersOverTimeCache) admin2.ordersOverTimeCache.cachedAt = now.toISOString();
+  db.admins[adminIndex] = admin2;
+}
+
+/** يجلب كاش الطلبات عبر الزمن مع إعادة حساب عند انتهاء الصلاحية. يرجع null إذا لم تكن الباقة Business أو الأدمن غير موجود. */
+export async function getOrdersOverTimeForAdmin(adminId: string): Promise<Admin['ordersOverTimeCache'] | null> {
+  const admin = await getAdmin(adminId);
+  if (!admin || !isBusinessPlanActive(admin)) return null;
+  const db = await readDB();
+  const adminIndex = db.admins.findIndex(a => a.id === adminId);
+  if (adminIndex === -1) return null;
+  ensureOrdersOverTimeCacheRecomputed(db, adminIndex);
+  await writeDB(db);
+  return db.admins[adminIndex].ordersOverTimeCache ?? null;
+}
+
+function subtractDeliveryCompletionFromOrdersOverTime(
+  db: Database,
+  adminIndex: number,
+  orderId: string,
+  revenue: number,
+  customerSaved: number
+): void {
+  if (!isBusinessPlanActive(db.admins[adminIndex])) return;
+  const logs = db.deliveryOrderStatusLogs.filter(
+    (l) => l.orderId === orderId && l.toStatus === DELIVERY_FINAL_STATUS
+  );
+  if (logs.length === 0) return;
+  logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const dateKey = toDateKey(logs[0].createdAt);
+  const admin = db.admins[adminIndex];
+  const cache = getOrInitOrdersOverTimeCache(admin);
+  const cur = cache.delivery[dateKey];
+  if (!cur) return;
+  const next = {
+    completedCount: Math.max(0, cur.completedCount - 1),
+    revenue: Math.max(0, cur.revenue - revenue),
+    customerSaved: Math.max(0, cur.customerSaved - customerSaved),
+  };
+  if (next.completedCount === 0 && next.revenue === 0 && next.customerSaved === 0) delete cache.delivery[dateKey];
+  else cache.delivery[dateKey] = next;
+  db.admins[adminIndex] = admin;
+}
+
+function subtractTableCompletionFromOrdersOverTime(
+  db: Database,
+  adminIndex: number,
+  orderId: string,
+  revenue: number,
+  customerSaved: number
+): void {
+  if (!isBusinessPlanActive(db.admins[adminIndex])) return;
+  const logs = db.tableOrderStatusLogs.filter(
+    (l) => l.orderId === orderId && l.toStatus === TABLE_FINAL_STATUS
+  );
+  if (logs.length === 0) return;
+  logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const dateKey = toDateKey(logs[0].createdAt);
+  const admin = db.admins[adminIndex];
+  const cache = getOrInitOrdersOverTimeCache(admin);
+  const cur = cache.table[dateKey];
+  if (!cur) return;
+  const next = {
+    completedCount: Math.max(0, cur.completedCount - 1),
+    revenue: Math.max(0, cur.revenue - revenue),
+    customerSaved: Math.max(0, cur.customerSaved - customerSaved),
+  };
+  if (next.completedCount === 0 && next.revenue === 0 && next.customerSaved === 0) delete cache.table[dateKey];
+  else cache.table[dateKey] = next;
+  db.admins[adminIndex] = admin;
 }
 
 function getOrInitProOrderStats(admin: Admin): NonNullable<Admin['proOrderStats']> {
@@ -810,6 +1051,11 @@ export async function updateOrderStatusWithLogAndCounters(
   };
   db.deliveryOrderStatusLogs.push(log);
 
+  if (fromStatus === DELIVERY_FINAL_STATUS && toStatus !== DELIVERY_FINAL_STATUS) {
+    const ai = db.admins.findIndex(a => a.id === order.adminId);
+    if (ai !== -1) subtractDeliveryCompletionFromOrdersOverTime(db, ai, orderId, order.totalPrice ?? 0, order.totalDiscount ?? 0);
+  }
+
   // عدادات نقل الحالات (باقة البزنس فقط) — لا نعد إن لم تكن الباقة مفعلة
   const adminForPlan = db.admins.find(a => a.id === order.adminId);
   if (adminForPlan && isBusinessPlanActive(adminForPlan) && fromStatus !== toStatus) {
@@ -872,8 +1118,16 @@ export async function deleteOrder(id: string): Promise<boolean> {
   const orderToDelete = db.orders.find(order => order.id === id);
   if (!orderToDelete) return false;
 
-  // عدّادات الأدمن (باقة البزنس فقط): إنقاص عند المسح
   const adminIndex = db.admins.findIndex(a => a.id === orderToDelete.adminId);
+  if (adminIndex !== -1 && (orderToDelete.status || '') === 'delivered') {
+    subtractDeliveryCompletionFromOrdersOverTime(
+      db,
+      adminIndex,
+      orderToDelete.id,
+      orderToDelete.totalPrice ?? 0,
+      orderToDelete.totalDiscount ?? 0
+    );
+  }
   if (adminIndex !== -1) {
     const admin = db.admins[adminIndex];
     if (isBusinessPlanActive(admin)) {
@@ -893,6 +1147,8 @@ export async function deleteOrder(id: string): Promise<boolean> {
           db.employees[empIndex] = e;
         }
       }
+      const itemStats = getOrInitItemSalesStats(admin);
+      applyItemSalesDelta(itemStats, orderToDelete.items, -1);
       db.admins[adminIndex] = admin;
     }
 
@@ -985,6 +1241,11 @@ export async function createTableOrder(order: Omit<TableOrder, 'id' | 'createdAt
       stats.sumDiscountTable += order.totalDiscount ?? 0;
       db.admins[adminIndex].proOrderStats = stats;
     }
+    if (isBusinessPlanActive(admin)) {
+      const itemStats = getOrInitItemSalesStats(admin);
+      applyItemSalesDelta(itemStats, order.items, 1);
+      db.admins[adminIndex] = admin;
+    }
   }
 
   await writeDB(db);
@@ -997,6 +1258,15 @@ export async function deleteTableOrder(id: string): Promise<boolean> {
   if (!orderToDelete) return false;
 
   const adminIndex = db.admins.findIndex(a => a.id === orderToDelete.adminId);
+  if (adminIndex !== -1 && (orderToDelete.status || '') === 'completed') {
+    subtractTableCompletionFromOrdersOverTime(
+      db,
+      adminIndex,
+      orderToDelete.id,
+      orderToDelete.totalPrice ?? 0,
+      orderToDelete.totalDiscount ?? 0
+    );
+  }
   if (adminIndex !== -1) {
     const admin = db.admins[adminIndex];
     if (isProPlanActive(admin)) {
@@ -1013,6 +1283,11 @@ export async function deleteTableOrder(id: string): Promise<boolean> {
         stats.sumCompletedDiscountTable = Math.max(0, stats.sumCompletedDiscountTable - discount);
       }
       db.admins[adminIndex].proOrderStats = stats;
+    }
+    if (isBusinessPlanActive(admin)) {
+      const itemStats = getOrInitItemSalesStats(admin);
+      applyItemSalesDelta(itemStats, orderToDelete.items, -1);
+      db.admins[adminIndex] = admin;
     }
   }
 
@@ -1061,6 +1336,11 @@ export async function updateTableOrderStatusWithLogAndCounters(
     createdAt: new Date().toISOString(),
   };
   db.tableOrderStatusLogs.push(log);
+
+  if (fromStatus === TABLE_FINAL_STATUS && toStatus !== TABLE_FINAL_STATUS) {
+    const ai = db.admins.findIndex(a => a.id === order.adminId);
+    if (ai !== -1) subtractTableCompletionFromOrdersOverTime(db, ai, orderId, order.totalPrice ?? 0, order.totalDiscount ?? 0);
+  }
 
   // عدادات نقل الحالات (باقة البزنس فقط) — لا نعد إن لم تكن الباقة مفعلة
   const adminForPlan = db.admins.find(a => a.id === order.adminId);

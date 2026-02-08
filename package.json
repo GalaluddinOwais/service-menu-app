@@ -13,6 +13,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "apexcharts": "^4.0.0",
+    "react-apexcharts": "^1.4.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@vercel/blob": "^2.0.0",

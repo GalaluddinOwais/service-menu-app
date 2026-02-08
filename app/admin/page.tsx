@@ -7,6 +7,15 @@ import AdGenerator from '@/components/AdGenerator';
 import UpgradeModal from '@/components/UpgradeModal';
 import LimitReachedModal from '@/components/LimitReachedModal';
 import { FONTS } from '@/lib/fonts';
+import dynamic from 'next/dynamic';
+
+type ApexChartProps = {
+  type: string;
+  height: number;
+  series: { name: string; data: number[] }[];
+  options: Record<string, unknown>;
+};
+const ApexCharts = dynamic(() => import('react-apexcharts'), { ssr: false }) as React.ComponentType<ApexChartProps>;
 
 interface Admin {
   id: string;
@@ -147,6 +156,20 @@ function AdminPageContent() {
   const [orderStatsLoading, setOrderStatsLoading] = useState(false);
   const [orderStatsError, setOrderStatsError] = useState<string | null>(null);
 
+  // أكثر المنتجات طلباً (باقة البزنس فقط) — للعرض في ملخص النشاط
+  type BestSellerItem = { name: string; quantity: number; revenue: number };
+  const [bestSellersItems, setBestSellersItems] = useState<BestSellerItem[]>([]);
+  const [bestSellersLoading, setBestSellersLoading] = useState(false);
+  const [bestSellersError, setBestSellersError] = useState<string | null>(null);
+  const [bestSellersSortBy, setBestSellersSortBy] = useState<'quantity' | 'revenue'>('quantity');
+
+  // الطلبات والإيراد عبر الزمن (باقة Basic+) — من الكاش
+  type OrdersOverTimeDay = { date: string; completedCount: number; revenue: number; customerSaved: number };
+  const [ordersOverTime, setOrdersOverTime] = useState<{ cachedAt: string; delivery: OrdersOverTimeDay[]; table: OrdersOverTimeDay[] } | null>(null);
+  const [ordersOverTimeLoading, setOrdersOverTimeLoading] = useState(false);
+  const [ordersOverTimeError, setOrdersOverTimeError] = useState<string | null>(null);
+  const [ordersOverTimeRange, setOrdersOverTimeRange] = useState<'30d' | '12m' | 'years'>('30d');
+
   // نشاط العمال: كاردات فقط + تفاصيل المُختار في قسم أسفل (باقة البزنس للتفاصيل)
   type WorkerCard = {
     id: string;
@@ -197,8 +220,12 @@ function AdminPageContent() {
     } catch {}
   }, [employeeRatingSettings]);
   const [isSavingRatingSettings, setIsSavingRatingSettings] = useState(false);
+  const [deliverySettingsSaving, setDeliverySettingsSaving] = useState(false);
+  const [tableSettingsSaving, setTableSettingsSaving] = useState(false);
+  const [employeeSettingsSaving, setEmployeeSettingsSaving] = useState(false);
   const [workersActivityList, setWorkersActivityList] = useState<WorkerCard[]>([]);
   const [workersActivityListLoading, setWorkersActivityListLoading] = useState(false);
+  const [workersActivityCachedAt, setWorkersActivityCachedAt] = useState<string | null>(null);
   const [workersActivitySearchQuery, setWorkersActivitySearchQuery] = useState('');
   const [workersActivityRoleFilter, setWorkersActivityRoleFilter] = useState<'all' | 'delivery' | 'waiter' | 'deliveryOnly' | 'waiterOnly'>('all');
   const [workersActivityPage, setWorkersActivityPage] = useState(1);
@@ -416,7 +443,7 @@ function AdminPageContent() {
               tendencyX: typeof admin.employeeRatingTendencyX === 'number' && admin.employeeRatingTendencyX >= 0 && admin.employeeRatingTendencyX <= 1 ? admin.employeeRatingTendencyX : 0.5,
             });
           }
-          fetchData(admin.id);
+          fetchData(admin.id, undefined, admin.plan);
         })
         .catch(error => {
           console.error('Error fetching admin data:', error);
@@ -469,7 +496,7 @@ function AdminPageContent() {
               tendencyX: typeof admin.employeeRatingTendencyX === 'number' && admin.employeeRatingTendencyX >= 0 && admin.employeeRatingTendencyX <= 1 ? admin.employeeRatingTendencyX : 0.5,
             });
           }
-          fetchData(admin.id);
+          fetchData(admin.id, undefined, admin.plan);
         });
       return;
     }
@@ -509,14 +536,11 @@ function AdminPageContent() {
         .then(res => res.json())
         .then(adminData => {
           setCurrentAdmin(adminData);
-          // Pass EMPLOYEE_ALL to show all employee's orders (assigned + ANY_DELIVERY)
-          fetchData(employee.adminId, 'EMPLOYEE_ALL');
+          fetchData(employee.adminId, 'EMPLOYEE_ALL', adminData?.plan);
         })
         .catch(error => {
           console.error('Error fetching admin data:', error);
-          // Fallback to minimal admin object
           setCurrentAdmin({ id: employee.adminId } as Admin);
-          // Pass EMPLOYEE_ALL to show all employee's orders (assigned + ANY_DELIVERY)
           fetchData(employee.adminId, 'EMPLOYEE_ALL');
         });
       return;
@@ -573,9 +597,11 @@ function AdminPageContent() {
     };
   };
 
-  const fetchData = async (adminId: string, employeeIdOverride?: string) => {
-    // جلب العاملين أولاً - قبل أي شيء آخر
-    const employeesPromise = fetch(`/api/employees?page=${currentEmployeePage}&limit=${employeesPerPage}`, {
+  const fetchData = async (adminId: string, employeeIdOverride?: string, plan?: string) => {
+    // باقة business: جلب حتى 100 عامل مرة واحدة لاستخدامهم في تبويب نشاط العاملين دون طلب إضافي
+    const employeesLimit = plan === 'business' ? 100 : employeesPerPage;
+    const employeesPage = plan === 'business' ? 1 : currentEmployeePage;
+    const employeesPromise = fetch(`/api/employees?page=${employeesPage}&limit=${employeesLimit}`, {
       headers: getAuthHeaders(),
     }).then(res => res.json());
 
@@ -805,49 +831,102 @@ function AdminPageContent() {
     }
   }, [userType, activeTab, currentAdmin?.id, currentAdmin?.plan, currentAdmin?.subscriptionEndsAt]);
 
+  const fetchBestSellers = async () => {
+    setBestSellersLoading(true);
+    setBestSellersError(null);
+    try {
+      const res = await fetch('/api/admin/stats/best-sellers?limit=20', { headers: getAuthHeaders() });
+      const data = await res.json();
+      if (!res.ok) {
+        setBestSellersError(data.error || 'فشل جلب أكثر المنتجات طلباً');
+        setBestSellersItems([]);
+        return;
+      }
+      setBestSellersItems(Array.isArray(data.items) ? data.items : []);
+    } catch (e) {
+      setBestSellersError('خطأ في الاتصال');
+      setBestSellersItems([]);
+    } finally {
+      setBestSellersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (userType === 'admin' && activeTab === 'summary' && isPlanActive('business')) {
+      fetchBestSellers();
+    }
+  }, [userType, activeTab, currentAdmin?.id, currentAdmin?.plan, currentAdmin?.subscriptionEndsAt]);
+
+  const fetchOrdersOverTime = async () => {
+    setOrdersOverTimeLoading(true);
+    setOrdersOverTimeError(null);
+    try {
+      const res = await fetch('/api/admin/stats/orders-over-time', { headers: getAuthHeaders() });
+      const data = await res.json();
+      if (!res.ok) {
+        setOrdersOverTimeError(data.error || 'فشل جلب الطلبات عبر الزمن');
+        setOrdersOverTime(null);
+        return;
+      }
+      const toDays = (rec: Record<string, { completedCount: number; revenue: number; customerSaved: number }> | undefined): OrdersOverTimeDay[] =>
+        Object.entries(rec ?? {}).map(([date, v]) => ({ date, completedCount: v.completedCount, revenue: v.revenue, customerSaved: v.customerSaved })).sort((a, b) => a.date.localeCompare(b.date));
+      setOrdersOverTime({
+        cachedAt: data.cachedAt ?? '',
+        delivery: toDays(data.delivery),
+        table: toDays(data.table),
+      });
+    } catch (e) {
+      setOrdersOverTimeError('خطأ في الاتصال');
+      setOrdersOverTime(null);
+    } finally {
+      setOrdersOverTimeLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (userType === 'admin' && activeTab === 'summary' && isPlanActive('business')) {
+      fetchOrdersOverTime();
+    }
+  }, [userType, activeTab, currentAdmin?.id, currentAdmin?.plan, currentAdmin?.subscriptionEndsAt]);
+
   const fetchWorkersActivityList = async () => {
     setWorkersActivityListLoading(true);
+    const headers = getAuthHeaders();
     try {
       if (userType === 'admin') {
-        const [empRes, teamRes] = await Promise.all([
-          fetch(`/api/employees?page=1&limit=100`, { headers: getAuthHeaders() }).then(r => r.json()),
-          isPlanActive('business') ? fetch('/api/admin/stats/team', { headers: getAuthHeaders() }).then(r => r.json()) : Promise.resolve({ users: [] }),
-        ]);
-        type Emp = { id: string; name: string; imageUrl?: string; username?: string; phone?: string; isDelivery?: boolean; isWaiter?: boolean; createdAt?: string };
-        const employees: WorkerCard[] = Array.isArray(empRes.employees) ? empRes.employees.map((e: Emp) => ({ id: e.id, name: e.name || e.id, imageUrl: e.imageUrl, username: e.username, phone: e.phone, isDelivery: e.isDelivery, isWaiter: e.isWaiter, createdAt: e.createdAt })) : [];
-        const teamUsers = (teamRes.users || []) as TeamStatsUser[];
-        // الكارد يعرض مجموع (العدد × الوزن)؛ الأسهم تعرض العدد كما هو
+        // نشاط العاملين لا يستدعي /api/admin/stats/team — البيانات من employees (المحمّلة في fetchData) و currentAdmin فقط
+        type Emp = { id: string; name: string; imageUrl?: string; username?: string; phone?: string; isDelivery?: boolean; isWaiter?: boolean; createdAt?: string; [k: string]: unknown };
+        const rawEmployees = (Array.isArray(employees) ? employees : []) as Emp[];
+        setWorkersActivityCachedAt(null);
         const forwardWeight = (n: number) => (n % 10) - Math.floor(n / 10); // 12→1, 13→2, 14→3, 23→1, 24→2, 34→1
         const downgradeWeight = (n: number) => Math.floor(n / 10) - (n % 10); // 43→1, 42→2, 41→3, 32→1, 31→2, 21→1
-        const sumForwardWeighted = (s: Record<string, number>, prefix: string) =>
+        const sumForwardWeighted = (s: Record<string, unknown>, prefix: string) =>
           [12, 13, 14, 23, 24, 34].reduce((a, n) => a + (Number(s[`${prefix}Forward${Math.floor(n / 10)}${n % 10}`]) || 0) * forwardWeight(n), 0);
-        const sumDowngradeWeighted = (s: Record<string, number>, prefix: string) =>
+        const sumDowngradeWeighted = (s: Record<string, unknown>, prefix: string) =>
           [43, 42, 41, 32, 31, 21].reduce((a, n) => a + (Number(s[`${prefix}Downgrade${Math.floor(n / 10)}${n % 10}`]) || 0) * downgradeWeight(n), 0);
-        const withStats = employees.map(emp => {
-          const tu = teamUsers.find(u => u.id === emp.id);
-          if (!tu || !tu.stats) return { ...emp };
-          const s = tu.stats;
+        const withStats: WorkerCard[] = rawEmployees.map((e: Emp) => {
+          const emp: WorkerCard = { id: e.id, name: e.name || e.id, imageUrl: e.imageUrl, username: e.username, phone: e.phone, isDelivery: e.isDelivery, isWaiter: e.isWaiter, createdAt: e.createdAt };
+          const s = e as Record<string, unknown>;
           const deliveryForward = sumForwardWeighted(s, 'delivery');
           const deliveryDowngrade = sumDowngradeWeighted(s, 'delivery');
           const tableForward = sumForwardWeighted(s, 'table');
           const tableDowngrade = sumDowngradeWeighted(s, 'table');
           return { ...emp, deliveryForward, deliveryDowngrade, tableForward, tableDowngrade };
         });
-        // الأدمن مستخدم أيضاً ويمكنه تغيير الحالات — نضيفه كأول شخص في القائمة
-        const adminTu = teamUsers.find(u => u.userType === 'admin') ?? teamUsers[0];
         if (currentAdmin) {
+          const adminS = currentAdmin as unknown as Record<string, unknown>;
           const adminCard: WorkerCard = {
             id: currentAdmin.id,
-            name: currentAdmin.name || currentAdmin.username || adminTu?.name || 'الأدمن',
+            name: currentAdmin.name || currentAdmin.username || 'الأدمن',
             imageUrl: currentAdmin.logoUrl,
             username: currentAdmin.username,
             phone: undefined,
             isDelivery: false,
             isWaiter: false,
-            deliveryForward: adminTu ? sumForwardWeighted(adminTu.stats, 'delivery') : undefined,
-            deliveryDowngrade: adminTu ? sumDowngradeWeighted(adminTu.stats, 'delivery') : undefined,
-            tableForward: adminTu ? sumForwardWeighted(adminTu.stats, 'table') : undefined,
-            tableDowngrade: adminTu ? sumDowngradeWeighted(adminTu.stats, 'table') : undefined,
+            deliveryForward: sumForwardWeighted(adminS, 'delivery'),
+            deliveryDowngrade: sumDowngradeWeighted(adminS, 'delivery'),
+            tableForward: sumForwardWeighted(adminS, 'table'),
+            tableDowngrade: sumDowngradeWeighted(adminS, 'table'),
             createdAt: undefined,
           };
           setWorkersActivityList([adminCard, ...withStats]);
@@ -855,8 +934,11 @@ function AdminPageContent() {
           setWorkersActivityList(withStats);
         }
       } else {
+        setWorkersActivityCachedAt(null);
         if (!currentEmployeeId) { setWorkersActivityList([]); return; }
-        const profileRes = await fetch(`/api/employees/${currentEmployeeId}`, { headers: getAuthHeaders() }).then(r => r.json());
+        const r = await fetch(`/api/employees/${currentEmployeeId}`, { headers });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const profileRes = await r.json();
         const emp = profileRes.employee as Record<string, unknown> | undefined;
         const name = (emp?.name as string) || 'أنت';
         const isDelivery = !!emp?.isDelivery;
@@ -888,7 +970,7 @@ function AdminPageContent() {
 
   useEffect(() => {
     if (activeTab === 'workersActivity') fetchWorkersActivityList();
-  }, [activeTab, userType, currentAdmin?.id, currentEmployeeId, currentAdmin?.plan]);
+  }, [activeTab, userType, currentAdmin?.id, currentEmployeeId, currentAdmin?.plan, employees.length]);
 
   // جلب تقييم الموظف (نقاط، كفاءة، ترتيب) عند فتح تبويب نشاطي — للموظف فقط
   useEffect(() => {
@@ -1109,10 +1191,10 @@ function AdminPageContent() {
 
     // إذا فشل، استرجاع البيانات الحقيقية
     if (!res.ok) {
-      fetchData(currentAdmin.id);
+      fetchData(currentAdmin.id, undefined, currentAdmin?.plan);
     } else {
       // تحديث بالبيانات الحقيقية من السيرفر
-      fetchData(currentAdmin.id);
+      fetchData(currentAdmin.id, undefined, currentAdmin?.plan);
     }
     setTimeout(() => listFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
   };
@@ -1152,7 +1234,7 @@ function AdminPageContent() {
       setItems(oldItems);
     } else {
       // تحديث بالبيانات الحقيقية
-      fetchData(currentAdmin.id);
+      fetchData(currentAdmin.id, undefined, currentAdmin?.plan);
     }
   };
 
@@ -1244,7 +1326,7 @@ function AdminPageContent() {
             setIsUpgradeModalOpen(true);
           }
         }
-        fetchData(currentAdmin.id);
+        fetchData(currentAdmin.id, undefined, currentAdmin?.plan);
         return;
       }
 
@@ -1252,7 +1334,7 @@ function AdminPageContent() {
       setItemFormData({ name: '', price: '', discountedPrice: '', imageUrl: '', description: '' });
       setEditingItem(null);
       itemImageUploadRef.current?.clearPendingFile();
-      fetchData(currentAdmin.id);
+      fetchData(currentAdmin.id, undefined, currentAdmin?.plan);
       setTimeout(() => itemFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
     } finally {
       setIsSubmittingItem(false);
@@ -1291,7 +1373,7 @@ function AdminPageContent() {
       setItems(oldItems);
     } else {
       // تحديث بالبيانات الحقيقية
-      fetchData(currentAdmin.id);
+      fetchData(currentAdmin.id, undefined, currentAdmin?.plan);
     }
   };
 
@@ -1380,94 +1462,102 @@ function AdminPageContent() {
       return;
     }
 
-    const res = await fetch(`/api/admins/${currentAdmin.id}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({
-        isAcceptingOrders: deliveryFormData.isAcceptingOrders,
-        isAcceptingOrdersViaWhatsapp: deliveryFormData.isAcceptingOrdersViaWhatsapp,
-        whatsappNumber: deliveryFormData.whatsappNumber,
-      }),
-    });
+    setDeliverySettingsSaving(true);
+    try {
+      const res = await fetch(`/api/admins/${currentAdmin.id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          isAcceptingOrders: deliveryFormData.isAcceptingOrders,
+          isAcceptingOrdersViaWhatsapp: deliveryFormData.isAcceptingOrdersViaWhatsapp,
+          whatsappNumber: deliveryFormData.whatsappNumber,
+        }),
+      });
 
-    if (res.ok) {
-      const updatedAdmin = await res.json();
-      const newAdminData = { ...currentAdmin, ...updatedAdmin };
-      setCurrentAdmin(newAdminData);
-      localStorage.setItem('admin_data', JSON.stringify(newAdminData));
-
-      alert('تم حفظ إعدادات طلبات التوصيل بنجاح!');
-    } else {
-      const error = await res.json();
-      if (res.status === 403 && confirm(error.error + '\n\nهل تريد عرض خطط الاشتراك للترقية؟')) {
-        setLockedFeatureName('الطلب من الموقع وعمال التوصيل');
-        setRequiredPlan('basic');
-        setIsUpgradeModalOpen(true);
-      } else if (res.status !== 403) {
-        alert(`فشل حفظ الإعدادات: ${error.error || 'خطأ غير معروف'}`);
+      if (res.ok) {
+        const updatedAdmin = await res.json();
+        const newAdminData = { ...currentAdmin, ...updatedAdmin };
+        setCurrentAdmin(newAdminData);
+        localStorage.setItem('admin_data', JSON.stringify(newAdminData));
+      } else {
+        const error = await res.json();
+        if (res.status === 403) {
+          setLockedFeatureName('الطلب من الموقع وعمال التوصيل');
+          setRequiredPlan('basic');
+          setIsUpgradeModalOpen(true);
+        } else {
+          alert(`فشل حفظ الإعدادات: ${error.error || 'خطأ غير معروف'}`);
+        }
       }
+    } finally {
+      setDeliverySettingsSaving(false);
     }
   };
 
   const handleTableSettingsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentAdmin) return;
+    setTableSettingsSaving(true);
+    try {
+      const res = await fetch(`/api/admins/${currentAdmin.id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          isAcceptingTableOrders: deliveryFormData.isAcceptingTableOrders,
+          tablesCount: deliveryFormData.tablesCount,
+        }),
+      });
 
-    const res = await fetch(`/api/admins/${currentAdmin.id}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({
-        isAcceptingTableOrders: deliveryFormData.isAcceptingTableOrders,
-        tablesCount: deliveryFormData.tablesCount,
-      }),
-    });
-
-    if (res.ok) {
-      const updatedAdmin = await res.json();
-      const newAdminData = { ...currentAdmin, ...updatedAdmin };
-      setCurrentAdmin(newAdminData);
-      localStorage.setItem('admin_data', JSON.stringify(newAdminData));
-
-      alert('تم حفظ إعدادات الطاولة بنجاح!');
-    } else {
-      const error = await res.json();
-      if (res.status === 403 && confirm(error.error + '\n\nهل تريد عرض خطط الاشتراك للترقية؟')) {
-        setLockedFeatureName('طلبات الطاولة والندلاء');
-        setRequiredPlan('pro');
-        setIsUpgradeModalOpen(true);
-      } else if (res.status !== 403) {
-        alert(`فشل حفظ الإعدادات: ${error.error || 'خطأ غير معروف'}`);
+      if (res.ok) {
+        const updatedAdmin = await res.json();
+        const newAdminData = { ...currentAdmin, ...updatedAdmin };
+        setCurrentAdmin(newAdminData);
+        localStorage.setItem('admin_data', JSON.stringify(newAdminData));
+      } else {
+        const error = await res.json();
+        if (res.status === 403) {
+          setLockedFeatureName('طلبات الطاولة والندلاء');
+          setRequiredPlan('pro');
+          setIsUpgradeModalOpen(true);
+        } else {
+          alert(`فشل حفظ الإعدادات: ${error.error || 'خطأ غير معروف'}`);
+        }
       }
+    } finally {
+      setTableSettingsSaving(false);
     }
   };
 
   const handleEmployeeSettingsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentAdmin) return;
+    setEmployeeSettingsSaving(true);
+    try {
+      const token = localStorage.getItem('session_token');
+      const res = await fetch('/api/admin/settings', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(employeeSettingsForm),
+      });
 
-    const token = localStorage.getItem('session_token');
-    const res = await fetch('/api/admin/settings', {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify(employeeSettingsForm),
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      setCurrentAdmin(prev => prev ? { ...prev, ...data.admin } : null);
-      alert('تم حفظ إعدادات العاملين بنجاح!');
-    } else {
-      const error = await res.json();
-      if (res.status === 403 && confirm(error.error + '\n\nهل تريد عرض خطط الاشتراك للترقية؟')) {
-        setLockedFeatureName('إدارة العاملين');
-        setRequiredPlan('basic');
-        setIsUpgradeModalOpen(true);
-      } else if (res.status !== 403) {
-        alert(`فشل حفظ الإعدادات: ${error.error || 'خطأ غير معروف'}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentAdmin(prev => prev ? { ...prev, ...data.admin } : null);
+      } else {
+        const error = await res.json();
+        if (res.status === 403) {
+          setLockedFeatureName('إدارة العاملين');
+          setRequiredPlan('basic');
+          setIsUpgradeModalOpen(true);
+        } else {
+          alert(`فشل حفظ الإعدادات: ${error.error || 'خطأ غير معروف'}`);
+        }
       }
+    } finally {
+      setEmployeeSettingsSaving(false);
     }
   };
 
@@ -1989,7 +2079,7 @@ function AdminPageContent() {
                   <span>إدارة العاملين</span>
                   {/* Info Badge - Not a lock */}
                   {!isPlanActive('basic') && (
-                    <span className="text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded-full font-bold ml-2">basic</span>
+                    <span className="text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded-full font-bold ml-2 uppercase">BASIC</span>
                   )}
                 </button>
               </div>
@@ -2058,9 +2148,9 @@ function AdminPageContent() {
               </div>
             ) : (
               <div className="space-y-10">
-                {/* عدد المنتجات وتوزيع العدد على كل قائمة — تظهر للجميع بما فيها Free، أول واحدة في الأعلى */}
-                <section>
-                  <h2 className="text-2xl font-bold text-gray-800 mb-4">عدد المنتجات وتوزيع العدد على كل قائمة</h2>
+                {/* المنتجات — دونات وتوزيع العدد على كل قائمة، سكشن مستقل */}
+                <h2 className="text-2xl font-bold text-gray-800 mb-4">المنتجات</h2>
+                <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                   {(() => {
                     const listIds = lists.map(l => l.id);
                     const adminItems = items.filter(i => listIds.includes(i.listId));
@@ -2078,26 +2168,30 @@ function AdminPageContent() {
                       return part;
                     });
                     return (
-                      <div className="bg-white rounded-xl shadow-md p-4 border border-gray-100 max-w-md">
-                        <div className="flex flex-col items-center">
-                          {total === 0 ? (
-                            <div className="w-44 h-44 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-sm">لا منتجات بعد</div>
-                          ) : (
-                            <>
-                              <div className="w-44 h-44 rounded-full flex-shrink-0" style={{ background: `conic-gradient(${conicParts.join(', ')})` }} title={segments.map(s => `${s.name}: ${s.value}`).join('\n')} />
-                              <p className="mt-3 text-sm font-bold text-gray-700">المجموع: {total} منتج</p>
-                              <ul className="mt-3 w-full space-y-2 text-sm">
-                                {segments.map((s, i) => (
-                                  <li key={i} className="flex items-center gap-2">
-                                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
-                                    <span className="truncate">{s.name}</span>
-                                    <span className="text-gray-600 font-medium flex-shrink-0">{s.value}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </>
-                          )}
-                        </div>
+                      <div className="flex flex-col items-center max-w-md mx-auto">
+                        {total === 0 ? (
+                          <div className="w-44 h-44 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-sm">لا منتجات بعد</div>
+                        ) : (
+                          <>
+                            <div className="relative w-44 h-44 flex-shrink-0" title={segments.map(s => `${s.name}: ${s.value}`).join('\n')}>
+                              <div className="absolute inset-0 rounded-full" style={{ background: `conic-gradient(${conicParts.join(', ')})` }} />
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center shadow-inner border border-gray-100">
+                                  <span className="text-lg font-bold text-gray-800">{total}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <ul className="mt-3 w-full flex flex-wrap gap-x-4 gap-y-1 justify-center text-sm">
+                              {segments.map((s, i) => (
+                                <li key={i} className="flex items-center gap-1.5">
+                                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
+                                  <span className="truncate max-w-[8rem]">{s.name}</span>
+                                  <span className="text-gray-600 font-medium flex-shrink-0">{s.value}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
                       </div>
                     );
                   })()}
@@ -2105,19 +2199,230 @@ function AdminPageContent() {
 
                 {!isPlanActive('basic') ? (
                   <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
-                    ملخص النشاط متاح ضمن باقة Basic أو أعلى.
+                    ملخص النشاط متاح ضمن باقة <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full font-bold">BASIC</span> أو أعلى.
                   </div>
                 ) : (
                   <>
-                {/* إحصائيات الطلبات — أشرطة مقسومة (Pro+) وأشرطة كاملة تحت كل واحد (Basic+ للموقع/واتساب، Pro+ للطاولة/المجموع) */}
-                <section>
-                  <h2 className="text-2xl font-bold text-gray-800 mb-4">إحصائيات الطلبات</h2>
+                {/* الطلبات + الإيرادات عبر الزمن + المصدر + أكثر المنتجات — سكشن واحد */}
+                <h2 className="text-2xl font-bold text-gray-800 mb-4">الطلبات</h2>
+                <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm space-y-8">
                   {orderStatsLoading ? (
                     <p className="text-gray-500">جاري تحميل إحصائيات الطلبات...</p>
                   ) : orderStatsError ? (
                     <p className="text-red-600">{orderStatsError}</p>
                   ) : orderStats ? (
                     <div className="space-y-6">
+                      {(() => {
+                        const includeTable = isPlanActive('pro');
+                        const totalCount = (orderStats.countWebsite ?? 0) + (orderStats.countWhatsapp ?? 0) + (includeTable ? (orderStats.countTable ?? 0) : 0);
+                        const totalPrice = (orderStats.sumPriceWebsite ?? 0) + (orderStats.sumPriceWhatsapp ?? 0) + (includeTable ? (orderStats.sumPriceTable ?? 0) : 0);
+                        const totalDiscount = (orderStats.sumDiscountWebsite ?? 0) + (orderStats.sumDiscountWhatsapp ?? 0) + (includeTable ? (orderStats.sumDiscountTable ?? 0) : 0);
+                        const completedCount = (orderStats.completedDeliveryWebsite ?? 0) + (orderStats.completedDeliveryWhatsapp ?? 0) + (includeTable ? (orderStats.completedTable ?? 0) : 0);
+                        const totalCompletedPrice = (orderStats.sumCompletedPriceWebsite ?? 0) + (orderStats.sumCompletedPriceWhatsapp ?? 0) + (includeTable ? (orderStats.sumCompletedPriceTable ?? 0) : 0);
+                        const totalCompletedDiscount = (orderStats.sumCompletedDiscountWebsite ?? 0) + (orderStats.sumCompletedDiscountWhatsapp ?? 0) + (includeTable ? (orderStats.sumCompletedDiscountTable ?? 0) : 0);
+                        const remainingCount = Math.max(0, totalCount - completedCount);
+                        const completedPrice = totalCompletedPrice;
+                        const remainingPrice = Math.max(0, totalPrice - totalCompletedPrice);
+                        const completedDiscountVal = totalCompletedDiscount;
+                        const remainingDiscountVal = Math.max(0, totalDiscount - totalCompletedDiscount);
+                        const pctCount = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+                        const pctPrice = totalPrice > 0 ? (completedPrice / totalPrice) * 100 : 0;
+                        const pctDiscount = totalDiscount > 0 ? (completedDiscountVal / totalDiscount) * 100 : 0;
+                        const conicCount = totalCount > 0 ? `conic-gradient(#10b981 0% ${pctCount}%, #f59e0b ${pctCount}% 100%)` : 'conic-gradient(#e5e7eb 0% 100%)';
+                        const conicPrice = totalPrice > 0 ? `conic-gradient(#10b981 0% ${pctPrice}%, #f59e0b ${pctPrice}% 100%)` : 'conic-gradient(#e5e7eb 0% 100%)';
+                        const conicDiscount = totalDiscount > 0 ? `conic-gradient(#10b981 0% ${pctDiscount}%, #f59e0b ${pctDiscount}% 100%)` : 'conic-gradient(#e5e7eb 0% 100%)';
+                        const DonutCard = ({ title, conic, centerValue, centerSuffix, labelTama, valueTama, labelRem, valueRem }: { title: string; conic: string; centerValue: number; centerSuffix: string; labelTama: string; valueTama: number; labelRem: string; valueRem: number }) => {
+                          const isMoney = centerSuffix.length > 0;
+                          const centerDisplay = isMoney ? `${centerValue} جـ` : String(centerValue);
+                          return (
+                            <div className="rounded-xl border border-gray-100 p-4 flex flex-col items-center">
+                              <p className="text-sm font-medium text-gray-600 mb-2">{title}</p>
+                              <div className="relative w-36 h-36 flex-shrink-0 flex items-center justify-center">
+                                <div className="absolute inset-0 rounded-full" style={{ background: conic }} />
+                                <div className="absolute inset-[22%] rounded-full bg-white" aria-hidden />
+                                <div className="relative z-10 flex flex-col items-center justify-center text-center">
+                                  <span className="text-lg font-bold text-gray-800">{centerDisplay}</span>
+                                </div>
+                              </div>
+                              <div className="mt-2 w-full flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs">
+                                <span className="inline-flex items-center gap-1.5">
+                                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 bg-emerald-500" aria-hidden />
+                                  <span>{labelTama}</span>
+                                  <span className="text-gray-600 font-medium">{valueTama}{isMoney ? ' جـ' : ''}</span>
+                                </span>
+                                <span className="inline-flex items-center gap-1.5">
+                                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 bg-amber-400" aria-hidden />
+                                  <span>{labelRem}</span>
+                                  <span className="text-gray-600 font-medium">{valueRem}{isMoney ? ' جـ' : ''}</span>
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        };
+                        return (
+                          <div className="flex flex-wrap items-start justify-center gap-8">
+                            <DonutCard title="العدد" conic={conicCount} centerValue={totalCount} centerSuffix="" labelTama="منتهية" valueTama={completedCount} labelRem="منتظر" valueRem={remainingCount} />
+                            <DonutCard title="المبلغ" conic={conicPrice} centerValue={totalPrice} centerSuffix=" جـ" labelTama="منتهية" valueTama={completedPrice} labelRem="منتظر" valueRem={remainingPrice} />
+                            <DonutCard title="توفير المشتري" conic={conicDiscount} centerValue={totalDiscount} centerSuffix=" جـ" labelTama="منتهية" valueTama={completedDiscountVal} labelRem="منتظر" valueRem={remainingDiscountVal} />
+                          </div>
+                        );
+                      })()}
+                      {/* الطلبات المكتملة والإيراد عبر الزمن (باقة Business فقط) */}
+                      {!isPlanActive('business') ? null : ordersOverTimeLoading ? (
+                        <p className="text-gray-500">جاري تحميل الاتجاهات...</p>
+                      ) : ordersOverTimeError ? (
+                        <p className="text-red-600">{ordersOverTimeError}</p>
+                      ) : ordersOverTime ? (() => {
+                        const delivery = ordersOverTime.delivery ?? [];
+                        const table = ordersOverTime.table ?? [];
+                        const allDates = Array.from(new Set([...delivery.map(d => d.date), ...table.map(d => d.date)])).sort();
+                        const fullDaily = allDates.map(date => {
+                          const d = delivery.find(x => x.date === date);
+                          const t = table.find(x => x.date === date);
+                          return {
+                            date,
+                            completedCount: (d?.completedCount ?? 0) + (t?.completedCount ?? 0),
+                            revenue: (d?.revenue ?? 0) + (t?.revenue ?? 0),
+                            customerSaved: (d?.customerSaved ?? 0) + (t?.customerSaved ?? 0),
+                          };
+                        });
+
+                        type ChartPoint = { label: string; completedCount: number; revenue: number; customerSaved: number };
+                        let chartData: ChartPoint[];
+                        let dateRangeLabel: string;
+                        if (ordersOverTimeRange === '30d') {
+                          const sliced = fullDaily.slice(-30);
+                          chartData = sliced.map(d => ({ label: d.date.slice(5), completedCount: d.completedCount, revenue: d.revenue, customerSaved: d.customerSaved }));
+                          dateRangeLabel = chartData.length > 0 ? `من ${sliced[0].date} إلى ${sliced[sliced.length - 1].date} (آخر ${chartData.length} يومًا)` : '';
+                        } else if (ordersOverTimeRange === '12m') {
+                          const byMonth = new Map<string, ChartPoint>();
+                          for (const d of fullDaily) {
+                            const key = d.date.slice(0, 7);
+                            const cur = byMonth.get(key) ?? { label: key, completedCount: 0, revenue: 0, customerSaved: 0 };
+                            byMonth.set(key, {
+                              label: key,
+                              completedCount: cur.completedCount + d.completedCount,
+                              revenue: cur.revenue + d.revenue,
+                              customerSaved: cur.customerSaved + d.customerSaved,
+                            });
+                          }
+                          const months = Array.from(byMonth.keys()).sort().slice(-12);
+                          chartData = months.map(k => byMonth.get(k)!);
+                          dateRangeLabel = chartData.length > 0 ? `آخر ${chartData.length} شهر (${chartData[0].label} — ${chartData[chartData.length - 1].label})` : '';
+                        } else {
+                          const byYear = new Map<string, ChartPoint>();
+                          for (const d of fullDaily) {
+                            const key = d.date.slice(0, 4);
+                            const cur = byYear.get(key) ?? { label: key, completedCount: 0, revenue: 0, customerSaved: 0 };
+                            byYear.set(key, {
+                              label: key,
+                              completedCount: cur.completedCount + d.completedCount,
+                              revenue: cur.revenue + d.revenue,
+                              customerSaved: cur.customerSaved + d.customerSaved,
+                            });
+                          }
+                          chartData = Array.from(byYear.keys()).sort().map(k => byYear.get(k)!);
+                          dateRangeLabel = chartData.length > 0 ? `السنين (${chartData.map(p => p.label).join(' — ')})` : '';
+                        }
+
+                        if (chartData.length === 0) {
+                          return (
+                            <div>
+                              <h2 className="text-xl font-bold text-gray-800 mb-3">الإيرادات عبر الزمن</h2>
+                              <div className="rounded-xl border border-gray-100 p-6 text-center text-gray-500">لا توجد بيانات بعد.</div>
+                            </div>
+                          );
+                        }
+                        const totalRevenue = chartData.reduce((s, d) => s + d.revenue, 0);
+                        const totalOrders = chartData.reduce((s, d) => s + d.completedCount, 0);
+                        const maxOrders = Math.max(1, ...chartData.map(d => d.completedCount));
+                        const ordersAxisMax = Math.ceil(maxOrders / 5) * 5 || 5;
+                        const lastUpdate = ordersOverTime?.cachedAt ? new Date(ordersOverTime.cachedAt).toLocaleDateString('ar-EG', { dateStyle: 'short' }) : '';
+                        return (
+                          <div className="w-full">
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3">
+                              <h2 className="text-xl font-bold text-gray-800">الإيرادات عبر الزمن</h2>
+                              {lastUpdate && <span className="text-sm text-gray-500">آخر تحديث {lastUpdate} (تُحدَّث يومياً)</span>}
+                            </div>
+                            <div className="w-full border border-gray-200 rounded-xl shadow-sm p-4 md:p-6">
+                              <div className="flex flex-wrap justify-between items-start gap-4 mb-2">
+                                <div>
+                                  <h5 className="text-2xl font-bold text-gray-900">{totalRevenue.toLocaleString('ar-EG')} جـ</h5>
+                                  <p className="text-gray-600">إيراد الفترة</p>
+                                  <p className="text-xs text-gray-400 mt-0.5">{dateRangeLabel}</p>
+                                </div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <select
+                                    value={ordersOverTimeRange}
+                                    onChange={(e) => setOrdersOverTimeRange(e.target.value as '30d' | '12m' | 'years')}
+                                    className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white text-gray-700"
+                                  >
+                                    <option value="30d">آخر 30 يوم</option>
+                                    <option value="12m">آخر 12 شهر</option>
+                                    <option value="years">السنين</option>
+                                  </select>
+                                </div>
+                              </div>
+                              <div id="data-series-chart" className="mt-2 w-full">
+                                <ApexCharts
+                                  type="line"
+                                  height={280}
+                                  series={[
+                                    { name: 'توفير المشتري', data: chartData.map(d => d.customerSaved) },
+                                    { name: 'المبلغ', data: chartData.map(d => d.revenue) },
+                                    { name: 'العدد', data: chartData.map(d => d.completedCount) },
+                                  ]}
+                                  options={(() => {
+                                    const maxMoney = Math.max(1, ...chartData.flatMap(d => [d.revenue, d.customerSaved]));
+                                    const leftAxisCommon = {
+                                      title: { text: 'جنيه' },
+                                      min: 0,
+                                      max: Math.ceil(maxMoney * 1.05 / 50) * 50 || 50,
+                                      labels: { formatter: (v: number) => (v != null ? String(v) : '') },
+                                    };
+                                    return {
+                                      chart: { type: 'line', toolbar: { show: false }, zoom: { enabled: false } },
+                                      stroke: { curve: 'smooth', width: 2 },
+                                      xaxis: {
+                                        categories: chartData.map(d => d.label),
+                                        labels: { style: { fontSize: '10px' } },
+                                      },
+                                      yaxis: [
+                                        { ...leftAxisCommon, seriesName: 'توفير المشتري', show: false },
+                                        { seriesName: 'العدد', opposite: true, title: { text: 'العدد' }, labels: { formatter: (v: number) => (v != null ? String(Math.round(v)) : '') }, min: 0, max: ordersAxisMax, forceNiceScale: false },
+                                        { ...leftAxisCommon, seriesName: 'المبلغ' },
+                                      ],
+                                      colors: ['#94a3b8', '#86efac', '#15803d'],
+                                      legend: { show: false },
+                                      tooltip: {
+                                        y: [
+                                          { formatter: (v: number) => (v != null ? `${v} جـ` : '') },
+                                          { formatter: (v: number) => (v != null ? `${v} جـ` : '') },
+                                          { formatter: (v: number) => (v != null ? `${v} طلب` : '') },
+                                        ],
+                                      },
+                                      grid: { xaxis: { lines: { show: false } }, yaxis: { lines: { show: true } } },
+                                    };
+                                  })()}
+                                />
+                              </div>
+                              <div className="grid grid-cols-1 border-t border-gray-200 pt-4 mt-4">
+                                <div className="flex flex-wrap gap-6 text-sm text-gray-700">
+                                  <span className="flex items-center gap-2">
+                                    <span className="w-6 h-1 rounded bg-emerald-400 inline-block" aria-hidden /> المبلغ
+                                  </span>
+                                  <span className="flex items-center gap-2">
+                                    <span className="w-6 h-1 rounded bg-slate-400 inline-block" aria-hidden /> توفير المشتري
+                                  </span>
+                                  <span className="flex items-center gap-2">
+                                    <span className="w-6 h-1 rounded bg-green-800 inline-block" aria-hidden /> العدد
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })() : null}
                       {(() => {
                         const isPro = isPlanActive('pro');
                         const OrderProgressBar = ({
@@ -2146,15 +2451,15 @@ function AdminPageContent() {
                           return (
                             <div>
                               <p className="text-sm font-medium text-gray-700 mb-2">{label}</p>
-                              <div className="flex w-full overflow-hidden rounded-lg border border-gray-300" dir="ltr">
+                              <div className="flex w-full overflow-hidden rounded-t-lg border border-b-0 border-gray-300" dir="ltr">
                                 {remainingPct > 0 && (
                                   <div
                                     className="flex flex-col items-center justify-center min-w-0 py-3 px-2 bg-amber-400 text-gray-900"
                                     style={{ width: `${remainingPct}%` }}
                                   >
-                                    <span className="font-bold text-sm">{remainingCount} طلب</span>
-                                    <span className="text-xs mt-1">المبلغ: {remainingPrice}</span>
-                                    <span className="text-xs">سيوفر المشتري: {remainingDiscount}</span>
+                                    <span className="font-bold text-sm">{remainingCount} طلب منتظر</span>
+                                    <span className="text-xs mt-1">المبلغ {remainingPrice}</span>
+                                    <span className="text-xs">توفير المشتري {remainingDiscount}</span>
                                   </div>
                                 )}
                                 {completedPct > 0 && (
@@ -2162,9 +2467,9 @@ function AdminPageContent() {
                                     className="flex flex-col items-center justify-center min-w-0 py-3 px-2 bg-emerald-500 text-white"
                                     style={{ width: `${completedPct}%` }}
                                   >
-                                    <span className="font-bold text-sm">{completedCount} طلب</span>
-                                    <span className="text-xs mt-1 opacity-95">المبلغ: {sumCompletedPrice}</span>
-                                    <span className="text-xs opacity-95">وفر المشتري: {sumCompletedDiscount}</span>
+                                    <span className="font-bold text-sm">{completedCount} طلب منتهي</span>
+                                    <span className="text-xs mt-1 opacity-95">المبلغ {sumCompletedPrice}</span>
+                                    <span className="text-xs opacity-95">توفير المشتري {sumCompletedDiscount}</span>
                                   </div>
                                 )}
                               </div>
@@ -2174,11 +2479,11 @@ function AdminPageContent() {
                         const FullBar = ({ count, sumPrice, sumDiscount }: { count: number; sumPrice: number; sumDiscount: number }) => {
                           if (count < 1) return null;
                           return (
-                            <div className="flex w-full overflow-hidden rounded-lg border border-gray-300 bg-slate-200 mt-2" dir="ltr">
+                            <div className="flex w-full overflow-hidden rounded-b-lg border border-t-0 border-gray-300 bg-slate-200" dir="ltr">
                               <div className="flex flex-col items-center justify-center flex-1 py-3 px-2 text-gray-900">
                                 <span className="font-bold text-sm">{count} طلب</span>
-                                <span className="text-xs mt-1">المبلغ: {sumPrice}</span>
-                                <span className="text-xs">وفر المشتري: {sumDiscount}</span>
+                                <span className="text-xs mt-1">المبلغ {sumPrice}</span>
+                                <span className="text-xs">توفير المشتري {sumDiscount}</span>
                               </div>
                             </div>
                           );
@@ -2194,69 +2499,60 @@ function AdminPageContent() {
                         const cTbl = orderStats.countTable ?? 0;
                         return (
                           <>
-                            <div>
-                              {isPro && (
-                                <OrderProgressBar
-                                  label="طلبات الموقع"
-                                  totalCount={cWeb}
-                                  completedCount={orderStats.completedDeliveryWebsite ?? 0}
-                                  sumPrice={orderStats.sumPriceWebsite ?? 0}
-                                  sumDiscount={orderStats.sumDiscountWebsite ?? 0}
-                                  sumCompletedPrice={orderStats.sumCompletedPriceWebsite ?? 0}
-                                  sumCompletedDiscount={orderStats.sumCompletedDiscountWebsite ?? 0}
-                                />
-                              )}
-                              {!isPro && cWeb >= 1 && <p className="text-sm font-medium text-gray-700 mb-2">طلبات الموقع</p>}
-                              <FullBar count={cWeb} sumPrice={orderStats.sumPriceWebsite ?? 0} sumDiscount={orderStats.sumDiscountWebsite ?? 0} />
-                            </div>
-                            <div>
-                              {isPro && (
-                                <OrderProgressBar
-                                  label="طلبات واتساب"
-                                  totalCount={cWa}
-                                  completedCount={orderStats.completedDeliveryWhatsapp ?? 0}
-                                  sumPrice={orderStats.sumPriceWhatsapp ?? 0}
-                                  sumDiscount={orderStats.sumDiscountWhatsapp ?? 0}
-                                  sumCompletedPrice={orderStats.sumCompletedPriceWhatsapp ?? 0}
-                                  sumCompletedDiscount={orderStats.sumCompletedDiscountWhatsapp ?? 0}
-                                />
-                              )}
-                              {!isPro && cWa >= 1 && <p className="text-sm font-medium text-gray-700 mb-2">طلبات واتساب</p>}
-                              <FullBar count={cWa} sumPrice={orderStats.sumPriceWhatsapp ?? 0} sumDiscount={orderStats.sumDiscountWhatsapp ?? 0} />
-                            </div>
-                            <div>
-                              {isPro && (
-                                <OrderProgressBar
-                                  label="طلبات الطاولة"
-                                  totalCount={cTbl}
-                                  completedCount={orderStats.completedTable ?? 0}
-                                  sumPrice={orderStats.sumPriceTable ?? 0}
-                                  sumDiscount={orderStats.sumDiscountTable ?? 0}
-                                  sumCompletedPrice={orderStats.sumCompletedPriceTable ?? 0}
-                                  sumCompletedDiscount={orderStats.sumCompletedDiscountTable ?? 0}
-                                />
-                              )}
-                              {isPro && <FullBar count={cTbl} sumPrice={orderStats.sumPriceTable ?? 0} sumDiscount={orderStats.sumDiscountTable ?? 0} />}
-                            </div>
-                            {isPro && totalCount >= 1 && (
-                              <div>
-                                <OrderProgressBar
-                                  label="المجموع"
-                                  totalCount={totalCount}
-                                  completedCount={totalCompletedCount}
-                                  sumPrice={totalPrice}
-                                  sumDiscount={totalDiscount}
-                                  sumCompletedPrice={totalCompletedPrice}
-                                  sumCompletedDiscount={totalCompletedDiscount}
-                                />
-                                <FullBar count={totalCount} sumPrice={totalPrice} sumDiscount={totalDiscount} />
-                              </div>
-                            )}
-                            {!isPro && (cWeb + cWa) >= 1 && (
-                              <div>
-                                <p className="text-sm font-medium text-gray-700 mb-2">المجموع</p>
-                                <FullBar count={cWeb + cWa} sumPrice={(orderStats.sumPriceWebsite ?? 0) + (orderStats.sumPriceWhatsapp ?? 0)} sumDiscount={(orderStats.sumDiscountWebsite ?? 0) + (orderStats.sumDiscountWhatsapp ?? 0)} />
-                              </div>
+                            <h3 className="text-lg font-bold text-gray-700 mb-2">المصدر</h3>
+                            {isPro && (
+                              <>
+                                <div>
+                                  <OrderProgressBar
+                                    label="طلبات الموقع"
+                                    totalCount={cWeb}
+                                    completedCount={orderStats.completedDeliveryWebsite ?? 0}
+                                    sumPrice={orderStats.sumPriceWebsite ?? 0}
+                                    sumDiscount={orderStats.sumDiscountWebsite ?? 0}
+                                    sumCompletedPrice={orderStats.sumCompletedPriceWebsite ?? 0}
+                                    sumCompletedDiscount={orderStats.sumCompletedDiscountWebsite ?? 0}
+                                  />
+                                  <FullBar count={cWeb} sumPrice={orderStats.sumPriceWebsite ?? 0} sumDiscount={orderStats.sumDiscountWebsite ?? 0} />
+                                </div>
+                                <div>
+                                  <OrderProgressBar
+                                    label="طلبات واتساب"
+                                    totalCount={cWa}
+                                    completedCount={orderStats.completedDeliveryWhatsapp ?? 0}
+                                    sumPrice={orderStats.sumPriceWhatsapp ?? 0}
+                                    sumDiscount={orderStats.sumDiscountWhatsapp ?? 0}
+                                    sumCompletedPrice={orderStats.sumCompletedPriceWhatsapp ?? 0}
+                                    sumCompletedDiscount={orderStats.sumCompletedDiscountWhatsapp ?? 0}
+                                  />
+                                  <FullBar count={cWa} sumPrice={orderStats.sumPriceWhatsapp ?? 0} sumDiscount={orderStats.sumDiscountWhatsapp ?? 0} />
+                                </div>
+                                <div>
+                                  <OrderProgressBar
+                                    label="طلبات الطاولة"
+                                    totalCount={cTbl}
+                                    completedCount={orderStats.completedTable ?? 0}
+                                    sumPrice={orderStats.sumPriceTable ?? 0}
+                                    sumDiscount={orderStats.sumDiscountTable ?? 0}
+                                    sumCompletedPrice={orderStats.sumCompletedPriceTable ?? 0}
+                                    sumCompletedDiscount={orderStats.sumCompletedDiscountTable ?? 0}
+                                  />
+                                  <FullBar count={cTbl} sumPrice={orderStats.sumPriceTable ?? 0} sumDiscount={orderStats.sumDiscountTable ?? 0} />
+                                </div>
+                                {totalCount >= 1 && (
+                                  <div>
+                                    <OrderProgressBar
+                                      label="المجموع"
+                                      totalCount={totalCount}
+                                      completedCount={totalCompletedCount}
+                                      sumPrice={totalPrice}
+                                      sumDiscount={totalDiscount}
+                                      sumCompletedPrice={totalCompletedPrice}
+                                      sumCompletedDiscount={totalCompletedDiscount}
+                                    />
+                                    <FullBar count={totalCount} sumPrice={totalPrice} sumDiscount={totalDiscount} />
+                                  </div>
+                                )}
+                              </>
                             )}
                             {/* Pies: Basic+ (موقع + واتساب)، Pro+ (موقع + واتساب + طاولة) */}
                             {(() => {
@@ -2264,6 +2560,7 @@ function AdminPageContent() {
                               const OrderPie = ({ label, segments }: { label: string; segments: { name: string; value: number }[] }) => {
                                 const withColor = segments.filter(s => s.value > 0).map(s => ({ ...s, color: PIE_COLORS_ORDER[s.name as keyof typeof PIE_COLORS_ORDER] ?? '#94a3b8' }));
                                 const total = withColor.reduce((sum, s) => sum + s.value, 0);
+                                const isMoney = label === 'المبلغ' || label === 'توفير المشتري';
                                 let cumulative = 0;
                                 const conicParts = withColor.map(s => {
                                   const pct = total ? (s.value / total) * 100 : 0;
@@ -2272,24 +2569,31 @@ function AdminPageContent() {
                                   return part;
                                 });
                                 return (
-                                  <div className="bg-white rounded-xl shadow-md p-4 border border-gray-100">
-                                    <h3 className="text-sm font-bold text-gray-700 mb-3 text-center">{label}</h3>
+                                  <div className="rounded-xl border border-gray-100 p-4">
+                                    {label ? <p className="text-sm font-medium text-gray-600 mb-2 text-center">{label}</p> : null}
                                     <div className="flex flex-col items-center">
                                       {total === 0 ? (
                                         <div className="w-36 h-36 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs">لا نشاط</div>
                                       ) : (
                                         <>
-                                          <div className="w-36 h-36 rounded-full flex-shrink-0" style={{ background: `conic-gradient(${conicParts.join(', ')})` }} title={withColor.map(s => `${s.name}: ${s.value}`).join('\n')} />
-                                          <p className="mt-2 text-xs text-gray-500">المجموع: {total}</p>
-                                          <ul className="mt-2 w-full space-y-1 text-xs">
+                                          <div className="relative w-36 h-36 flex-shrink-0 flex items-center justify-center" title={withColor.map(s => `${s.name}: ${s.value}`).join('\n')}>
+                                            <div className="absolute inset-0 rounded-full" style={{ background: `conic-gradient(${conicParts.join(', ')})` }} />
+                                            <div className="absolute inset-[22%] rounded-full bg-white" aria-hidden />
+                                            <div className="relative z-10 flex flex-col items-center justify-center text-center">
+                                              <span className="text-lg font-bold text-gray-800">
+                                                {isMoney ? `${total} جـ` : total}
+                                              </span>
+                                            </div>
+                                          </div>
+                                          <div className="mt-2 w-full flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs">
                                             {withColor.map((s, i) => (
-                                              <li key={i} className="flex items-center gap-2">
-                                                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                                              <span key={i} className="inline-flex items-center gap-1.5">
+                                                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} aria-hidden />
                                                 <span>{s.name}</span>
-                                                <span className="text-gray-600 font-medium">{s.value}</span>
-                                              </li>
+                                                <span className="text-gray-600 font-medium">{isMoney ? `${s.value} جـ` : s.value}</span>
+                                              </span>
                                             ))}
-                                          </ul>
+                                          </div>
                                         </>
                                       )}
                                     </div>
@@ -2304,17 +2608,16 @@ function AdminPageContent() {
                               const segProDiscount = [{ name: 'موقع', value: orderStats.sumDiscountWebsite ?? 0 }, { name: 'واتساب', value: orderStats.sumDiscountWhatsapp ?? 0 }, { name: 'طاولة', value: orderStats.sumDiscountTable ?? 0 }];
                               return (
                                 <div className="mt-8 space-y-6">
-                                  <h3 className="text-lg font-bold text-gray-700">توزيع حسب المصدر</h3>
                                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                                    <OrderPie label="العدد (موقع + واتساب)" segments={segBasicCount} />
-                                    <OrderPie label="المبلغ (موقع + واتساب)" segments={segBasicPrice} />
-                                    <OrderPie label="وفر المشتري (موقع + واتساب)" segments={segBasicDiscount} />
+                                    <OrderPie label="العدد" segments={segBasicCount} />
+                                    <OrderPie label="المبلغ" segments={segBasicPrice} />
+                                    <OrderPie label="توفير المشتري" segments={segBasicDiscount} />
                                   </div>
                                   {isPro && (
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                                      <OrderPie label="العدد (مع الطاولة)" segments={segProCount} />
-                                      <OrderPie label="المبلغ (مع الطاولة)" segments={segProPrice} />
-                                      <OrderPie label="وفر المشتري (مع الطاولة)" segments={segProDiscount} />
+                                      <OrderPie label="العدد" segments={segProCount} />
+                                      <OrderPie label="المبلغ" segments={segProPrice} />
+                                      <OrderPie label="توفير المشتري" segments={segProDiscount} />
                                     </div>
                                   )}
                                 </div>
@@ -2325,6 +2628,85 @@ function AdminPageContent() {
                       })()}
                     </div>
                   ) : null}
+
+                  {/* أكثر المنتجات طلباً (داخل سكشن الطلبات، باقة البزنس فقط) */}
+                  {!isPlanActive('business') ? null : (
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-700 mb-3">أكثر المنتجات طلباً</h3>
+                      {bestSellersLoading ? (
+                      <p className="text-gray-500">جاري التحميل...</p>
+                    ) : bestSellersError ? (
+                      <p className="text-red-600">{bestSellersError}</p>
+                    ) : bestSellersItems.length === 0 ? (
+                      <div className="bg-white rounded-2xl shadow-lg p-8 border border-gray-100 text-center text-gray-500">
+                        لا توجد بيانات بعد. تظهر هنا المنتجات الأكثر طلباً بعد إنشاء الطلبات.
+                      </div>
+                    ) : (
+                      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+                        <div className="px-5 py-4 bg-gradient-to-l from-slate-50 to-white border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+                          <p className="text-sm text-gray-500">الترتيب</p>
+                          <div className="flex rounded-lg bg-gray-200 p-0.5" role="group" aria-label="ترتيب أكثر المنتجات">
+                            <button
+                              type="button"
+                              onClick={() => setBestSellersSortBy('quantity')}
+                              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${bestSellersSortBy === 'quantity' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}
+                            >
+                              حسب الكمية
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setBestSellersSortBy('revenue')}
+                              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${bestSellersSortBy === 'revenue' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}
+                            >
+                              حسب الإيراد
+                            </button>
+                          </div>
+                        </div>
+                        <div className="p-5 space-y-4">
+                          {(() => {
+                            const sorted = [...bestSellersItems].sort((a, b) =>
+                              bestSellersSortBy === 'quantity' ? b.quantity - a.quantity : b.revenue - a.revenue
+                            );
+                            const maxVal = Math.max(1, bestSellersSortBy === 'quantity' ? (sorted[0]?.quantity ?? 1) : (sorted[0]?.revenue ?? 1));
+                            const barColor = '#475569';
+                            return sorted.map((item, i) => {
+                              const barValue = bestSellersSortBy === 'quantity' ? item.quantity : item.revenue;
+                              return (
+                                <div key={i} className="flex items-center gap-3">
+                                  <span
+                                    className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0 bg-gray-200 text-gray-700"
+                                    title={i < 3 ? (i === 0 ? 'الأول' : i === 1 ? 'الثاني' : 'الثالث') : undefined}
+                                  >
+                                    {i + 1}
+                                  </span>
+                                  <div className="w-40 sm:w-52 flex-shrink-0 min-w-0">
+                                    <p className="truncate font-medium text-gray-800" title={item.name}>
+                                      {item.name}
+                                    </p>
+                                    <p className="text-xs text-gray-500 mt-0.5">
+                                      {bestSellersSortBy === 'quantity' ? `${item.revenue} جـ` : `${item.quantity} وحدة`}
+                                    </p>
+                                  </div>
+                                  <div className="flex-1 min-w-0 h-9 rounded-lg bg-gray-100 overflow-hidden flex" dir="ltr">
+                                    <div
+                                      className="h-full rounded-lg flex items-center justify-end px-3 transition-all duration-500 min-w-[44px] text-white font-bold"
+                                      style={{
+                                        width: `${Math.max(20, (barValue / maxVal) * 100)}%`,
+                                        backgroundColor: barColor,
+                                      }}
+                                    >
+                                      {bestSellersSortBy === 'quantity' ? item.quantity : item.revenue}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                      </div>
+                    )}
+                    </div>
+                  )}
                 </section>
 
                 {/* إحصائيات الفريق (Business فقط) */}
@@ -2373,28 +2755,29 @@ function AdminPageContent() {
                     return part;
                   });
                   return (
-                    <div className="bg-white rounded-xl shadow-md p-4 border border-gray-100">
-                      <h3 className="text-sm font-bold text-gray-700 mb-3 text-center">{label}</h3>
+                    <div className="rounded-xl border border-gray-100 p-4">
+                      <p className="text-sm font-medium text-gray-600 mb-2 text-center">{label}</p>
                       <div className="flex flex-col items-center">
                         {total === 0 ? (
-                          <div className="w-40 h-40 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-sm">لا نشاط</div>
+                          <div className="w-36 h-36 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs">لا نشاط</div>
                         ) : (
                           <>
                             <div
-                              className="w-40 h-40 rounded-full flex-shrink-0"
+                              className="w-36 h-36 rounded-full flex-shrink-0"
                               style={{ background: `conic-gradient(${conicParts.join(', ')})` }}
                               title={segments.map(s => `${s.name}: ${s.value}`).join('\n')}
                             />
-                            <p className="mt-2 text-xs text-gray-500">المجموع: {total}</p>
-                            <ul className="mt-2 w-full space-y-1 text-xs">
-                              {segments.map((s, i) => (
-                                <li key={i} className="flex items-center gap-2">
-                                  <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
-                                  <span className="truncate">{s.name}</span>
-                                  <span className="text-gray-600 font-medium">{s.value}</span>
-                                </li>
-                              ))}
-                            </ul>
+                            <div className="mt-2 w-full flex justify-center">
+                              <div className="inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs">
+                                {segments.map((s, i) => (
+                                  <span key={i} className="inline-flex items-center gap-1.5">
+                                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} aria-hidden />
+                                    <span>{s.name}</span>
+                                    <span className="text-gray-600 font-medium">{s.value}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
                           </>
                         )}
                       </div>
@@ -2402,28 +2785,30 @@ function AdminPageContent() {
                   );
                 };
 
-                const DELIVERY_ASSIGNMENT = [{ key: 'deliveryAssignedCount', label: 'تعيين عمال التوصيل للطلبات' }];
-                /** تقديم: تجميع حسب الحالة الهدف (إلى 2، إلى 3، إلى 4) */
+                const DELIVERY_ASSIGNMENT_LABEL = 'التعيين على الطلبات';
+                /** تقديم التوصيل: 2 مقروء، 3 قيد التوصيل، 4 تم */
                 const DELIVERY_PIES_FORWARD = [
-                  { statKeys: ['deliveryForward12'] as const, label: 'تقديم إلى 2' },
-                  { statKeys: ['deliveryForward13', 'deliveryForward23'] as const, label: 'تقديم إلى 3' },
-                  { statKeys: ['deliveryForward14', 'deliveryForward24', 'deliveryForward34'] as const, label: 'تقديم إلى 4' },
+                  { statKeys: ['deliveryForward12'] as const, label: 'تقديم الحالة إلى (مقروء)' },
+                  { statKeys: ['deliveryForward13', 'deliveryForward23'] as const, label: 'تقديم الحالة إلى (قيد التوصيل)' },
+                  { statKeys: ['deliveryForward14', 'deliveryForward24', 'deliveryForward34'] as const, label: 'تقديم الحالة إلى (تم)' },
                 ];
-                /** تأخير: تجميع حسب الحالة الهدف (إلى 1، إلى 2، إلى 3) */
+                /** تأخير التوصيل: 1 جديد، 2 مقروء، 3 قيد التوصيل */
                 const DELIVERY_PIES_DOWNGRADE = [
-                  { statKeys: ['deliveryDowngrade41', 'deliveryDowngrade31', 'deliveryDowngrade21'] as const, label: 'تأخير إلى 1' },
-                  { statKeys: ['deliveryDowngrade42', 'deliveryDowngrade32'] as const, label: 'تأخير إلى 2' },
-                  { statKeys: ['deliveryDowngrade43'] as const, label: 'تأخير إلى 3' },
+                  { statKeys: ['deliveryDowngrade41', 'deliveryDowngrade31', 'deliveryDowngrade21'] as const, label: 'تأخير الحالة إلى (جديد)' },
+                  { statKeys: ['deliveryDowngrade42', 'deliveryDowngrade32'] as const, label: 'تأخير الحالة إلى (مقروء)' },
+                  { statKeys: ['deliveryDowngrade43'] as const, label: 'تأخير الحالة إلى (قيد التوصيل)' },
                 ];
+                /** تقديم الطاولة: 2 مقروء، 3 تم التقديم، 4 تم */
                 const TABLE_PIES_FORWARD = [
-                  { statKeys: ['tableForward12'] as const, label: 'تقديم إلى 2' },
-                  { statKeys: ['tableForward13', 'tableForward23'] as const, label: 'تقديم إلى 3' },
-                  { statKeys: ['tableForward14', 'tableForward24', 'tableForward34'] as const, label: 'تقديم إلى 4' },
+                  { statKeys: ['tableForward12'] as const, label: 'تقديم الحالة إلى (مقروء)' },
+                  { statKeys: ['tableForward13', 'tableForward23'] as const, label: 'تقديم الحالة إلى (تم التقديم)' },
+                  { statKeys: ['tableForward14', 'tableForward24', 'tableForward34'] as const, label: 'تقديم الحالة إلى (تم)' },
                 ];
+                /** تأخير الطاولة: 1 جديد، 2 مقروء، 3 تم التقديم */
                 const TABLE_PIES_DOWNGRADE = [
-                  { statKeys: ['tableDowngrade41', 'tableDowngrade31', 'tableDowngrade21'] as const, label: 'تأخير إلى 1' },
-                  { statKeys: ['tableDowngrade42', 'tableDowngrade32'] as const, label: 'تأخير إلى 2' },
-                  { statKeys: ['tableDowngrade43'] as const, label: 'تأخير إلى 3' },
+                  { statKeys: ['tableDowngrade41', 'tableDowngrade31', 'tableDowngrade21'] as const, label: 'تأخير الحالة إلى (جديد)' },
+                  { statKeys: ['tableDowngrade42', 'tableDowngrade32'] as const, label: 'تأخير الحالة إلى (مقروء)' },
+                  { statKeys: ['tableDowngrade43'] as const, label: 'تأخير الحالة إلى (تم التقديم)' },
                 ];
 
                 const formatCachedAt = (iso: string) => {
@@ -2435,58 +2820,79 @@ function AdminPageContent() {
                   }
                 };
 
+                const assignmentSegments = getSegments('deliveryAssignedCount');
+                const assignmentTotal = assignmentSegments.reduce((sum, s) => sum + s.value, 0);
+
                 return (
-                  <div className="space-y-10">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h2 className="text-2xl font-bold text-gray-800">ملخص النشاط</h2>
+                  <>
+                    <div className="flex flex-wrap items-center gap-3 mb-4">
+                      <h2 className="text-2xl font-bold text-gray-800">العاملين</h2>
                       {teamStatsCachedAt && (
                         <span className="text-sm text-gray-500">
                           آخر تحديث: {formatCachedAt(teamStatsCachedAt)}
                         </span>
                       )}
                     </div>
+                    <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm space-y-8">
+                      <div className="flex flex-col items-center">
+                        <h3 className="text-lg font-bold text-gray-700 mb-4">التعيين على الطلبات</h3>
+                        {assignmentTotal === 0 ? (
+                          <div className="w-40 h-40 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-sm">لا نشاط</div>
+                        ) : (
+                          <>
+                            <div className="relative w-40 h-40 flex-shrink-0 flex items-center justify-center" title={assignmentSegments.map(s => `${s.name}: ${s.value}`).join('\n')}>
+                              <div className="absolute inset-0 rounded-full" style={{ background: `conic-gradient(${assignmentSegments.map((s, i) => { const prev = assignmentSegments.slice(0, i).reduce((a, x) => a + x.value, 0); return `${s.color} ${(prev / assignmentTotal) * 100}% ${(prev + s.value) / assignmentTotal * 100}%`; }).join(', ')})` }} />
+                              <div className="absolute inset-[22%] rounded-full bg-white" aria-hidden />
+                              <div className="relative z-10 flex flex-col items-center justify-center text-center">
+                                <span className="text-2xl font-bold text-gray-800">{assignmentTotal}</span>
+                              </div>
+                            </div>
+                            <div className="mt-3 w-full flex justify-center">
+                              <ul className="inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs list-none p-0 m-0">
+                                {assignmentSegments.map((s, i) => (
+                                  <li key={i} className="inline-flex items-center gap-2">
+                                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                                    <span className="text-gray-600 font-medium">{s.value}</span>
+                                    <span className="truncate">{s.name}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </>
+                        )}
+                      </div>
 
-                    <section>
-                      <h3 className="text-lg font-bold text-gray-700 mb-4">تعيين عمال التوصيل للطلبات</h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {DELIVERY_ASSIGNMENT.map(({ key, label }) => (
-                          <PieCard key={key} statKey={key} label={label} />
-                        ))}
+                      <div className="space-y-6">
+                        <h3 className="text-lg font-bold text-gray-700 mb-4 text-center">تقديم حالة طلب التوصيل</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                          {DELIVERY_PIES_FORWARD.map(({ statKeys, label }, i) => (
+                            <PieCard key={i} statKeys={[...statKeys]} label={label} />
+                          ))}
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-700 mb-4 text-center">تأخير حالة طلب التوصيل</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                          {DELIVERY_PIES_DOWNGRADE.map(({ statKeys, label }, i) => (
+                            <PieCard key={i} statKeys={[...statKeys]} label={label} />
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-6">
+                        <h3 className="text-lg font-bold text-gray-700 mb-4 text-center">تقديم حالة طلب الطاولة</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                          {TABLE_PIES_FORWARD.map(({ statKeys, label }, i) => (
+                            <PieCard key={i} statKeys={[...statKeys]} label={label} />
+                          ))}
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-700 mb-4 text-center">تأخير حالة طلب الطاولة</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                          {TABLE_PIES_DOWNGRADE.map(({ statKeys, label }, i) => (
+                            <PieCard key={i} statKeys={[...statKeys]} label={label} />
+                          ))}
+                        </div>
                       </div>
                     </section>
-
-                    <section>
-                      <h3 className="text-lg font-bold text-gray-700 mb-4">التوصيل</h3>
-                      <h4 className="text-base font-bold text-gray-600 mb-3">التقديم</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-6">
-                        {DELIVERY_PIES_FORWARD.map(({ statKeys, label }, i) => (
-                          <PieCard key={i} statKeys={[...statKeys]} label={label} />
-                        ))}
-                      </div>
-                      <h4 className="text-base font-bold text-gray-600 mb-3">التأخير</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {DELIVERY_PIES_DOWNGRADE.map(({ statKeys, label }, i) => (
-                          <PieCard key={i} statKeys={[...statKeys]} label={label} />
-                        ))}
-                      </div>
-                    </section>
-
-                    <section>
-                      <h3 className="text-lg font-bold text-gray-700 mb-4">الطاولة</h3>
-                      <h4 className="text-base font-bold text-gray-600 mb-3">التقديم</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-6">
-                        {TABLE_PIES_FORWARD.map(({ statKeys, label }, i) => (
-                          <PieCard key={i} statKeys={[...statKeys]} label={label} />
-                        ))}
-                      </div>
-                      <h4 className="text-base font-bold text-gray-600 mb-3">التأخير</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {TABLE_PIES_DOWNGRADE.map(({ statKeys, label }, i) => (
-                          <PieCard key={i} statKeys={[...statKeys]} label={label} />
-                        ))}
-                      </div>
-                    </section>
-                  </div>
+                  </>
                 );
               })()
             )}
@@ -2500,7 +2906,22 @@ function AdminPageContent() {
           <div className="w-full max-w-5xl mx-auto p-4 space-y-8">
             {userType === 'admin' && (
               <>
-                <h2 className="text-2xl font-bold text-gray-800">نشاط العاملين</h2>
+                <div className="flex flex-wrap items-center gap-3">
+                  <h2 className="text-2xl font-bold text-gray-800">نشاط العاملين</h2>
+                  <span className="text-sm text-gray-500">تحدث الارقام يوميا</span>
+                  {workersActivityCachedAt && (
+                    <span className="text-sm text-gray-500">
+                      آخر تحديث: {(() => {
+                        try {
+                          const d = new Date(workersActivityCachedAt);
+                          return d.toLocaleDateString('ar-SA', { dateStyle: 'short' }) + ' ' + d.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+                        } catch {
+                          return workersActivityCachedAt;
+                        }
+                      })()}
+                    </span>
+                  )}
+                </div>
                 {!isPlanActive('business') && (
                   <p className="text-gray-500 text-sm">تفاصيل النشاط والإحصائيات واللوجات متاحة ضمن باقة البزنس فقط.</p>
                 )}
@@ -3981,7 +4402,7 @@ function AdminPageContent() {
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-gray-800">تفعيل الطلب عبر الموقع</span>
                     {!isPlanActive('basic') && (
-                      <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full font-bold">basic</span>
+                      <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full font-bold uppercase">BASIC</span>
                     )}
                   </div>
                   <p className="text-xs text-gray-500 mt-0.5">سيظهر زر "اطلب الآن عبر الموقع" في السلة</p>
@@ -4020,9 +4441,10 @@ function AdminPageContent() {
 
               <button
                 type="submit"
-                className="w-full bg-gray-800 hover:bg-gray-900 text-white py-3 px-4 rounded-xl font-bold transition-colors"
+                disabled={deliverySettingsSaving}
+                className="w-full bg-gray-800 hover:bg-gray-900 text-white py-3 px-4 rounded-xl font-bold transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                حفظ إعدادات طلبات التوصيل
+                {deliverySettingsSaving ? 'جاري الحفظ...' : 'حفظ إعدادات طلبات التوصيل'}
               </button>
             </form>
 
@@ -4101,9 +4523,10 @@ function AdminPageContent() {
 
               <button
                 type="submit"
-                className="w-full bg-gray-800 hover:bg-gray-900 text-white py-3 px-4 rounded-xl font-bold transition-colors"
+                disabled={tableSettingsSaving}
+                className="w-full bg-gray-800 hover:bg-gray-900 text-white py-3 px-4 rounded-xl font-bold transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                حفظ إعدادات طلبات الطاولة
+                {tableSettingsSaving ? 'جاري الحفظ...' : 'حفظ إعدادات طلبات الطاولة'}
               </button>
             </form>
 
@@ -4132,7 +4555,7 @@ function AdminPageContent() {
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-gray-800">تفعيل عمال التوصيل</span>
                     {!isPlanActive('basic') && (
-                      <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full font-bold">basic</span>
+                      <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full font-bold uppercase">BASIC</span>
                     )}
                   </div>
                   <p className="text-xs text-gray-500 mt-0.5">سيتمكن العمال من التحكم في حالة طلبات التوصيل</p>
@@ -4213,9 +4636,10 @@ function AdminPageContent() {
 
               <button
                 type="submit"
-                className="w-full bg-gray-800 hover:bg-gray-900 text-white py-3 px-4 rounded-xl font-bold transition-colors"
+                disabled={employeeSettingsSaving}
+                className="w-full bg-gray-800 hover:bg-gray-900 text-white py-3 px-4 rounded-xl font-bold transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                حفظ إعدادات العاملين
+                {employeeSettingsSaving ? 'جاري الحفظ...' : 'حفظ إعدادات العاملين'}
               </button>
             </form>
           </div>
@@ -4428,7 +4852,7 @@ function AdminPageContent() {
                   <>
                     إضافة عامل جديد
                     {!isPlanActive('basic') && (
-                      <span className="text-[10px] bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full font-bold">basic</span>
+                      <span className="text-[10px] bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full font-bold uppercase">BASIC</span>
                     )}
                   </>
                 )}

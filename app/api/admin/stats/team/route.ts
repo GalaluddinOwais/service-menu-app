@@ -9,6 +9,9 @@ import {
 import { verifySessionToken } from '@/lib/auth';
 import type { UserStats } from '@/lib/db';
 
+/** منع كاش Next.js حتى تُحسب النتائج من DB في كل طلب */
+export const dynamic = 'force-dynamic';
+
 export type TeamStatsUser = {
   id: string;
   name: string;
@@ -16,7 +19,7 @@ export type TeamStatsUser = {
   stats: UserStats;
 };
 
-/** GET /api/admin/stats/team — إحصائيات الأدمن + كل العمال (باقة البزنس فقط) */
+/** GET /api/admin/stats/team — إحصائيات الأدمن + كل العمال (سكشن العاملين في ملخص النشاط، باقة البزنس فقط) */
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization');
@@ -42,13 +45,14 @@ export async function GET(request: NextRequest) {
 
     const CACHE_MS = 24 * 60 * 60 * 1000; // 24 ساعة
     const cached = admin.adminCachedStats?.team;
-    if (cached?.cachedAt) {
+    if (cached?.cachedAt && Array.isArray(cached.users)) {
       const age = Date.now() - new Date(cached.cachedAt).getTime();
       if (age < CACHE_MS) {
         return NextResponse.json({ users: cached.users, cachedAt: cached.cachedAt });
       }
     }
 
+    // انتهت صلاحية الكاش — إعادة الحساب ثم تخزينه في DB
     const adminStats = await getUserStats(adminId, 'admin');
     const { employees } = await getEmployees(adminId);
     const statsPromises = employees.map(emp => getUserStats(emp.id, 'employee'));
