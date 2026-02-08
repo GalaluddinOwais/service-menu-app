@@ -2275,6 +2275,48 @@ function AdminPageContent() {
                       ) : ordersOverTime ? (() => {
                         const delivery = ordersOverTime.delivery ?? [];
                         const table = ordersOverTime.table ?? [];
+
+                        type ChartPoint = { label: string; completedCount: number; revenue: number; customerSaved: number };
+                        const buildChartFromDaily = (daily: typeof delivery, range: '30d' | '12m' | 'years'): { chartData: ChartPoint[]; dateRangeLabel: string } => {
+                          if (range === '30d') {
+                            const sliced = daily.slice(-30);
+                            const chartData = sliced.map(d => ({ label: d.date.slice(5), completedCount: d.completedCount, revenue: d.revenue, customerSaved: d.customerSaved }));
+                            const dateRangeLabel = chartData.length > 0 ? `من ${sliced[0].date} إلى ${sliced[sliced.length - 1].date} (آخر ${chartData.length} يومًا)` : '';
+                            return { chartData, dateRangeLabel };
+                          }
+                          if (range === '12m') {
+                            const byMonth = new Map<string, ChartPoint>();
+                            for (const d of daily) {
+                              const key = d.date.slice(0, 7);
+                              const cur = byMonth.get(key) ?? { label: key, completedCount: 0, revenue: 0, customerSaved: 0 };
+                              byMonth.set(key, {
+                                label: key,
+                                completedCount: cur.completedCount + d.completedCount,
+                                revenue: cur.revenue + d.revenue,
+                                customerSaved: cur.customerSaved + d.customerSaved,
+                              });
+                            }
+                            const months = Array.from(byMonth.keys()).sort().slice(-12);
+                            const chartData = months.map(k => byMonth.get(k)!);
+                            const dateRangeLabel = chartData.length > 0 ? `آخر ${chartData.length} شهر (${chartData[0].label} — ${chartData[chartData.length - 1].label})` : '';
+                            return { chartData, dateRangeLabel };
+                          }
+                          const byYear = new Map<string, ChartPoint>();
+                          for (const d of daily) {
+                            const key = d.date.slice(0, 4);
+                            const cur = byYear.get(key) ?? { label: key, completedCount: 0, revenue: 0, customerSaved: 0 };
+                            byYear.set(key, {
+                              label: key,
+                              completedCount: cur.completedCount + d.completedCount,
+                              revenue: cur.revenue + d.revenue,
+                              customerSaved: cur.customerSaved + d.customerSaved,
+                            });
+                          }
+                          const chartData = Array.from(byYear.keys()).sort().map(k => byYear.get(k)!);
+                          const dateRangeLabel = chartData.length > 0 ? `السنين (${chartData.map(p => p.label).join(' — ')})` : '';
+                          return { chartData, dateRangeLabel };
+                        };
+
                         const allDates = Array.from(new Set([...delivery.map(d => d.date), ...table.map(d => d.date)])).sort();
                         const fullDaily = allDates.map(date => {
                           const d = delivery.find(x => x.date === date);
@@ -2287,86 +2329,40 @@ function AdminPageContent() {
                           };
                         });
 
-                        type ChartPoint = { label: string; completedCount: number; revenue: number; customerSaved: number };
-                        let chartData: ChartPoint[];
-                        let dateRangeLabel: string;
-                        if (ordersOverTimeRange === '30d') {
-                          const sliced = fullDaily.slice(-30);
-                          chartData = sliced.map(d => ({ label: d.date.slice(5), completedCount: d.completedCount, revenue: d.revenue, customerSaved: d.customerSaved }));
-                          dateRangeLabel = chartData.length > 0 ? `من ${sliced[0].date} إلى ${sliced[sliced.length - 1].date} (آخر ${chartData.length} يومًا)` : '';
-                        } else if (ordersOverTimeRange === '12m') {
-                          const byMonth = new Map<string, ChartPoint>();
-                          for (const d of fullDaily) {
-                            const key = d.date.slice(0, 7);
-                            const cur = byMonth.get(key) ?? { label: key, completedCount: 0, revenue: 0, customerSaved: 0 };
-                            byMonth.set(key, {
-                              label: key,
-                              completedCount: cur.completedCount + d.completedCount,
-                              revenue: cur.revenue + d.revenue,
-                              customerSaved: cur.customerSaved + d.customerSaved,
-                            });
-                          }
-                          const months = Array.from(byMonth.keys()).sort().slice(-12);
-                          chartData = months.map(k => byMonth.get(k)!);
-                          dateRangeLabel = chartData.length > 0 ? `آخر ${chartData.length} شهر (${chartData[0].label} — ${chartData[chartData.length - 1].label})` : '';
-                        } else {
-                          const byYear = new Map<string, ChartPoint>();
-                          for (const d of fullDaily) {
-                            const key = d.date.slice(0, 4);
-                            const cur = byYear.get(key) ?? { label: key, completedCount: 0, revenue: 0, customerSaved: 0 };
-                            byYear.set(key, {
-                              label: key,
-                              completedCount: cur.completedCount + d.completedCount,
-                              revenue: cur.revenue + d.revenue,
-                              customerSaved: cur.customerSaved + d.customerSaved,
-                            });
-                          }
-                          chartData = Array.from(byYear.keys()).sort().map(k => byYear.get(k)!);
-                          dateRangeLabel = chartData.length > 0 ? `السنين (${chartData.map(p => p.label).join(' — ')})` : '';
-                        }
+                        const deliveryBuilt = buildChartFromDaily(delivery, ordersOverTimeRange);
+                        const tableBuilt = buildChartFromDaily(table, ordersOverTimeRange);
+                        const combinedBuilt = buildChartFromDaily(fullDaily, ordersOverTimeRange);
+                        const lastUpdate = ordersOverTime?.cachedAt ? (() => {
+                            const d = new Date(ordersOverTime.cachedAt);
+                            return d.toLocaleDateString('ar-EG', { dateStyle: 'short' }) + ' ' + d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+                          })() : '';
 
-                        if (chartData.length === 0) {
+                        const renderLineChart = (title: string, chartData: ChartPoint[], dateRangeLabel: string, emptyMessage: string) => {
+                          if (chartData.length === 0) {
+                            return (
+                              <div className="w-full border border-gray-200 rounded-xl shadow-sm p-4 md:p-6">
+                                <h3 className="text-lg font-bold text-gray-800 mb-2">{title}</h3>
+                                <div className="rounded-xl border border-gray-100 p-6 text-center text-gray-500">{emptyMessage}</div>
+                              </div>
+                            );
+                          }
+                          const totalRevenue = chartData.reduce((s, d) => s + d.revenue, 0);
+                          const maxOrders = Math.max(1, ...chartData.map(d => d.completedCount));
+                          const ordersAxisMax = Math.ceil(maxOrders / 5) * 5 || 5;
                           return (
-                            <div>
-                              <h2 className="text-xl font-bold text-gray-800 mb-3">الإيرادات عبر الزمن</h2>
-                              <div className="rounded-xl border border-gray-100 p-6 text-center text-gray-500">لا توجد بيانات بعد.</div>
-                            </div>
-                          );
-                        }
-                        const totalRevenue = chartData.reduce((s, d) => s + d.revenue, 0);
-                        const totalOrders = chartData.reduce((s, d) => s + d.completedCount, 0);
-                        const maxOrders = Math.max(1, ...chartData.map(d => d.completedCount));
-                        const ordersAxisMax = Math.ceil(maxOrders / 5) * 5 || 5;
-                        const lastUpdate = ordersOverTime?.cachedAt ? new Date(ordersOverTime.cachedAt).toLocaleDateString('ar-EG', { dateStyle: 'short' }) : '';
-                        return (
-                          <div className="w-full">
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3">
-                              <h2 className="text-xl font-bold text-gray-800">الإيرادات عبر الزمن</h2>
-                              {lastUpdate && <span className="text-sm text-gray-500">آخر تحديث {lastUpdate} (تُحدَّث يومياً)</span>}
-                            </div>
                             <div className="w-full border border-gray-200 rounded-xl shadow-sm p-4 md:p-6">
                               <div className="flex flex-wrap justify-between items-start gap-4 mb-2">
                                 <div>
-                                  <h5 className="text-2xl font-bold text-gray-900">{totalRevenue.toLocaleString('ar-EG')} جـ</h5>
-                                  <p className="text-gray-600">إيراد الفترة</p>
+                                  <h3 className="text-lg font-bold text-gray-800">{title}</h3>
+                                  <h5 className="text-2xl font-bold text-gray-900 mt-1">{totalRevenue.toLocaleString('ar-EG')} جـ</h5>
+                                  <p className="text-gray-600 text-sm">إيراد الفترة</p>
                                   <p className="text-xs text-gray-400 mt-0.5">{dateRangeLabel}</p>
                                 </div>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <select
-                                    value={ordersOverTimeRange}
-                                    onChange={(e) => setOrdersOverTimeRange(e.target.value as '30d' | '12m' | 'years')}
-                                    className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white text-gray-700"
-                                  >
-                                    <option value="30d">آخر 30 يوم</option>
-                                    <option value="12m">آخر 12 شهر</option>
-                                    <option value="years">السنين</option>
-                                  </select>
-                                </div>
                               </div>
-                              <div id="data-series-chart" className="mt-2 w-full">
+                              <div className="mt-2 w-full">
                                 <ApexCharts
                                   type="line"
-                                  height={280}
+                                  height={260}
                                   series={[
                                     { name: 'توفير المشتري', data: chartData.map(d => d.customerSaved) },
                                     { name: 'المبلغ', data: chartData.map(d => d.revenue) },
@@ -2406,20 +2402,39 @@ function AdminPageContent() {
                                   })()}
                                 />
                               </div>
-                              <div className="grid grid-cols-1 border-t border-gray-200 pt-4 mt-4">
-                                <div className="flex flex-wrap gap-6 text-sm text-gray-700">
-                                  <span className="flex items-center gap-2">
-                                    <span className="w-6 h-1 rounded bg-emerald-400 inline-block" aria-hidden /> المبلغ
-                                  </span>
-                                  <span className="flex items-center gap-2">
-                                    <span className="w-6 h-1 rounded bg-slate-400 inline-block" aria-hidden /> توفير المشتري
-                                  </span>
-                                  <span className="flex items-center gap-2">
-                                    <span className="w-6 h-1 rounded bg-green-800 inline-block" aria-hidden /> العدد
-                                  </span>
-                                </div>
+                              <div className="flex flex-wrap gap-6 text-sm text-gray-700 mt-4 pt-4 border-t border-gray-200">
+                                <span className="flex items-center gap-2">
+                                  <span className="w-6 h-1 rounded bg-emerald-400 inline-block" aria-hidden /> المبلغ
+                                </span>
+                                <span className="flex items-center gap-2">
+                                  <span className="w-6 h-1 rounded bg-slate-400 inline-block" aria-hidden /> توفير المشتري
+                                </span>
+                                <span className="flex items-center gap-2">
+                                  <span className="w-6 h-1 rounded bg-green-800 inline-block" aria-hidden /> العدد
+                                </span>
                               </div>
                             </div>
+                          );
+                        };
+
+                        return (
+                          <div className="w-full space-y-6">
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3">
+                              <h2 className="text-xl font-bold text-gray-800">الإيرادات عبر الزمن</h2>
+                              {lastUpdate && <span className="text-sm text-gray-500">آخر تحديث {lastUpdate} (تُحدَّث يومياً)</span>}
+                              <select
+                                value={ordersOverTimeRange}
+                                onChange={(e) => setOrdersOverTimeRange(e.target.value as '30d' | '12m' | 'years')}
+                                className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white text-gray-700"
+                              >
+                                <option value="30d">آخر 30 يوم</option>
+                                <option value="12m">آخر 12 شهر</option>
+                                <option value="years">السنين</option>
+                              </select>
+                            </div>
+                            {renderLineChart('جميع الطلبات', combinedBuilt.chartData, combinedBuilt.dateRangeLabel, 'لا توجد بيانات بعد.')}
+                            {renderLineChart('طلبات التوصيل', deliveryBuilt.chartData, deliveryBuilt.dateRangeLabel, 'لا توجد بيانات توصيل بعد.')}
+                            {renderLineChart('طلبات الطاولة', tableBuilt.chartData, tableBuilt.dateRangeLabel, 'لا توجد بيانات طاولة بعد.')}
                           </div>
                         );
                       })() : null}
@@ -2829,7 +2844,7 @@ function AdminPageContent() {
                       <h2 className="text-2xl font-bold text-gray-800">العاملين</h2>
                       {teamStatsCachedAt && (
                         <span className="text-sm text-gray-500">
-                          آخر تحديث: {formatCachedAt(teamStatsCachedAt)}
+                          آخر تحديث: {formatCachedAt(teamStatsCachedAt)} (تُحدَّث يومياً)
                         </span>
                       )}
                     </div>
@@ -2908,7 +2923,6 @@ function AdminPageContent() {
               <>
                 <div className="flex flex-wrap items-center gap-3">
                   <h2 className="text-2xl font-bold text-gray-800">نشاط العاملين</h2>
-                  <span className="text-sm text-gray-500">تحدث الارقام يوميا</span>
                   {workersActivityCachedAt && (
                     <span className="text-sm text-gray-500">
                       آخر تحديث: {(() => {
