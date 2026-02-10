@@ -871,7 +871,7 @@ function appendTableCompletionsToOrdersOverTime(
   db.admins[adminIndex] = admin;
 }
 
-/** إذا مرّ يوم على cachedAt يُلحَق التمام منذ آخر تاريخ كاش حتى أمس (استبعاد اليوم). باقة Business فقط. */
+/** إذا مرّ يوم على cachedAt يُلحَق التمام منذ اليوم التالي لآخر تاريخ موجود في الكاش حتى أمس (استبعاد اليوم). باقة Business فقط. */
 export function ensureOrdersOverTimeCacheRecomputed(db: Database, adminIndex: number): void {
   const admin = db.admins[adminIndex];
   if (!isBusinessPlanActive(admin)) return;
@@ -880,9 +880,18 @@ export function ensureOrdersOverTimeCacheRecomputed(db: Database, adminIndex: nu
   const cachedAt = new Date(cache.cachedAt);
   const oneDayMs = 24 * 60 * 60 * 1000;
   if (now.getTime() - cachedAt.getTime() < oneDayMs) return;
-  const start = new Date(cachedAt);
-  start.setUTCDate(start.getUTCDate() + 1);
-  start.setUTCHours(0, 0, 0, 0);
+
+  // بداية النطاق: اليوم التالي لآخر تاريخ له بيانات في الكاش (وليس اليوم التالي لـ cachedAt)
+  const allDateKeys = [...Object.keys(cache.delivery), ...Object.keys(cache.table)];
+  let start: Date;
+  if (allDateKeys.length > 0) {
+    const lastKey = allDateKeys.sort().pop()!;
+    start = new Date(lastKey + 'T00:00:00.000Z');
+    start.setUTCDate(start.getUTCDate() + 1);
+  } else {
+    start = new Date(cachedAt);
+    start.setUTCHours(0, 0, 0, 0);
+  }
   const end = new Date(now);
   end.setUTCDate(end.getUTCDate() - 1);
   end.setUTCHours(23, 59, 59, 999);
