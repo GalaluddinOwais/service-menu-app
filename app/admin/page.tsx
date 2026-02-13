@@ -1038,8 +1038,8 @@ function AdminPageContent() {
         if (delRes.logs) setExpandedWorkerDeliveryLogs({ logs: delRes.logs, total: delRes.total ?? 0, page: delRes.page ?? 1, limit: delRes.limit ?? limit });
         if (tblRes.logs) setExpandedWorkerTableLogs({ logs: tblRes.logs, total: tblRes.total ?? 0, page: tblRes.page ?? 1, limit: tblRes.limit ?? limit });
         if (isPlanActive('business')) {
-          const fromTeam = teamStatsUsers.find(u => u.id === userId)?.stats as Record<string, number> | undefined;
-          const counts = fromTeam ?? (employeeOrAdmin ? countsFrom(employeeOrAdmin) : {});
+          // أرقام الأسهم من استجابة الموظف/الأدمن فقط — لا اعتماد على team stats
+          const counts = employeeOrAdmin ? countsFrom(employeeOrAdmin) : {};
           if (Object.keys(counts).length) setExpandedWorkerStats(counts);
         }
       } else {
@@ -3317,9 +3317,245 @@ function AdminPageContent() {
                               </button>
                             </div>
                           )}
+                          {/* تفاصيل العامل — أسفل الكاردس مباشرة */}
+                          <div ref={workerDetailsRef} className="min-h-[200px] pt-4">
+                            {expandedWorkerId && (
+                              <div className="bg-white rounded-xl shadow border border-gray-100 p-6 space-y-6">
+                                {expandedWorkerLoading ? (
+                                  <p className="text-gray-500">جاري تحميل التفاصيل...</p>
+                                ) : (
+                                  <>
+                                    {expandedWorkerProfile && (
+                                      <div className="border-b border-gray-100 pb-4">
+                                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                                          <div className="flex items-center justify-center shrink-0">
+                                            {(expandedWorkerProfile.imageUrl as string) ? (
+                                              <img src={expandedWorkerProfile.imageUrl as string} alt="" className="w-20 h-20 rounded-full object-cover border-2 border-gray-200" />
+                                            ) : (
+                                              <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center border-2 border-gray-200">
+                                                <svg className="w-10 h-10 text-gray-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                                              </div>
+                                            )}
+                                          </div>
+                                          <div className="flex flex-col gap-2 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                              <svg className="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                                              <span className="text-lg font-bold text-gray-800">{String(expandedWorkerProfile.name ?? expandedWorkerId)} <span className="text-gray-500 font-normal">({String(expandedWorkerProfile.username ?? '—')})</span></span>
+                                            </div>
+                                            {expandedWorkerProfile.phone ? (
+                                              <div className="flex items-center gap-2">
+                                                <svg className="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                                                <span className="text-sm text-gray-600">{String(expandedWorkerProfile.phone)}</span>
+                                              </div>
+                                            ) : null}
+                                            {expandedWorkerProfile.createdAt ? (
+                                              <div className="flex items-center gap-2">
+                                                <svg className="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                                <span className="text-sm text-gray-600">منذ {new Date(String(expandedWorkerProfile.createdAt)).toLocaleDateString('ar-SA', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                                              </div>
+                                            ) : null}
+                                            {isPlanActive('business') && expandedWorkerStats != null && Number(expandedWorkerStats.deliveryAssignedCount) > 0 && (
+                                              <div className="flex items-center gap-2">
+                                                <svg className="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                                                <span className="text-sm text-gray-600">طلبات توصيل معينة: <span className="font-semibold text-gray-800">{Number(expandedWorkerStats.deliveryAssignedCount)}</span></span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                    {isPlanActive('business') && expandedWorkerStats && (
+                                      <>
+                                        {(() => {
+                                          const DEL_LABELS = ['جديد', 'مقروء', 'قيد التوصيل', 'تم'];
+                                          const TBL_LABELS = ['جديد', 'مقروء', 'تم التقديم', 'تم'];
+                                          const forwardPairs: [number, number][] = [[1, 2], [1, 3], [1, 4], [2, 3], [2, 4], [3, 4]];
+                                          const downgradePairs: [number, number][] = [[4, 3], [4, 2], [4, 1], [3, 2], [3, 1], [2, 1]];
+                                          const forwardKeys = ['Forward12', 'Forward13', 'Forward14', 'Forward23', 'Forward24', 'Forward34'];
+                                          const downgradeKeys = ['Downgrade43', 'Downgrade42', 'Downgrade41', 'Downgrade32', 'Downgrade31', 'Downgrade21'];
+                                          const stateX = (i: number) => 12.5 + (4 - i) * 25;
+                                          const ArrowDiagram = ({ title, labels, prefix }: { title: string; labels: string[]; prefix: 'delivery' | 'table' }) => {
+                                            const w = 100;
+                                            const hTop = 38;
+                                            const hBottom = 38;
+                                            const yBaseTop = 38;
+                                            const yBaseBottom = 52;
+                                            const totalH = 100;
+                                            const viewY = 2;
+                                            const viewH = 84;
+                                            const strokeWidth = 0.45;
+                                            const circleR = 2;
+                                            const bulge1 = 8;
+                                            const bulge2 = 19;
+                                            const bulge3 = 30;
+                                            const getYCurveTop = (dist: number) => {
+                                              if (dist === 1) return yBaseTop - bulge1;
+                                              if (dist === 2) return yBaseTop - bulge2;
+                                              return yBaseTop - bulge3;
+                                            };
+                                            const getYCurveBottom = (dist: number) => {
+                                              if (dist === 1) return yBaseBottom + bulge1;
+                                              if (dist === 2) return yBaseBottom + bulge2;
+                                              return yBaseBottom + bulge3;
+                                            };
+                                            const colorForward = prefix === 'delivery' ? '#0d9488' : '#d97706';
+                                            const colorDowngrade = '#64748b';
+                                            return (
+                                              <div className="rounded-xl bg-slate-50/80 border border-slate-200/90 overflow-hidden shadow-sm">
+                                                <h4 className="text-slate-600 font-semibold text-sm mb-1 px-3 pt-2">{title}</h4>
+                                                <div className="relative w-full px-1 pb-1" style={{ minHeight: 130 }}>
+                                                  <svg className="w-full block" viewBox={`0 ${viewY} ${w} ${viewH}`} preserveAspectRatio="xMidYMid meet" style={{ minHeight: 130 }}>
+                                                    <defs>
+                                                      <marker id={`arrow-${prefix}-f`} markerWidth="4" markerHeight="4" refX="3" refY="2" orient="auto">
+                                                        <path d="M0,0 L4,2 L0,4 Z" fill={colorForward} />
+                                                      </marker>
+                                                      <marker id={`arrow-${prefix}-d`} markerWidth="4" markerHeight="4" refX="3" refY="2" orient="auto">
+                                                        <path d="M0,0 L4,2 L0,4 Z" fill={colorDowngrade} />
+                                                      </marker>
+                                                    </defs>
+                                                    {forwardPairs.map(([from, to], idx) => {
+                                                      const key = `${prefix}${forwardKeys[idx]}`;
+                                                      const value = Number(expandedWorkerStats[key]) || 0;
+                                                      const dist = to - from;
+                                                      const x1 = stateX(from);
+                                                      const x2 = stateX(to);
+                                                      const xm = (x1 + x2) / 2;
+                                                      const yCurve = getYCurveTop(dist);
+                                                      const yBase = yBaseTop;
+                                                      const path = `M ${x1} ${yBase} Q ${xm} ${yCurve} ${x2} ${yBase}`;
+                                                      const yCircle = (yBase + yCurve) / 2;
+                                                      return (
+                                                        <g key={key}>
+                                                          <path d={path} fill="none" stroke={colorForward} strokeWidth={strokeWidth} markerEnd={`url(#arrow-${prefix}-f)`} />
+                                                          <circle cx={xm} cy={yCircle} r={circleR} fill="white" stroke={colorForward} strokeWidth={0.4} opacity={0.95} />
+                                                          <text x={xm} y={yCircle} textAnchor="middle" dominantBaseline="central" fontSize="2.3" fill="#475569" fontWeight="600">{value}</text>
+                                                        </g>
+                                                      );
+                                                    })}
+                                                    {downgradePairs.map(([from, to], idx) => {
+                                                      const key = `${prefix}${downgradeKeys[idx]}`;
+                                                      const value = Number(expandedWorkerStats[key]) || 0;
+                                                      const dist = from - to;
+                                                      const x1 = stateX(from);
+                                                      const x2 = stateX(to);
+                                                      const xm = (x1 + x2) / 2;
+                                                      const yCurve = getYCurveBottom(dist);
+                                                      const yBase = yBaseBottom;
+                                                      const path = `M ${x1} ${yBase} Q ${xm} ${yCurve} ${x2} ${yBase}`;
+                                                      const yCircle = (yBase + yCurve) / 2;
+                                                      return (
+                                                        <g key={key}>
+                                                          <path d={path} fill="none" stroke={colorDowngrade} strokeWidth={strokeWidth} markerEnd={`url(#arrow-${prefix}-d)`} />
+                                                          <circle cx={xm} cy={yCircle} r={circleR} fill="white" stroke={colorDowngrade} strokeWidth={0.4} opacity={0.95} />
+                                                          <text x={xm} y={yCircle} textAnchor="middle" dominantBaseline="central" fontSize="2.3" fill="#475569" fontWeight="600">{value}</text>
+                                                        </g>
+                                                      );
+                                                    })}
+                                                  </svg>
+                                                  <div className="absolute inset-x-0 flex justify-between px-[8%] gap-1" dir="rtl" style={{ top: '50%', transform: 'translateY(-50%)', marginTop: '-2px' }}>
+                                                    {labels.map((name, i) => (
+                                                      <span key={i} className="text-center text-[15px] font-medium text-slate-600 flex-1 bg-white/95 rounded-md px-2 py-1 border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.04)]" style={{ maxWidth: '24%' }}>{name}</span>
+                                                    ))}
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            );
+                                          };
+                                          return (
+                                            <>
+                                              <div className="space-y-4">
+                                                <ArrowDiagram title="التوصيل" labels={DEL_LABELS} prefix="delivery" />
+                                                <h4 className="font-bold text-gray-700 mb-2">لوجات التوصيل</h4>
+                                                <div className="overflow-x-auto rounded-lg border border-slate-200/90 bg-white/80 shadow-sm">
+                                                  {(expandedWorkerDeliveryLogs.logs as { orderId?: string; fromStatus?: number; toStatus?: number; createdAt?: string }[])?.length ? (
+                                                    <table className="w-full text-sm">
+                                                      <thead><tr className="bg-slate-50/90 border-b border-slate-200"><th className="p-2 text-right">الطلب</th><th className="p-2 text-right">من</th><th className="p-2 text-right">إلى</th><th className="p-2 text-right">الوقت</th></tr></thead>
+                                                      <tbody>
+                                                        {(expandedWorkerDeliveryLogs.logs as { orderId?: string; fromStatus?: number; toStatus?: number; createdAt?: string }[]).map((log, i) => {
+                                                          const DEL_L: Record<number, string> = { 1: 'جديد', 2: 'مقروء', 3: 'قيد التوصيل', 4: 'تم' };
+                                                          const fromL = DEL_L[log.fromStatus ?? 1] ?? String(log.fromStatus);
+                                                          const toL = DEL_L[log.toStatus ?? 1] ?? String(log.toStatus);
+                                                          const isForward = (log.toStatus ?? 0) > (log.fromStatus ?? 0);
+                                                          return (
+                                                            <tr key={i} className={`border-b border-slate-100 last:border-0 ${isForward ? 'bg-emerald-200/85' : 'bg-slate-300/80'}`}>
+                                                              <td className="p-2 text-sm text-gray-700">{String(log.orderId || '').replace('order_', '')}</td>
+                                                              <td className="p-2 text-sm text-gray-700">{fromL}</td>
+                                                              <td className="p-2 text-sm text-gray-700">{toL}</td>
+                                                              <td className="p-2 text-sm text-slate-500">{log.createdAt ? new Date(log.createdAt).toLocaleString('ar-SA') : ''}</td>
+                                                            </tr>
+                                                          );
+                                                        })}
+                                                      </tbody>
+                                                    </table>
+                                                  ) : (
+                                                    <p className="p-4 text-center text-slate-500 text-sm">لا يوجد</p>
+                                                  )}
+                                                </div>
+                                                {expandedWorkerDeliveryLogs.total > expandedWorkerDeliveryLogs.limit && (
+                                                  <div className="mt-6 flex justify-center items-center gap-2">
+                                                    <button type="button" disabled={expandedWorkerDeliveryLogs.page <= 1} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => fetchExpandedWorkerDetails(expandedWorkerId!, expandedWorkerDeliveryLogs.page - 1, expandedWorkerTableLogs.page, true)}>السابق</button>
+                                                    <div className="flex gap-1 overflow-x-auto max-w-[200px] md:max-w-none scrollbar-hide">
+                                                      {Array.from({ length: Math.ceil(expandedWorkerDeliveryLogs.total / expandedWorkerDeliveryLogs.limit) || 1 }, (_, i) => i + 1).map(page => (
+                                                        <button key={page} type="button" onClick={() => fetchExpandedWorkerDetails(expandedWorkerId!, page, expandedWorkerTableLogs.page, true)} className={`px-3 py-2 rounded-lg font-semibold transition flex-shrink-0 ${expandedWorkerDeliveryLogs.page === page ? 'bg-gray-800 text-white shadow-md' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>{page}</button>
+                                                      ))}
+                                                    </div>
+                                                    <button type="button" disabled={expandedWorkerDeliveryLogs.page >= Math.ceil(expandedWorkerDeliveryLogs.total / expandedWorkerDeliveryLogs.limit)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => fetchExpandedWorkerDetails(expandedWorkerId!, expandedWorkerDeliveryLogs.page + 1, expandedWorkerTableLogs.page, true)}>التالي</button>
+                                                  </div>
+                                                )}
+                                              </div>
+                                              <div className="space-y-4">
+                                                <ArrowDiagram title="الطاولة" labels={TBL_LABELS} prefix="table" />
+                                                <h4 className="font-bold text-gray-700 mb-2">لوجات الطاولة</h4>
+                                                <div className="overflow-x-auto rounded-lg border border-slate-200/90 bg-white/80 shadow-sm">
+                                                  {(expandedWorkerTableLogs.logs as { orderId?: string; fromStatus?: number; toStatus?: number; createdAt?: string }[])?.length ? (
+                                                    <table className="w-full text-sm">
+                                                      <thead><tr className="bg-slate-50/90 border-b border-slate-200"><th className="p-2 text-right">الطلب</th><th className="p-2 text-right">من</th><th className="p-2 text-right">إلى</th><th className="p-2 text-right">الوقت</th></tr></thead>
+                                                      <tbody>
+                                                        {(expandedWorkerTableLogs.logs as { orderId?: string; fromStatus?: number; toStatus?: number; createdAt?: string }[]).map((log, i) => {
+                                                          const TBL_L: Record<number, string> = { 1: 'جديد', 2: 'مقروء', 3: 'تم التقديم', 4: 'تم' };
+                                                          const fromL = TBL_L[log.fromStatus ?? 1] ?? String(log.fromStatus);
+                                                          const toL = TBL_L[log.toStatus ?? 1] ?? String(log.toStatus);
+                                                          const isForward = (log.toStatus ?? 0) > (log.fromStatus ?? 0);
+                                                          return (
+                                                            <tr key={i} className={`border-b border-slate-100 last:border-0 ${isForward ? 'bg-amber-200/85' : 'bg-slate-300/80'}`}>
+                                                              <td className="p-2 text-sm text-gray-700">{String(log.orderId || '').replace('table_order_', '')}</td>
+                                                              <td className="p-2 text-sm text-gray-700">{fromL}</td>
+                                                              <td className="p-2 text-sm text-gray-700">{toL}</td>
+                                                              <td className="p-2 text-sm text-slate-500">{log.createdAt ? new Date(log.createdAt).toLocaleString('ar-SA') : ''}</td>
+                                                            </tr>
+                                                          );
+                                                        })}
+                                                      </tbody>
+                                                    </table>
+                                                  ) : (
+                                                    <p className="p-4 text-center text-slate-500 text-sm">لا يوجد</p>
+                                                  )}
+                                                </div>
+                                                {expandedWorkerTableLogs.total > expandedWorkerTableLogs.limit && (
+                                                  <div className="mt-6 flex justify-center items-center gap-2">
+                                                    <button type="button" disabled={expandedWorkerTableLogs.page <= 1} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => fetchExpandedWorkerDetails(expandedWorkerId!, expandedWorkerDeliveryLogs.page, expandedWorkerTableLogs.page - 1, true)}>السابق</button>
+                                                    <div className="flex gap-1 overflow-x-auto max-w-[200px] md:max-w-none scrollbar-hide">
+                                                      {Array.from({ length: Math.ceil(expandedWorkerTableLogs.total / expandedWorkerTableLogs.limit) || 1 }, (_, i) => i + 1).map(page => (
+                                                        <button key={page} type="button" onClick={() => fetchExpandedWorkerDetails(expandedWorkerId!, expandedWorkerDeliveryLogs.page, page, true)} className={`px-3 py-2 rounded-lg font-semibold transition flex-shrink-0 ${expandedWorkerTableLogs.page === page ? 'bg-gray-800 text-white shadow-md' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>{page}</button>
+                                                      ))}
+                                                    </div>
+                                                    <button type="button" disabled={expandedWorkerTableLogs.page >= Math.ceil(expandedWorkerTableLogs.total / expandedWorkerTableLogs.limit)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => fetchExpandedWorkerDetails(expandedWorkerId!, expandedWorkerDeliveryLogs.page, expandedWorkerTableLogs.page + 1, true)}>التالي</button>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            </>
+                                          );
+                                        })()}
+                                      </>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
                           {/* فورم تقييم وترتيب العاملين - أسفل الليست، باقة البزنس فقط */}
                           {isPlanActive('business') && (
-                            <div className="border-2 border-amber-200 bg-amber-50/50 rounded-xl p-6 mt-8">
+                            <div className="border-2 border-slate-200 bg-slate-50/50 rounded-xl p-6 mt-8">
                               <label className="flex items-center gap-3 cursor-pointer mb-4">
                                 <input
                                   type="checkbox"
@@ -3363,7 +3599,7 @@ function AdminPageContent() {
                                       </div>
                                     );
                                   })}
-                                  <div className="pt-4 mt-4 border-t border-amber-200/80 space-y-1">
+                                  <div className="pt-4 mt-4 border-t border-slate-200/80 space-y-1">
                                     <label className="block text-sm font-bold text-gray-700">إلى من تميل أكثر؟</label>
                                     <div className="flex px-1 mb-1">
                                       <span className="flex-1 text-center text-xs text-gray-500">موظف قديم  (النقاط)</span>
@@ -3373,13 +3609,13 @@ function AdminPageContent() {
                                       <span className="flex-1 text-center text-xs text-gray-500">موظف نشيط (الكفاءة)</span>
                                     </div>
                                     <div className="relative flex px-1 py-3">
-                                      <div className="absolute left-[10%] right-[10%] top-1/2 h-0.5 bg-amber-200 rounded -translate-y-1/2" aria-hidden />
+                                      <div className="absolute left-[10%] right-[10%] top-1/2 h-0.5 bg-gray-200 rounded -translate-y-1/2" aria-hidden />
                                       {([{ v: 0, l: 'قديم' }, { v: 0.25, l: 'أقرب لقديم' }, { v: 0.5, l: 'متوسط' }, { v: 0.75, l: 'أقرب لجديد' }, { v: 1, l: 'جديد' }] as const).map(({ v, l }) => (
                                         <div key={v} className="flex-1 flex justify-center">
                                           <button
                                             type="button"
                                             onClick={() => setEmployeeRatingSettings({ ...employeeRatingSettings, tendencyX: v })}
-                                            className={`relative z-10 w-5 h-5 rounded-full shrink-0 transition ${employeeRatingSettings.tendencyX === v ? 'bg-amber-600 ring-2 ring-amber-600 ring-offset-2' : 'bg-white ring-2 ring-amber-200 hover:ring-amber-300'}`}
+                                            className={`relative z-10 w-5 h-5 rounded-full shrink-0 transition ${employeeRatingSettings.tendencyX === v ? 'bg-gray-700 ring-2 ring-gray-700 ring-offset-2' : 'bg-white ring-2 ring-gray-300 hover:ring-gray-400'}`}
                                             title={l}
                                           />
                                         </div>
@@ -3487,6 +3723,8 @@ function AdminPageContent() {
               </div>
             )}
 
+            {/* تفاصيل العامل للموظف — تظهر أسفل دوائر النقاط/الترتيب */}
+            {userType === 'employee' && (
             <div ref={workerDetailsRef} className="min-h-[200px] pt-4">
               {expandedWorkerId && (
                 <div className="bg-white rounded-xl shadow border border-gray-100 p-6 space-y-6">
@@ -3572,7 +3810,7 @@ function AdminPageContent() {
                                 if (dist === 2) return yBaseBottom + bulge2;
                                 return yBaseBottom + bulge3;
                               };
-                              const colorForward = '#0d9488';
+                              const colorForward = prefix === 'delivery' ? '#0d9488' : '#d97706';
                               const colorDowngrade = '#64748b';
                               return (
                                 <div className="rounded-xl bg-slate-50/80 border border-slate-200/90 overflow-hidden shadow-sm">
@@ -3691,7 +3929,7 @@ function AdminPageContent() {
                                             const toL = TBL_L[log.toStatus ?? 1] ?? String(log.toStatus);
                                             const isForward = (log.toStatus ?? 0) > (log.fromStatus ?? 0);
                                             return (
-                                              <tr key={i} className={`border-b border-slate-100 last:border-0 ${isForward ? 'bg-emerald-200/85' : 'bg-slate-300/80'}`}>
+                                              <tr key={i} className={`border-b border-slate-100 last:border-0 ${isForward ? 'bg-amber-200/85' : 'bg-slate-300/80'}`}>
                                                 <td className="p-2 text-sm text-gray-700">{String(log.orderId || '').replace('table_order_', '')}</td>
                                                 <td className="p-2 text-sm text-gray-700">{fromL}</td>
                                                 <td className="p-2 text-sm text-gray-700">{toL}</td>
@@ -3727,6 +3965,7 @@ function AdminPageContent() {
                 </div>
               )}
             </div>
+            )}
           </div>
         )}
         {activeTab === 'lists' && (
