@@ -330,6 +330,7 @@ function AdminPageContent() {
   const [deletingTableOrderId, setDeletingTableOrderId] = useState<string | null>(null);
   const [assigningEmployee, setAssigningEmployee] = useState<string | null>(null); // orderId being assigned
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [clientOrigin, setClientOrigin] = useState('');
 
   // Upgrade Modal State
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
@@ -353,6 +354,10 @@ function AdminPageContent() {
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000); // تحديث كل دقيقة
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') setClientOrigin(window.location.origin);
   }, []);
 
   // Filtering and pagination state
@@ -1997,31 +2002,33 @@ function AdminPageContent() {
             <h1 className="text-3xl font-bold text-gray-800">
               لوحة التحكم
             </h1>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setIsSidebarOpen(true)}
-                className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition flex items-center gap-2"
+                className="bg-gray-900 hover:bg-gray-800 text-white px-4 py-2 rounded-lg transition flex items-center gap-2 text-sm font-medium"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
                 قائمة التحكم
               </button>
               <Link
                 href={`/menu/${currentAdmin.username}`}
-                className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg transition flex items-center gap-2"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-gray-900 hover:bg-gray-800 text-white px-4 py-2 rounded-lg transition flex items-center gap-2 text-sm font-medium"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
-                عرض صفحة العميل
+              صفحة العميل
               </Link>
               <button
                 onClick={handleLogout}
-                className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition flex items-center gap-2"
+                className="bg-gray-900 hover:bg-gray-800 text-white px-4 py-2 rounded-lg transition flex items-center gap-2 text-sm font-medium"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
                 تسجيل الخروج
@@ -2390,47 +2397,88 @@ function AdminPageContent() {
                             );
                           }
                           const totalRevenue = chartData.reduce((s, d) => s + d.revenue, 0);
+                          const totalCount = chartData.reduce((s, d) => s + d.completedCount, 0);
                           const maxOrders = Math.max(1, ...chartData.map(d => d.completedCount));
                           const ordersAxisMax = Math.ceil(maxOrders / 5) * 5 || 5;
-                          // اتجاه الإيراد: الفارق بين آخر يوم وقبل الأخير فقط
                           const n = chartData.length;
+                          // اتجاه الإيراد
                           const prevRevenue = n >= 2 ? chartData[n - 2].revenue : 0;
                           const lastRevenue = n >= 1 ? chartData[n - 1].revenue : 0;
                           const base = prevRevenue || 1;
                           const pct = n >= 2 ? ((lastRevenue - prevRevenue) / base) * 100 : 0;
+                          const deltaRevenue = lastRevenue - prevRevenue;
+                          // اتجاه العدد
+                          const prevCount = n >= 2 ? chartData[n - 2].completedCount : 0;
+                          const lastCount = n >= 1 ? chartData[n - 1].completedCount : 0;
+                          const baseCount = prevCount || 1;
+                          const pctCount = n >= 2 ? ((lastCount - prevCount) / baseCount) * 100 : 0;
+                          const deltaCount = lastCount - prevCount;
                           type Dir = 'up' | 'upRight' | 'right' | 'downRight' | 'down';
-                          let dir: Dir = 'right';
                           const rot = { up: 0, upRight: 45, right: 90, downRight: 135, down: 180 };
-                          let arrowStyle = 'text-slate-400';
-                          if (n >= 2) {
-                            if (pct >= 8) { dir = 'up'; arrowStyle = 'text-emerald-500'; }
-                            else if (pct >= 2) { dir = 'upRight'; arrowStyle = 'text-emerald-400'; }
-                            else if (pct <= -8) { dir = 'down'; arrowStyle = 'text-red-500'; }
-                            else if (pct <= -2) { dir = 'downRight'; arrowStyle = 'text-red-400'; }
-                            else { arrowStyle = 'text-slate-400'; }
-                          }
-                          const pctText = n >= 2 ? (pct < 0 ? `-${Math.abs(pct).toFixed(0)}%` : `${pct.toFixed(0)}%`) : '';
-                          const isNeutral = dir === 'right';
+                          const dirFromPct = (p: number) => {
+                            if (p >= 8) return { dir: 'up' as Dir, arrowStyle: 'text-emerald-500' };
+                            if (p >= 2) return { dir: 'upRight' as Dir, arrowStyle: 'text-emerald-400' };
+                            if (p <= -8) return { dir: 'down' as Dir, arrowStyle: 'text-red-500' };
+                            if (p <= -2) return { dir: 'downRight' as Dir, arrowStyle: 'text-red-400' };
+                            return { dir: 'right' as Dir, arrowStyle: 'text-slate-400' };
+                          };
+                          const revTrend = n >= 2 ? dirFromPct(pct) : { dir: 'right' as Dir, arrowStyle: 'text-slate-400' };
+                          const countTrend = n >= 2 ? dirFromPct(pctCount) : { dir: 'right' as Dir, arrowStyle: 'text-slate-400' };
+                          const pctText = n >= 2 ? (pct < 0 ? `-${Math.abs(pct).toFixed(2)}%` : `${pct.toFixed(2)}%`) : '';
+                          const pctCountText = n >= 2 ? (pctCount < 0 ? `-${Math.abs(pctCount).toFixed(2)}%` : `${pctCount.toFixed(2)}%`) : '';
+                          const isNeutralRev = revTrend.dir === 'right';
+                          const isNeutralCount = countTrend.dir === 'right';
+                          const renderMiniCard = (
+                            label: string,
+                            value: string,
+                            dir: Dir,
+                            arrowStyle: string,
+                            isNeutral: boolean,
+                            pctStr: string,
+                            deltaStr: string
+                          ) => (
+                            <div className="border border-gray-200 rounded-xl bg-gray-50/80 p-4 flex items-center gap-3 min-w-0">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs text-gray-500">{label}</p>
+                                <p className="text-xl font-bold text-gray-900 truncate">{value}</p>
+                              </div>
+                              <div className={`flex items-center gap-2 shrink-0 ${arrowStyle}`}>
+                                <div className="flex flex-col items-end">
+                                  {pctStr ? <span className="text-sm font-medium tabular-nums">{pctStr}</span> : null}
+                                  {deltaStr ? <span className="text-xs tabular-nums opacity-90">{deltaStr}</span> : null}
+                                </div>
+                                <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white shadow-sm border border-gray-100" aria-hidden style={isNeutral ? undefined : { transform: `rotate(${rot[dir]}deg)` }}>
+                                  {isNeutral ? (
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+                                  ) : (
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                          );
                           return (
                             <div className="w-full border border-gray-200 rounded-xl shadow-sm p-4 md:p-6">
-                              <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-4 mb-2 w-full min-w-0">
-                                <div className="min-w-0 text-start">
-                                  <h3 className="text-lg font-bold text-gray-800">{title}</h3>
-                                  <h5 className="text-2xl font-bold text-gray-900 mt-1">{totalRevenue.toLocaleString('ar-EG')} جـ</h5>
-                                </div>
-                                <div className="flex justify-center items-center gap-2 shrink-0">
-                                  <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full bg-white/80 shadow-sm border border-gray-100 ${arrowStyle}`} aria-hidden style={isNeutral ? undefined : { transform: `rotate(${rot[dir]}deg)` }}>
-                                    {isNeutral ? (
-                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
-                                    ) : (
-                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
-                                    )}
-                                  </span>
-                                  {pctText ? <span className={`text-sm font-medium tabular-nums ${arrowStyle}`}>{pctText}</span> : null}
-                                </div>
-                                <div className="min-w-0 text-end">
-                                  <p className="text-xs text-gray-400">{dateRangeLabel}</p>
-                                </div>
+                              <h3 className="text-lg font-bold text-gray-800 mb-3">{title}</h3>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                                {renderMiniCard(
+                                  'المبلغ',
+                                  `${totalRevenue.toLocaleString('ar-EG')} جـ`,
+                                  revTrend.dir,
+                                  revTrend.arrowStyle,
+                                  isNeutralRev,
+                                  pctText,
+                                  n >= 2 ? (deltaRevenue >= 0 ? deltaRevenue.toFixed(2) : deltaRevenue.toFixed(2)) : ''
+                                )}
+                                {renderMiniCard(
+                                  'العدد',
+                                  `${totalCount.toLocaleString('ar-EG')} طلب`,
+                                  countTrend.dir,
+                                  countTrend.arrowStyle,
+                                  isNeutralCount,
+                                  pctCountText,
+                                  n >= 2 ? String(deltaCount) : ''
+                                )}
                               </div>
                               <div className="mt-2 w-full">
                                 <ApexCharts
@@ -2475,7 +2523,7 @@ function AdminPageContent() {
                                   })()}
                                 />
                               </div>
-                              <div className="flex flex-wrap gap-6 text-sm text-gray-700 mt-4 pt-4 border-t border-gray-200">
+                              <div className="flex flex-wrap items-center gap-4 text-sm text-gray-700 mt-4 pt-4 border-t border-gray-200">
                                 <span className="flex items-center gap-2">
                                   <span className="w-6 h-1 rounded bg-green-800 inline-block" aria-hidden /> العدد
                                 </span>
@@ -2485,6 +2533,7 @@ function AdminPageContent() {
                                 <span className="flex items-center gap-2">
                                   <span className="w-6 h-1 rounded bg-slate-400 inline-block" aria-hidden /> توفير المشتري
                                 </span>
+                                <p className="text-xs text-gray-400 mr-auto">{dateRangeLabel}</p>
                               </div>
                             </div>
                           );
@@ -3071,7 +3120,7 @@ function AdminPageContent() {
                             setWorkersActivitySearchQuery(e.target.value);
                             setWorkersActivityPage(1);
                           }}
-                          className="flex-1 min-w-0 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-gray-800"
+                          className="flex-1 min-w-0 px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-transparent text-gray-800"
                         />
                       </div>
                     </div>
@@ -3756,7 +3805,7 @@ function AdminPageContent() {
                             </button>
                             <button
                               onClick={() => handleSelectListForItems(list)}
-                              className="bg-emerald-500 hover:bg-emerald-600 text-white py-1 px-2 rounded text-xs transition"
+                              className="bg-slate-600 hover:bg-slate-700 text-white py-1 px-2 rounded text-xs transition"
                             >
                             إدارة العناصر
                             </button>
@@ -4102,7 +4151,7 @@ function AdminPageContent() {
                       <select
                         value={employeeFilter}
                         onChange={(e) => { setEmployeeFilter(e.target.value); setCurrentPage(1); }}
-                        className="w-full px-1.5 py-0.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors bg-white text-sm"
+                        className="w-full px-1.5 py-0.5 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 transition-colors bg-white text-sm"
                       >
                         <option value="all">الكل</option>
                         <option value="">بدون عامل توصيل</option>
@@ -4123,7 +4172,7 @@ function AdminPageContent() {
                       <select
                         value={employeeFilter}
                         onChange={(e) => { setEmployeeFilter(e.target.value); setCurrentPage(1); }}
-                        className="w-full px-1.5 py-0.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors bg-white text-sm"
+                        className="w-full px-1.5 py-0.5 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 transition-colors bg-white text-sm"
                       >
                         <option value="EMPLOYEE_ALL">كل طلباتي</option>
                         <option value="EMPLOYEE_MINE">المعينة لي فقط</option>
@@ -4378,7 +4427,7 @@ function AdminPageContent() {
                                 value={assigningEmployee === order.id ? '' : ((order as any).assignedTo || '')}
                                 onChange={(e) => handleAssignEmployee(order.id, e.target.value || null)}
                                 disabled={assigningEmployee === order.id}
-                                className={`w-full px-3 border-2 border-emerald-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors ${assigningEmployee === order.id ? 'opacity-50 cursor-wait' : ''
+                                className={`w-full px-3 border-2 border-emerald-200 rounded-lg focus:outline-none focus:border-emerald-400 transition-colors ${assigningEmployee === order.id ? 'opacity-50 cursor-wait' : ''
                                   }`}
                               >
                                 {assigningEmployee === order.id ? (
@@ -4536,7 +4585,7 @@ function AdminPageContent() {
                     type="tel"
                     value={deliveryFormData.whatsappNumber}
                     onChange={(e) => setDeliveryFormData({ ...deliveryFormData, whatsappNumber: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full px-4 py-3 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 transition-colors"
                     placeholder="مثال: 201234567890"
                     required
                   />
@@ -4680,7 +4729,7 @@ function AdminPageContent() {
                   <select
                     value={employeeSettingsForm.defaultDeliveryAssignment}
                     onChange={(e) => setEmployeeSettingsForm({ ...employeeSettingsForm, defaultDeliveryAssignment: e.target.value as 'ANY_DELIVERY' | '' })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full px-4 py-3 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 transition-colors"
                   >
                     <option value="">بدون عامل توصيل</option>
                     <option value="ANY_DELIVERY">أي عامل يمكنه التوصيل</option>
@@ -4708,7 +4757,7 @@ function AdminPageContent() {
                       <select
                         value={employeeSettingsForm.defaultDeliveryAssignment}
                         onChange={(e) => setEmployeeSettingsForm({ ...employeeSettingsForm, defaultDeliveryAssignment: e.target.value as 'ANY_DELIVERY' | '' })}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
+                        className="w-full px-4 py-3 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 transition-colors"
                       >
                         <option value="">بدون عامل توصيل</option>
                         <option value="ANY_DELIVERY">أي عامل يمكنه التوصيل</option>
@@ -4771,7 +4820,7 @@ function AdminPageContent() {
                 <select
                   value={settingsFormData.theme}
                   onChange={(e) => setSettingsFormData({ ...settingsFormData, theme: e.target.value as any })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
+                  className="w-full px-4 py-3 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 transition-colors"
                 >
                   {Object.entries(THEMES).map(([key, value]) => (
                     <option key={key} value={key}>
@@ -4799,7 +4848,7 @@ function AdminPageContent() {
                 <select
                   value={settingsFormData.cardStyle || 'rounded'}
                   onChange={(e) => setSettingsFormData({ ...settingsFormData, cardStyle: e.target.value as any })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
+                  className="w-full px-4 py-3 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 transition-colors"
                 >
                   <option value="rounded">مستدير - حواف دائرية</option>
                   <option value="sharp">حاد - حواف حادة مع إطار رمادي</option>
@@ -4818,7 +4867,7 @@ function AdminPageContent() {
                 <select
                   value={settingsFormData.fontFamily || 'baloo-bhaijaan'}
                   onChange={(e) => setSettingsFormData({ ...settingsFormData, fontFamily: e.target.value as any })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
+                  className="w-full px-4 py-3 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 transition-colors"
                 >
                   <option value="cairo" className={FONTS.cairo}>هندسي قوي</option>
                   <option value="baloo-bhaijaan" className={FONTS['baloo-bhaijaan']}>لطيف ودود</option>
@@ -4851,7 +4900,7 @@ function AdminPageContent() {
                   value={settingsFormData.welcomeMessage}
                   onChange={(e) => setSettingsFormData({ ...settingsFormData, welcomeMessage: e.target.value })}
                   rows={3}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
+                  className="w-full px-4 py-3 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 transition-colors"
                   placeholder="أهلا وسهلا بكم. نحن متخصصون في تقديم أفضل أنواع الـ.."
                 />
                 <p className="text-xs text-gray-500 mt-1">اختياري: رسالة تظهر في أول الصفحة بعد الشعار - اتركه فارغاً ولن تظهر أية رسالة</p>
@@ -4865,7 +4914,7 @@ function AdminPageContent() {
                   value={settingsFormData.contactMessage}
                   onChange={(e) => setSettingsFormData({ ...settingsFormData, contactMessage: e.target.value })}
                   rows={3}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
+                  className="w-full px-4 py-3 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 transition-colors"
                   placeholder={"مثال: لطلب طلب تواصل معنا من خلال\n015231231"}
                 />
                 <p className="text-xs text-gray-500 mt-1">اختياري: رسالة تظهر بعد كل قائمة - اتركه فارغاً ولن تظهر أية رسالة</p>
@@ -4899,7 +4948,7 @@ function AdminPageContent() {
                     type="text"
                     value={settingsFormData.name}
                     onChange={(e) => setSettingsFormData({ ...settingsFormData, name: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full px-4 py-3 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 transition-colors"
                     placeholder="الاسم الكامل"
                   />
                   <p className="text-xs text-gray-500 mt-1">اسمك الذي سيظهر في لوحة التحكم</p>
@@ -4913,10 +4962,27 @@ function AdminPageContent() {
                     type="text"
                     value={settingsFormData.username}
                     onChange={(e) => setSettingsFormData({ ...settingsFormData, username: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full px-4 py-3 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 transition-colors"
                     placeholder="اسم المستخدم"
                   />
                   <p className="text-xs text-gray-500 mt-1">اسم المستخدم الخاص بك</p>
+                  <p className="text-xs text-gray-600 mt-2">
+                  يؤثر في رابط صفحة العميل{' '}
+                    {(settingsFormData.username || '').trim() && clientOrigin ? (
+                      <a
+                        href={`${clientOrigin}/menu/${encodeURIComponent((settingsFormData.username || '').trim())}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="break-all text-gray-700 hover:underline"
+                      >
+                        {clientOrigin.replace(/^https?:\/\//, '')}/menu/{(settingsFormData.username || '').trim()}
+                      </a>
+                    ) : (
+                      <span className="break-all text-gray-700">
+                        {clientOrigin ? `${clientOrigin.replace(/^https?:\/\//, '')}/menu/` : '/menu/'}{(settingsFormData.username || '').trim() || '...'}
+                      </span>
+                    )}
+                  </p>
                 </div>
 
                 <button
@@ -4942,7 +5008,7 @@ function AdminPageContent() {
                     type="password"
                     value={settingsFormData.newPassword}
                     onChange={(e) => setSettingsFormData({ ...settingsFormData, newPassword: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full px-4 py-3 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 transition-colors"
                     placeholder="أدخل كلمة المرور الجديدة"
                   />
                 </div>
@@ -4957,7 +5023,7 @@ function AdminPageContent() {
                       required
                       value={settingsFormData.currentPassword}
                       onChange={(e) => setSettingsFormData({ ...settingsFormData, currentPassword: e.target.value })}
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
+                      className="w-full px-4 py-3 border-2 border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 transition-colors"
                       placeholder="أدخل كلمة المرور الحالية للتأكيد"
                     />
                     <p className="text-xs text-gray-500 mt-1">مطلوبة للتحقق من هويتك عند تغيير كلمة المرور</p>
