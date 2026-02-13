@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // انتهت صلاحية الكاش — إعادة الحساب ثم تخزينه في DB
+    // انتهت صلاحية الكاش — إعادة الحساب ثم تخزينه في DB (بدون ألوان؛ تُجلب بريكويست منفصل)
     const adminStats = await getUserStats(adminId, 'admin');
     const { employees } = await getEmployees(adminId);
     const statsPromises = employees.map(emp => getUserStats(emp.id, 'employee'));

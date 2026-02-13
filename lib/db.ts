@@ -236,6 +236,8 @@ export interface Employee {
     rankAmongDelivery?: number;
     rankAmongWaiters?: number;
   };
+  /** لون العامل (باقة البزنس) — للدونات/الفطائر في ملخص النشاط؛ إن لم يُرسَل يُعيَّن عشوائياً */
+  color?: string;
 }
 
 // لوجز تغيير حالة الطلبات (باقة البزنس فقط)
@@ -1457,6 +1459,22 @@ export async function updateTableOrderStatusWithLogAndCounters(
 
 // ==================== Employee Functions ====================
 
+/** لون hex عشوائي للعامل عندما لا يُرسل من الفرونت (غير باقة البزنس) */
+function randomHexColor(): string {
+  const h = Math.floor(Math.random() * 360);
+  const s = 55 + Math.floor(Math.random() * 30);
+  const l = 45 + Math.floor(Math.random() * 25);
+  const a = (s * Math.min(l, 100 - l)) / 100;
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    return l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+  };
+  const r = Math.round(f(0) * 255);
+  const g = Math.round(f(8) * 255);
+  const b = Math.round(f(4) * 255);
+  return `#${[r, g, b].map(x => x.toString(16).padStart(2, '0')).join('')}`;
+}
+
 export async function createEmployee(employee: Omit<Employee, 'id' | 'createdAt'>): Promise<Employee> {
   const db = await readDB();
 
@@ -1466,10 +1484,12 @@ export async function createEmployee(employee: Omit<Employee, 'id' | 'createdAt'
     throw new Error('اسم المستخدم موجود بالفعل');
   }
 
+  const color = employee.color && /^#[0-9A-Fa-f]{6}$/.test(employee.color) ? employee.color : randomHexColor();
   const newEmployee: Employee = {
     ...employee,
     id: `employee_${Date.now()}`,
     createdAt: new Date().toISOString(),
+    color,
   };
 
   db.employees.push(newEmployee);

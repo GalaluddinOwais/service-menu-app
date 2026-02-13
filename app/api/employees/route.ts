@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, username, password, isDelivery, isWaiter, imageUrl, phone } = body;
+    const { name, username, password, isDelivery, isWaiter, imageUrl, phone, color } = body;
 
     // Fetch admin info to check plan
     const admin = await getAdmin(payload.adminId);
@@ -85,6 +85,7 @@ export async function POST(request: NextRequest) {
       isWaiter: isWaiter || false,
       ...(imageUrl != null && { imageUrl: String(imageUrl) }),
       ...(phone != null && phone !== '' && { phone: String(phone).trim() }),
+      ...(color != null && typeof color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(color) && { color }),
     });
 
     return NextResponse.json(employee, { status: 201 });

@@ -127,6 +127,7 @@ function AdminPageContent() {
   // ملخص النشاط (باقة البزنس): إحصائيات الفريق للأدمن — استجابة واحدة من عدة قد تكون لاحقاً
   type TeamStatsUser = { id: string; name: string; userType: 'admin' | 'employee'; stats: Record<string, number> };
   const [teamStatsUsers, setTeamStatsUsers] = useState<TeamStatsUser[]>([]);
+  const [teamColors, setTeamColors] = useState<Record<string, string>>({});
   const [teamStatsLoading, setTeamStatsLoading] = useState(false);
   const [teamStatsError, setTeamStatsError] = useState<string | null>(null);
   const [teamStatsCachedAt, setTeamStatsCachedAt] = useState<string | null>(null);
@@ -303,6 +304,7 @@ function AdminPageContent() {
     isWaiter: boolean;
     phone: string;
     imageUrl?: string;
+    color?: string;
   }>({
     name: '',
     username: '',
@@ -781,25 +783,37 @@ function AdminPageContent() {
     currentAdmin.plan !== 'free' &&
     (!currentAdmin.subscriptionEndsAt || new Date(currentAdmin.subscriptionEndsAt) < new Date());
 
-  // جلب إحصائيات الفريق لتبويب ملخص النشاط (باقة البزنس فقط)
+  // جلب إحصائيات الفريق لتبويب ملخص النشاط (باقة البزنس فقط) + ريكويست منفصل للألوان (id + color)
   const fetchTeamStats = async () => {
     setTeamStatsLoading(true);
     setTeamStatsError(null);
     try {
-      const res = await fetch('/api/admin/stats/team', { headers: getAuthHeaders() });
-      const data = await res.json();
-      if (!res.ok) {
-        setTeamStatsError(data.error || 'فشل جلب الإحصائيات');
+      const [teamRes, colorsRes] = await Promise.all([
+        fetch('/api/admin/stats/team', { headers: getAuthHeaders() }),
+        fetch('/api/admin/stats/team-colors', { headers: getAuthHeaders() }),
+      ]);
+      const teamData = await teamRes.json();
+      if (!teamRes.ok) {
+        setTeamStatsError(teamData.error || 'فشل جلب الإحصائيات');
         setTeamStatsUsers([]);
         setTeamStatsCachedAt(null);
+        setTeamColors({});
         return;
       }
-      setTeamStatsUsers(data.users || []);
-      setTeamStatsCachedAt(typeof data.cachedAt === 'string' ? data.cachedAt : null);
+      setTeamStatsUsers(teamData.users || []);
+      setTeamStatsCachedAt(typeof teamData.cachedAt === 'string' ? teamData.cachedAt : null);
+
+      const colorsData = await colorsRes.json();
+      if (colorsRes.ok && colorsData.colors && typeof colorsData.colors === 'object') {
+        setTeamColors(colorsData.colors);
+      } else {
+        setTeamColors({});
+      }
     } catch (e) {
       setTeamStatsError('خطأ في الاتصال');
       setTeamStatsUsers([]);
       setTeamStatsCachedAt(null);
+      setTeamColors({});
     } finally {
       setTeamStatsLoading(false);
     }
@@ -1849,6 +1863,9 @@ function AdminPageContent() {
         if (employeeFormData.password) {
           updates.password = employeeFormData.password;
         }
+        if (isPlanActive('business') && employeeFormData.color) {
+          updates.color = employeeFormData.color;
+        }
 
         const res = await fetch(`/api/employees/${editingEmployeeId}`, {
           method: 'PATCH',
@@ -1868,6 +1885,7 @@ function AdminPageContent() {
             isWaiter: false,
             phone: '',
             imageUrl: undefined,
+            color: undefined,
           });
           employeeImageUploadRef.current?.clearPendingFile();
           setTimeout(() => employeeFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
@@ -1888,6 +1906,7 @@ function AdminPageContent() {
             isWaiter: employeeFormData.isWaiter,
             ...(imageUrlToSend && { imageUrl: imageUrlToSend }),
             ...(employeeFormData.phone.trim() && { phone: employeeFormData.phone.trim() }),
+            ...(isPlanActive('business') && employeeFormData.color && { color: employeeFormData.color }),
           }),
         });
 
@@ -1902,6 +1921,7 @@ function AdminPageContent() {
           isWaiter: false,
           phone: '',
           imageUrl: undefined,
+          color: undefined,
         });
         employeeImageUploadRef.current?.clearPendingFile();
         setTimeout(() => employeeFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
@@ -1948,6 +1968,7 @@ function AdminPageContent() {
       isWaiter: employee.isWaiter || false,
       phone: employee.phone ?? '',
       imageUrl: employee.imageUrl ?? undefined,
+      color: (employee as { color?: string }).color ?? '#3b82f6',
     });
     employeeImageUploadRef.current?.clearPendingFile(false);
     setTimeout(() => employeeFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
@@ -2871,29 +2892,30 @@ function AdminPageContent() {
                 const getSegments = (keyOrKeys: string | string[]) => {
                   const keys = Array.isArray(keyOrKeys) ? keyOrKeys : [keyOrKeys];
                   if (keys.length === 1 && keys[0] === 'deliveryAssignedCount') {
-                    // نبني بالترتيب: بدون عامل → أي عامل → العمال
-                    const out: { name: string; value: number }[] = [];
+                    // نبني بالترتيب: بدون عامل → أي عامل → العمال (لون من teamColors)
+                    const out: { name: string; value: number; color: string }[] = [];
                     const adminUser = teamStatsUsers.find(u => u.userType === 'admin');
                     if (adminUser) {
                       const w = Number((adminUser.stats as Record<string, number>).WithoutDeliveryOrdersCount) || 0;
                       const a = Number((adminUser.stats as Record<string, number>).AnyDeliveryOrdersCount) || 0;
-                      if (w > 0) out.push({ name: 'بدون عامل', value: w });
-                      if (a > 0) out.push({ name: 'أي عامل', value: a });
+                      if (w > 0) out.push({ name: 'بدون عامل', value: w, color: PIE_COLORS[0] });
+                      if (a > 0) out.push({ name: 'أي عامل', value: a, color: PIE_COLORS[1] });
                     }
                     teamStatsUsers.forEach(u => {
                       const v = Number(u.stats.deliveryAssignedCount) || 0;
-                      if (v > 0) out.push({ name: u.name, value: v });
+                      if (v > 0) out.push({ name: u.name, value: v, color: teamColors[u.id] || PIE_COLORS[out.length % PIE_COLORS.length] });
                     });
-                    return out.map((s, i) => ({ ...s, color: PIE_COLORS[i % PIE_COLORS.length] }));
+                    return out;
                   }
-                  // pies التقديم والتأخير: نجمع العمال ونلوّن حسب الترتيب النهائي
+                  // pies التقديم والتأخير: لون من teamColors
                   const out = teamStatsUsers
-                    .map(u => ({
+                    .map((u, i) => ({
                       name: u.name,
                       value: keys.reduce((sum, k) => sum + (Number((u.stats as Record<string, number>)[k]) || 0), 0),
+                      color: teamColors[u.id] || PIE_COLORS[i % PIE_COLORS.length],
                     }))
                     .filter(s => s.value > 0);
-                  return out.map((s, i) => ({ ...s, color: PIE_COLORS[i % PIE_COLORS.length] }));
+                  return out;
                 };
 
                 const PieCard = ({ statKey, statKeys, label }: { statKey?: string; statKeys?: string[]; label: string }) => {
@@ -5415,6 +5437,27 @@ function AdminPageContent() {
                   </div>
                 </div>
 
+                {isPlanActive('business') && (
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">لون العامل</label>
+                    <div className="flex items-center gap-3">
+                      <label className="relative block w-10 h-10 rounded-full border-2 border-gray-200 shadow-inner overflow-hidden cursor-pointer hover:border-gray-300 transition-colors">
+                        <span
+                          className="absolute inset-0 rounded-full"
+                          style={{ backgroundColor: employeeFormData.color || '#3b82f6' }}
+                        />
+                        <input
+                          type="color"
+                          value={employeeFormData.color || '#3b82f6'}
+                          onChange={(e) => setEmployeeFormData({ ...employeeFormData, color: e.target.value })}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                      </label>
+                      <span className="text-sm text-gray-600 tabular-nums">{employeeFormData.color || '#3b82f6'}</span>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex gap-3">
                   <button
                     type="submit"
@@ -5469,7 +5512,16 @@ function AdminPageContent() {
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="font-bold text-gray-800 text-lg truncate">{employee.name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-bold text-gray-800 text-lg truncate">{employee.name}</p>
+                              {isPlanActive('business') && (
+                                <span
+                                  className="w-3 h-3 rounded-full flex-shrink-0 border border-gray-200/80 shadow-sm"
+                                  style={{ backgroundColor: (employee as { color?: string }).color || '#9ca3af' }}
+                                  title="لون العامل"
+                                />
+                              )}
+                            </div>
                             <p className="text-sm text-gray-500 mt-0.5">{employee.phone ?? '—'}</p>
                             <p className="text-sm text-gray-500">@{employee.username}</p>
                             <div className="flex gap-2 flex-wrap mt-2">
@@ -5526,7 +5578,18 @@ function AdminPageContent() {
                                 <span className="inline-flex w-14 h-14 rounded-full bg-gray-200 items-center justify-center text-gray-400 text-sm">—</span>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-gray-800 font-medium">{employee.name}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                {isPlanActive('business') && (
+                                  <span
+                                    className="w-3 h-3 rounded-full flex-shrink-0 border border-gray-200/80 shadow-sm"
+                                    style={{ backgroundColor: (employee as { color?: string }).color || '#9ca3af' }}
+                                    title="لون العامل"
+                                  />
+                                )}
+                                <span className="text-gray-800 font-medium">{employee.name}</span>
+                              </div>
+                            </td>
                             <td className="px-4 py-3 text-gray-500 text-sm">{employee.phone ?? '—'}</td>
                             <td className="px-4 py-3 text-gray-500 text-sm">{employee.username}</td>
                             <td className="px-4 py-3">

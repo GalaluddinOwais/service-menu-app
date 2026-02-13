@@ -87,6 +87,9 @@ export async function PATCH(
     if (body.phone !== undefined) {
       updates.phone = body.phone === '' ? undefined : String(body.phone).trim();
     }
+    if (body.color !== undefined && typeof body.color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(body.color)) {
+      updates.color = body.color;
+    }
     if (body.password !== undefined && body.password.trim() !== '') {
       // Hash password before updating
       updates.password = await hashPassword(body.password);
