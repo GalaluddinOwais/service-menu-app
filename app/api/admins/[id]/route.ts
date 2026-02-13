@@ -58,7 +58,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { username, currentPassword, newPassword, logoUrl, backgroundUrl, theme, cardStyle, fontFamily, welcomeMessage, contactMessage, whatsappNumber, isAcceptingOrders, isAcceptingOrdersViaWhatsapp, isAcceptingTableOrders, tablesCount, showDeliveryStaff, showWaiterStaff } = body;
+    const { name, username, currentPassword, newPassword, logoUrl, backgroundUrl, theme, cardStyle, fontFamily, welcomeMessage, contactMessage, whatsappNumber, isAcceptingOrders, isAcceptingOrdersViaWhatsapp, isAcceptingTableOrders, tablesCount, showDeliveryStaff, showWaiterStaff } = body;
 
     // دالة مساعدة للتحقق من صلاحية الخطة والميزة
     const isPlanActiveFor = (requiredPlan: 'basic' | 'pro' | 'business') => {
@@ -109,6 +109,7 @@ export async function PUT(
     }
 
     const updates: any = {};
+    if (name !== undefined) updates.name = name;
     if (username) updates.username = username;
     if (newPassword) updates.password = newPassword;
     if (logoUrl !== undefined) updates.logoUrl = logoUrl;

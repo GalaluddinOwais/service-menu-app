@@ -109,11 +109,11 @@ function AdminPageContent() {
   const [selectedList, setSelectedList] = useState<MenuList | null>(null);
   const [editingList, setEditingList] = useState<MenuList | null>(null);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
-  type TabType = 'summary' | 'lists' | 'settings' | 'delivery' | 'orders' | 'tableOrders' | 'employees' | 'workersActivity';
+  type TabType = 'summary' | 'lists' | 'settings' | 'clientSettings' | 'delivery' | 'orders' | 'tableOrders' | 'employees' | 'workersActivity';
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const tabParam = searchParams.get('tab');
-  const TAB_VALUES: TabType[] = ['summary', 'lists', 'settings', 'delivery', 'orders', 'tableOrders', 'employees', 'workersActivity'];
+  const TAB_VALUES: TabType[] = ['summary', 'lists', 'settings', 'clientSettings', 'delivery', 'orders', 'tableOrders', 'employees', 'workersActivity'];
   const activeTab: TabType = TAB_VALUES.includes(tabParam as TabType) ? (tabParam as TabType) : 'summary';
   const setActiveTab = (tab: TabType) => {
     router.push(`${pathname}?tab=${tab}`, { scroll: false });
@@ -320,6 +320,7 @@ function AdminPageContent() {
   const [isRefreshingTableOrders, setIsRefreshingTableOrders] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [profileInfoSaving, setProfileInfoSaving] = useState(false);
   const [isSubmittingItem, setIsSubmittingItem] = useState(false);
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
   const [expandedTableOrders, setExpandedTableOrders] = useState<Set<string>>(new Set());
@@ -1382,12 +1383,41 @@ function AdminPageContent() {
     setItemFormData({ name: '', price: '', discountedPrice: '', imageUrl: '', description: '' });
   };
 
+  const handleProfileInfoSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentAdmin) return;
+    setProfileInfoSaving(true);
+    try {
+      const res = await fetch(`/api/admins/${currentAdmin.id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          name: settingsFormData.name,
+          username: settingsFormData.username,
+        }),
+      });
+
+      if (res.ok) {
+        const updatedAdmin = await res.json();
+        const newAdminData = { ...currentAdmin, ...updatedAdmin };
+        setCurrentAdmin(newAdminData);
+        localStorage.setItem('admin_data', JSON.stringify(newAdminData));
+        alert('تم حفظ بيانات الحساب بنجاح!');
+      } else {
+        const error = await res.json();
+        alert(`فشل حفظ بيانات الحساب: ${error.error || 'خطأ غير معروف'}`);
+      }
+    } finally {
+      setProfileInfoSaving(false);
+    }
+  };
+
   const handleSettingsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentAdmin) return;
 
-    // إرسال الإعدادات فقط بدون كلمة المرور
-    const { currentPassword, newPassword, ...otherData } = settingsFormData;
+    // إرسال الإعدادات فقط بدون الاسم واسم المستخدم وكلمة المرور
+    const { currentPassword, newPassword, name, username, ...otherData } = settingsFormData;
 
     const res = await fetch(`/api/admins/${currentAdmin.id}`, {
       method: 'PUT',
@@ -1937,7 +1967,7 @@ function AdminPageContent() {
   if (!currentAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
       </div>
     );
   }
@@ -1979,7 +2009,7 @@ function AdminPageContent() {
               </button>
               <Link
                 href={`/menu/${currentAdmin.username}`}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition flex items-center gap-2"
+                className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg transition flex items-center gap-2"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -2085,7 +2115,7 @@ function AdminPageContent() {
               </div>
             )}
 
-            {/* طلبات التوصيل - للأدمن وعمال التوصيل فقط */}
+            {/* طلبات التوصيل الواردة - للأدمن وعمال التوصيل فقط */}
             {(userType === 'admin' || isDelivery) && (
               <button
                 onClick={() => { setActiveTab('orders'); setIsSidebarOpen(false); }}
@@ -2094,11 +2124,11 @@ function AdminPageContent() {
                   : 'text-gray-700 hover:bg-gray-100'
                   }`}
               >
-                طلبات التوصيل
+                طلبات التوصيل الواردة
               </button>
             )}
 
-            {/* طلبات الطاولات - للأدمن والنوادل فقط */}
+            {/* طلبات الطاولة الواردة - للأدمن والنوادل فقط */}
             {(userType === 'admin' || isWaiter) && (
               <button
                 onClick={() => { setActiveTab('tableOrders'); setIsSidebarOpen(false); }}
@@ -2107,11 +2137,11 @@ function AdminPageContent() {
                   : 'text-gray-700 hover:bg-gray-100'
                   }`}
               >
-                طلبات الطاولة
+                طلبات الطاولة الواردة
               </button>
             )}
 
-            {/* إعدادات الطلبات - للأدمن فقط */}
+            {/* إعدادات الطلبات والعاملين - للأدمن فقط */}
             {userType === 'admin' && (
               <button
                 onClick={() => { setActiveTab('delivery'); setIsSidebarOpen(false); }}
@@ -2120,7 +2150,20 @@ function AdminPageContent() {
                   : 'text-gray-700 hover:bg-gray-100'
                   }`}
               >
-                إعدادات الطلبات
+                إعدادات الطلبات{isPlanActive('basic') ? ' والعاملين' : ''}
+              </button>
+            )}
+
+            {/* إعدادات صفحة العميل - للأدمن فقط */}
+            {userType === 'admin' && (
+              <button
+                onClick={() => { setActiveTab('clientSettings'); setIsSidebarOpen(false); }}
+                className={`w-full text-right px-4 py-3 rounded-lg font-bold transition-colors ${activeTab === 'clientSettings'
+                  ? 'bg-gray-800 text-white'
+                  : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+              >
+                إعدادات صفحة العميل
               </button>
             )}
 
@@ -2261,9 +2304,9 @@ function AdminPageContent() {
                         };
                         return (
                           <div className="flex flex-wrap items-start justify-center gap-8">
-                            <DonutCard title="العدد" conic={conicCount} centerValue={totalCount} centerSuffix="" labelTama="منتهية" valueTama={completedCount} labelRem="منتظر" valueRem={remainingCount} />
-                            <DonutCard title="المبلغ" conic={conicPrice} centerValue={totalPrice} centerSuffix=" جـ" labelTama="منتهية" valueTama={completedPrice} labelRem="منتظر" valueRem={remainingPrice} />
-                            <DonutCard title="توفير المشتري" conic={conicDiscount} centerValue={totalDiscount} centerSuffix=" جـ" labelTama="منتهية" valueTama={completedDiscountVal} labelRem="منتظر" valueRem={remainingDiscountVal} />
+                            <DonutCard title="العدد" conic={conicCount} centerValue={totalCount} centerSuffix="" labelTama="منتهية" valueTama={completedCount} labelRem="منتظرة" valueRem={remainingCount} />
+                            <DonutCard title="المبلغ" conic={conicPrice} centerValue={totalPrice} centerSuffix=" جـ" labelTama="منتهية" valueTama={completedPrice} labelRem="منتظرة" valueRem={remainingPrice} />
+                            <DonutCard title="توفير المشتري" conic={conicDiscount} centerValue={totalDiscount} centerSuffix=" جـ" labelTama="منتهية" valueTama={completedDiscountVal} labelRem="منتظرة" valueRem={remainingDiscountVal} />
                           </div>
                         );
                       })()}
@@ -2349,14 +2392,44 @@ function AdminPageContent() {
                           const totalRevenue = chartData.reduce((s, d) => s + d.revenue, 0);
                           const maxOrders = Math.max(1, ...chartData.map(d => d.completedCount));
                           const ordersAxisMax = Math.ceil(maxOrders / 5) * 5 || 5;
+                          // اتجاه الإيراد: الفارق بين آخر يوم وقبل الأخير فقط
+                          const n = chartData.length;
+                          const prevRevenue = n >= 2 ? chartData[n - 2].revenue : 0;
+                          const lastRevenue = n >= 1 ? chartData[n - 1].revenue : 0;
+                          const base = prevRevenue || 1;
+                          const pct = n >= 2 ? ((lastRevenue - prevRevenue) / base) * 100 : 0;
+                          type Dir = 'up' | 'upRight' | 'right' | 'downRight' | 'down';
+                          let dir: Dir = 'right';
+                          const rot = { up: 0, upRight: 45, right: 90, downRight: 135, down: 180 };
+                          let arrowStyle = 'text-slate-400';
+                          if (n >= 2) {
+                            if (pct >= 8) { dir = 'up'; arrowStyle = 'text-emerald-500'; }
+                            else if (pct >= 2) { dir = 'upRight'; arrowStyle = 'text-emerald-400'; }
+                            else if (pct <= -8) { dir = 'down'; arrowStyle = 'text-red-500'; }
+                            else if (pct <= -2) { dir = 'downRight'; arrowStyle = 'text-red-400'; }
+                            else { arrowStyle = 'text-slate-400'; }
+                          }
+                          const pctText = n >= 2 ? (pct < 0 ? `-${Math.abs(pct).toFixed(0)}%` : `${pct.toFixed(0)}%`) : '';
+                          const isNeutral = dir === 'right';
                           return (
                             <div className="w-full border border-gray-200 rounded-xl shadow-sm p-4 md:p-6">
-                              <div className="flex flex-wrap justify-between items-start gap-4 mb-2">
-                                <div>
+                              <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-4 mb-2 w-full min-w-0">
+                                <div className="min-w-0 text-start">
                                   <h3 className="text-lg font-bold text-gray-800">{title}</h3>
                                   <h5 className="text-2xl font-bold text-gray-900 mt-1">{totalRevenue.toLocaleString('ar-EG')} جـ</h5>
-                                  <p className="text-gray-600 text-sm">إيراد الفترة</p>
-                                  <p className="text-xs text-gray-400 mt-0.5">{dateRangeLabel}</p>
+                                </div>
+                                <div className="flex justify-center items-center gap-2 shrink-0">
+                                  <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full bg-white/80 shadow-sm border border-gray-100 ${arrowStyle}`} aria-hidden style={isNeutral ? undefined : { transform: `rotate(${rot[dir]}deg)` }}>
+                                    {isNeutral ? (
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+                                    ) : (
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+                                    )}
+                                  </span>
+                                  {pctText ? <span className={`text-sm font-medium tabular-nums ${arrowStyle}`}>{pctText}</span> : null}
+                                </div>
+                                <div className="min-w-0 text-end">
+                                  <p className="text-xs text-gray-400">{dateRangeLabel}</p>
                                 </div>
                               </div>
                               <div className="mt-2 w-full">
@@ -2364,9 +2437,9 @@ function AdminPageContent() {
                                   type="line"
                                   height={260}
                                   series={[
-                                    { name: 'توفير المشتري', data: chartData.map(d => d.customerSaved) },
-                                    { name: 'المبلغ', data: chartData.map(d => d.revenue) },
                                     { name: 'العدد', data: chartData.map(d => d.completedCount) },
+                                    { name: 'المبلغ', data: chartData.map(d => d.revenue) },
+                                    { name: 'توفير المشتري', data: chartData.map(d => d.customerSaved) },
                                   ]}
                                   options={(() => {
                                     const maxMoney = Math.max(1, ...chartData.flatMap(d => [d.revenue, d.customerSaved]));
@@ -2384,17 +2457,17 @@ function AdminPageContent() {
                                         labels: { style: { fontSize: '10px' } },
                                       },
                                       yaxis: [
-                                        { ...leftAxisCommon, seriesName: 'توفير المشتري', show: false },
                                         { seriesName: 'العدد', opposite: true, title: { text: 'العدد' }, labels: { formatter: (v: number) => (v != null ? String(Math.round(v)) : '') }, min: 0, max: ordersAxisMax, forceNiceScale: false },
                                         { ...leftAxisCommon, seriesName: 'المبلغ' },
+                                        { ...leftAxisCommon, seriesName: 'توفير المشتري', show: false },
                                       ],
-                                      colors: ['#94a3b8', '#86efac', '#15803d'],
+                                      colors: ['#15803d', '#86efac', '#94a3b8'],
                                       legend: { show: false },
                                       tooltip: {
                                         y: [
+                                          { formatter: (v: number) => (v != null ? `طلب ${v}` : '') },
                                           { formatter: (v: number) => (v != null ? `${v} جـ` : '') },
                                           { formatter: (v: number) => (v != null ? `${v} جـ` : '') },
-                                          { formatter: (v: number) => (v != null ? `${v} طلب` : '') },
                                         ],
                                       },
                                       grid: { xaxis: { lines: { show: false } }, yaxis: { lines: { show: true } } },
@@ -2404,13 +2477,13 @@ function AdminPageContent() {
                               </div>
                               <div className="flex flex-wrap gap-6 text-sm text-gray-700 mt-4 pt-4 border-t border-gray-200">
                                 <span className="flex items-center gap-2">
+                                  <span className="w-6 h-1 rounded bg-green-800 inline-block" aria-hidden /> العدد
+                                </span>
+                                <span className="flex items-center gap-2">
                                   <span className="w-6 h-1 rounded bg-emerald-400 inline-block" aria-hidden /> المبلغ
                                 </span>
                                 <span className="flex items-center gap-2">
                                   <span className="w-6 h-1 rounded bg-slate-400 inline-block" aria-hidden /> توفير المشتري
-                                </span>
-                                <span className="flex items-center gap-2">
-                                  <span className="w-6 h-1 rounded bg-green-800 inline-block" aria-hidden /> العدد
                                 </span>
                               </div>
                             </div>
@@ -2463,28 +2536,40 @@ function AdminPageContent() {
                           const remainingPct = 100 - completedPct;
                           const remainingPrice = Math.max(0, sumPrice - sumCompletedPrice);
                           const remainingDiscount = Math.max(0, sumDiscount - sumCompletedDiscount);
+                          const MIN_SEGMENT_PCT = 10;
+                          let remW = remainingPct;
+                          let compW = completedPct;
+                          if (remainingPct > 0 && remainingPct < MIN_SEGMENT_PCT) {
+                            remW = MIN_SEGMENT_PCT;
+                            compW = 100 - MIN_SEGMENT_PCT;
+                          } else if (completedPct > 0 && completedPct < MIN_SEGMENT_PCT) {
+                            compW = MIN_SEGMENT_PCT;
+                            remW = 100 - MIN_SEGMENT_PCT;
+                          }
                           return (
                             <div>
                               <p className="text-sm font-medium text-gray-700 mb-2">{label}</p>
                               <div className="flex w-full overflow-hidden rounded-t-lg border border-b-0 border-gray-300" dir="ltr">
                                 {remainingPct > 0 && (
                                   <div
-                                    className="flex flex-col items-center justify-center min-w-0 py-3 px-2 bg-amber-400 text-gray-900"
-                                    style={{ width: `${remainingPct}%` }}
+                                    className="flex flex-col items-center justify-center min-w-0 py-3 px-2 bg-amber-400 text-gray-900 shrink-0 overflow-hidden"
+                                    style={{ width: `${remW}%` }}
+                                    title={`طلب منتظر ${remainingCount} — المبلغ ${remainingPrice} — توفير المشتري ${remainingDiscount}`}
                                   >
-                                    <span className="font-bold text-sm">{remainingCount} طلب منتظر</span>
-                                    <span className="text-xs mt-1">المبلغ {remainingPrice}</span>
-                                    <span className="text-xs">توفير المشتري {remainingDiscount}</span>
+                                    <span className="font-bold text-sm whitespace-nowrap truncate max-w-full">طلب منتظر <span dir="ltr">{remainingCount}</span></span>
+                                    <span className="text-xs mt-1 whitespace-nowrap truncate max-w-full">المبلغ {remainingPrice}</span>
+                                    <span className="text-xs whitespace-nowrap truncate max-w-full">توفير المشتري {remainingDiscount}</span>
                                   </div>
                                 )}
                                 {completedPct > 0 && (
                                   <div
-                                    className="flex flex-col items-center justify-center min-w-0 py-3 px-2 bg-emerald-500 text-white"
-                                    style={{ width: `${completedPct}%` }}
+                                    className="flex flex-col items-center justify-center min-w-0 py-3 px-2 bg-emerald-500 text-white shrink-0 overflow-hidden"
+                                    style={{ width: `${compW}%` }}
+                                    title={`طلب منتهي ${completedCount} — المبلغ ${sumCompletedPrice} — توفير المشتري ${sumCompletedDiscount}`}
                                   >
-                                    <span className="font-bold text-sm">{completedCount} طلب منتهي</span>
-                                    <span className="text-xs mt-1 opacity-95">المبلغ {sumCompletedPrice}</span>
-                                    <span className="text-xs opacity-95">توفير المشتري {sumCompletedDiscount}</span>
+                                    <span className="font-bold text-sm whitespace-nowrap truncate max-w-full">طلب منتهي <span dir="ltr">{completedCount}</span></span>
+                                    <span className="text-xs mt-1 opacity-95 whitespace-nowrap truncate max-w-full">المبلغ {sumCompletedPrice}</span>
+                                    <span className="text-xs opacity-95 whitespace-nowrap truncate max-w-full">توفير المشتري {sumCompletedDiscount}</span>
                                   </div>
                                 )}
                               </div>
@@ -2496,7 +2581,7 @@ function AdminPageContent() {
                           return (
                             <div className="flex w-full overflow-hidden rounded-b-lg border border-t-0 border-gray-300 bg-slate-200" dir="ltr">
                               <div className="flex flex-col items-center justify-center flex-1 py-3 px-2 text-gray-900">
-                                <span className="font-bold text-sm">{count} طلب</span>
+                                <span className="font-bold text-sm">طلب <span dir="ltr">{count}</span></span>
                                 <span className="text-xs mt-1">المبلغ {sumPrice}</span>
                                 <span className="text-xs">توفير المشتري {sumDiscount}</span>
                               </div>
@@ -2683,7 +2768,7 @@ function AdminPageContent() {
                               bestSellersSortBy === 'quantity' ? b.quantity - a.quantity : b.revenue - a.revenue
                             );
                             const maxVal = Math.max(1, bestSellersSortBy === 'quantity' ? (sorted[0]?.quantity ?? 1) : (sorted[0]?.revenue ?? 1));
-                            const barColor = '#475569';
+                            const barColor = '#22c55e';
                             return sorted.map((item, i) => {
                               const barValue = bestSellersSortBy === 'quantity' ? item.quantity : item.revenue;
                               return (
@@ -2731,32 +2816,35 @@ function AdminPageContent() {
                   <p className="text-red-600">{teamStatsError}</p>
                 ) : (
               (() => {
-                const PIE_COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'];
+                /** نفس مصفوفة ألوان دونات المنتجات كاملة (8 ألوان) */
+                const PIE_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
 
                 const getSegments = (keyOrKeys: string | string[]) => {
                   const keys = Array.isArray(keyOrKeys) ? keyOrKeys : [keyOrKeys];
                   if (keys.length === 1 && keys[0] === 'deliveryAssignedCount') {
-                    const out: { name: string; value: number; color: string }[] = [];
-                    teamStatsUsers.forEach((u, i) => {
-                      const v = Number(u.stats.deliveryAssignedCount) || 0;
-                      if (v > 0) out.push({ name: u.name, value: v, color: PIE_COLORS[i % PIE_COLORS.length] });
-                    });
+                    // نبني بالترتيب: بدون عامل → أي عامل → العمال
+                    const out: { name: string; value: number }[] = [];
                     const adminUser = teamStatsUsers.find(u => u.userType === 'admin');
                     if (adminUser) {
                       const w = Number((adminUser.stats as Record<string, number>).WithoutDeliveryOrdersCount) || 0;
                       const a = Number((adminUser.stats as Record<string, number>).AnyDeliveryOrdersCount) || 0;
-                      if (w > 0) out.push({ name: 'بدون عامل', value: w, color: PIE_COLORS[teamStatsUsers.length % PIE_COLORS.length] });
-                      if (a > 0) out.push({ name: 'أي عامل', value: a, color: PIE_COLORS[(teamStatsUsers.length + 1) % PIE_COLORS.length] });
+                      if (w > 0) out.push({ name: 'بدون عامل', value: w });
+                      if (a > 0) out.push({ name: 'أي عامل', value: a });
                     }
-                    return out;
+                    teamStatsUsers.forEach(u => {
+                      const v = Number(u.stats.deliveryAssignedCount) || 0;
+                      if (v > 0) out.push({ name: u.name, value: v });
+                    });
+                    return out.map((s, i) => ({ ...s, color: PIE_COLORS[i % PIE_COLORS.length] }));
                   }
-                  return teamStatsUsers
-                    .map((u, i) => ({
+                  // pies التقديم والتأخير: نجمع العمال ونلوّن حسب الترتيب النهائي
+                  const out = teamStatsUsers
+                    .map(u => ({
                       name: u.name,
                       value: keys.reduce((sum, k) => sum + (Number((u.stats as Record<string, number>)[k]) || 0), 0),
-                      color: PIE_COLORS[i % PIE_COLORS.length],
                     }))
                     .filter(s => s.value > 0);
+                  return out.map((s, i) => ({ ...s, color: PIE_COLORS[i % PIE_COLORS.length] }));
                 };
 
                 const PieCard = ({ statKey, statKeys, label }: { statKey?: string; statKeys?: string[]; label: string }) => {
@@ -2867,8 +2955,8 @@ function AdminPageContent() {
                                 {assignmentSegments.map((s, i) => (
                                   <li key={i} className="inline-flex items-center gap-2">
                                     <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
-                                    <span className="text-gray-600 font-medium">{s.value}</span>
                                     <span className="truncate">{s.name}</span>
+                                    <span className="text-gray-600 font-medium">{s.value}</span>
                                   </li>
                                 ))}
                               </ul>
@@ -2944,8 +3032,8 @@ function AdminPageContent() {
                 ) : (
                   <>
                     <div className="flex flex-col gap-3">
+                      <span className="text-sm font-medium text-gray-600">الفئة</span>
                       <div className="flex flex-wrap gap-2 items-center">
-                        <span className="text-sm font-medium text-gray-600">الفئة:</span>
                         {([
                           { value: 'all', label: 'الكل' },
                           { value: 'delivery', label: 'عامل توصيل' },
@@ -2965,7 +3053,7 @@ function AdminPageContent() {
                                 ? role === 'all'
                                   ? 'bg-gray-800 text-white'
                                   : role === 'delivery' || role === 'deliveryOnly'
-                                    ? 'bg-blue-600 text-white'
+                                    ? 'bg-emerald-600 text-white'
                                     : 'bg-amber-600 text-white'
                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                             }`}
@@ -2983,7 +3071,7 @@ function AdminPageContent() {
                             setWorkersActivitySearchQuery(e.target.value);
                             setWorkersActivityPage(1);
                           }}
-                          className="flex-1 min-w-0 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800"
+                          className="flex-1 min-w-0 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-gray-800"
                         />
                       </div>
                     </div>
@@ -3098,8 +3186,8 @@ function AdminPageContent() {
                                   return (
                                     <div className="space-y-3 text-center">
                                       <div className="flex flex-wrap gap-1.5 justify-center">
-                                        <span className={`inline-flex flex-col items-center px-2 py-1 rounded-lg text-[10px] font-medium min-w-[3.5rem] leading-tight ${w.isDelivery ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-400'}`}>
-                                          <span>توصيل</span>
+                                        <span className={`inline-flex flex-col items-center px-2 py-1 rounded-lg text-[10px] font-medium min-w-[3.5rem] leading-tight ${w.isDelivery ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-400'}`}>
+                                          <span>موصِّل</span>
                                           <span className="text-sm font-bold mt-0.5">{w.deliveryForward ?? '—'}</span>
                                           <span className="text-[9px] text-gray-500 mt-0">{w.deliveryDowngrade ?? '—'}</span>
                                         </span>
@@ -3114,7 +3202,7 @@ function AdminPageContent() {
                                           <span className="text-gray-500 font-medium">النقاط:</span>
                                           <span className="font-semibold text-gray-800">{fmt(S)}</span>
                                           <span className="text-gray-400">·</span>
-                                          <span className="font-semibold text-blue-700">{fmt(pointsDelivery)}</span>
+                                          <span className="font-semibold text-emerald-700">{fmt(pointsDelivery)}</span>
                                           <span className="text-gray-400">·</span>
                                           <span className="font-semibold text-amber-700">{fmt(pointsTable)}</span>
                                         </p>
@@ -3122,7 +3210,7 @@ function AdminPageContent() {
                                           <span className="text-gray-500 font-medium">الكفاءة:</span>
                                           <span className="font-semibold text-gray-800">{Math.round(R)}</span>
                                           <span className="text-gray-400">·</span>
-                                          <span className="font-semibold text-blue-700">{Math.round(efficiencyDelivery)}</span>
+                                          <span className="font-semibold text-emerald-700">{Math.round(efficiencyDelivery)}</span>
                                           <span className="text-gray-400">·</span>
                                           <span className="font-semibold text-amber-700">{Math.round(efficiencyTable)}</span>
                                         </p>
@@ -3130,17 +3218,19 @@ function AdminPageContent() {
                                     </div>
                                   );
                                 })() : (
-                                  <div className="flex flex-wrap gap-1 justify-center">
-                                    <span className={`inline-flex flex-col items-center px-1 py-0.5 rounded text-[10px] font-medium min-w-[3rem] leading-tight ${w.isWaiter ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-400'}`}>
-                                      <span>نادل</span>
-                                      <span className="text-sm font-bold mt-0">{w.tableForward ?? '—'}</span>
-                                      <span className="text-[9px] text-left w-full text-gray-500 mt-0">{w.tableDowngrade ?? '—'}</span>
-                                    </span>
-                                    <span className={`inline-flex flex-col items-center px-1 py-0.5 rounded text-[10px] font-medium min-w-[3rem] leading-tight ${w.isDelivery ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-400'}`}>
-                                      <span>توصيل</span>
-                                      <span className="text-sm font-bold mt-0">{w.deliveryForward ?? '—'}</span>
-                                      <span className="text-[9px] text-left w-full text-gray-500 mt-0">{w.deliveryDowngrade ?? '—'}</span>
-                                    </span>
+                                  <div className="space-y-3 text-center">
+                                    <div className="flex flex-wrap gap-1.5 justify-center">
+                                      <span className={`inline-flex flex-col items-center px-2 py-1 rounded-lg text-[10px] font-medium min-w-[3.5rem] leading-tight ${w.isDelivery ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-400'}`}>
+                                        <span>توصيل</span>
+                                        <span className="text-sm font-bold mt-0.5">{w.deliveryForward ?? '—'}</span>
+                                        <span className="text-[9px] text-gray-500 mt-0">{w.deliveryDowngrade ?? '—'}</span>
+                                      </span>
+                                      <span className={`inline-flex flex-col items-center px-2 py-1 rounded-lg text-[10px] font-medium min-w-[3.5rem] leading-tight ${w.isWaiter ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-400'}`}>
+                                        <span>نادل</span>
+                                        <span className="text-sm font-bold mt-0.5">{w.tableForward ?? '—'}</span>
+                                        <span className="text-[9px] text-gray-500 mt-0">{w.tableDowngrade ?? '—'}</span>
+                                      </span>
+                                    </div>
                                   </div>
                                 )}
                               </button>
@@ -3227,11 +3317,11 @@ function AdminPageContent() {
                                   <div className="pt-4 mt-4 border-t border-amber-200/80 space-y-1">
                                     <label className="block text-sm font-bold text-gray-700">إلى من تميل أكثر؟</label>
                                     <div className="flex px-1 mb-1">
-                                      <span className="flex-1 text-center text-xs text-gray-500">موظف قديم راكد  (النقاط)</span>
+                                      <span className="flex-1 text-center text-xs text-gray-500">موظف قديم  (النقاط)</span>
                                       <span className="flex-1 text-center text-xs text-gray-500" />
                                       <span className="flex-1 text-center text-xs text-gray-500" />
                                       <span className="flex-1 text-center text-xs text-gray-500" />
-                                      <span className="flex-1 text-center text-xs text-gray-500">موظف جديد نشيط (الكفاءة)</span>
+                                      <span className="flex-1 text-center text-xs text-gray-500">موظف نشيط (الكفاءة)</span>
                                     </div>
                                     <div className="relative flex px-1 py-3">
                                       <div className="absolute left-[10%] right-[10%] top-1/2 h-0.5 bg-amber-200 rounded -translate-y-1/2" aria-hidden />
@@ -3512,7 +3602,7 @@ function AdminPageContent() {
                                             const toL = DEL_L[log.toStatus ?? 1] ?? String(log.toStatus);
                                             const isForward = (log.toStatus ?? 0) > (log.fromStatus ?? 0);
                                             return (
-                                              <tr key={i} className={`border-b border-slate-100 last:border-0 ${isForward ? 'bg-teal-200/85' : 'bg-slate-300/80'}`}>
+                                              <tr key={i} className={`border-b border-slate-100 last:border-0 ${isForward ? 'bg-emerald-200/85' : 'bg-slate-300/80'}`}>
                                                 <td className="p-2 text-sm text-gray-700">{String(log.orderId || '').replace('order_', '')}</td>
                                                 <td className="p-2 text-sm text-gray-700">{fromL}</td>
                                                 <td className="p-2 text-sm text-gray-700">{toL}</td>
@@ -3552,7 +3642,7 @@ function AdminPageContent() {
                                             const toL = TBL_L[log.toStatus ?? 1] ?? String(log.toStatus);
                                             const isForward = (log.toStatus ?? 0) > (log.fromStatus ?? 0);
                                             return (
-                                              <tr key={i} className={`border-b border-slate-100 last:border-0 ${isForward ? 'bg-teal-200/85' : 'bg-slate-300/80'}`}>
+                                              <tr key={i} className={`border-b border-slate-100 last:border-0 ${isForward ? 'bg-emerald-200/85' : 'bg-slate-300/80'}`}>
                                                 <td className="p-2 text-sm text-gray-700">{String(log.orderId || '').replace('table_order_', '')}</td>
                                                 <td className="p-2 text-sm text-gray-700">{fromL}</td>
                                                 <td className="p-2 text-sm text-gray-700">{toL}</td>
@@ -3595,7 +3685,7 @@ function AdminPageContent() {
             {/* قسم إدارة القوائم */}
             <div className="bg-white p-6 rounded-lg shadow-md">
               {/* Add/Edit List Form */}
-              <div ref={listFormRef} className={`border-2 rounded-lg p-6 mb-6 ${editingList ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'}`}>
+              <div ref={listFormRef} className={`border-2 rounded-lg p-6 mb-6 ${editingList ? 'bg-slate-100 border-slate-300' : 'bg-slate-100 border-slate-300'}`}>
                 <h3 className="text-lg font-bold text-gray-800 mb-4">
                   {editingList ? 'تحديث قائمة' : 'إضافة قائمة جديدة'}
                 </h3>
@@ -3609,7 +3699,7 @@ function AdminPageContent() {
                       required
                       value={listFormData.name}
                       onChange={(e) => setListFormData({ ...listFormData, name: e.target.value })}
-                      className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingList ? 'focus:border-blue-500' : 'focus:border-green-500'}`}
+                      className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingList ? 'focus:border-slate-500' : 'focus:border-slate-500'}`}
                       placeholder="مثال: أسعار المشروبات"
                     />
                   </div>
@@ -3617,11 +3707,11 @@ function AdminPageContent() {
                     <button
                       type="submit"
                       className={`flex-1 py-3 px-4 rounded-lg font-bold text-lg transition-all duration-200 transform hover:scale-[1.02] shadow-lg text-white ${editingList
-                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
-                        : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700'
-                        }`}
-                    >
-                      {editingList ? 'تحديث' : 'إضافة القائمة'}
+? 'bg-gradient-to-r from-slate-600 to-slate-800 hover:from-slate-700 hover:to-slate-900'
+                      : 'bg-gradient-to-r from-slate-500 to-slate-600 hover:from-slate-600 hover:to-slate-700'
+                      }`}
+                  >
+                    {editingList ? 'تحديث' : 'إضافة القائمة'}
                     </button>
                     {editingList && (
                       <button
@@ -3646,7 +3736,7 @@ function AdminPageContent() {
                       <div
                         key={list.id}
                         className={`border rounded-lg p-3 transition ${selectedList?.id === list.id
-                          ? 'bg-blue-50 border-blue-500'
+                          ? 'bg-slate-100 border-slate-400'
                           : 'hover:bg-gray-50'
                           }`}
                       >
@@ -3660,21 +3750,21 @@ function AdminPageContent() {
                           <div className="flex gap-1 flex-wrap justify-end">
                             <button
                               onClick={() => handleEditList(list)}
-                              className="bg-blue-500 hover:bg-blue-600 text-white py-1 px-2 rounded text-xs transition"
+                              className="bg-slate-600 hover:bg-slate-700 text-white py-1 px-2 rounded text-xs transition"
                             >
-                              تحديث
+                              تحديث الاسم
                             </button>
                             <button
                               onClick={() => handleSelectListForItems(list)}
-                              className="bg-blue-500 hover:bg-blue-600 text-white py-1 px-2 rounded text-xs transition"
+                              className="bg-emerald-500 hover:bg-emerald-600 text-white py-1 px-2 rounded text-xs transition"
                             >
-                              تحديث العناصر
+                            إدارة العناصر
                             </button>
                             <button
                               onClick={() => handleDeleteList(list.id)}
-                              className="bg-red-500 hover:bg-red-600 text-white py-1 px-2 rounded text-xs transition"
+                              className="bg-red-500 hover:bg-red-600 text-white py-1 px-2 rounded text-xs transition inline-flex items-center gap-1"
                             >
-                              حذف
+                              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                             </button>
                           </div>
                         </div>
@@ -3690,7 +3780,7 @@ function AdminPageContent() {
               {selectedList ? (
                 <>
                   {/* Add/Edit Item Form */}
-                  <div ref={itemFormRef} className={`border-2 rounded-lg p-6 mb-6 ${editingItem ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'}`}>
+                  <div ref={itemFormRef} className={`border-2 rounded-lg p-6 mb-6 ${editingItem ? 'bg-slate-100 border-slate-300' : 'bg-slate-100 border-slate-300'}`}>
                     <h3 className="text-lg font-bold text-gray-800 mb-2">
                       {editingItem ? 'تحديث عنصر' : 'إضافة عنصر جديد'}
                     </h3>
@@ -3706,7 +3796,7 @@ function AdminPageContent() {
                             required
                             value={itemFormData.name}
                             onChange={(e) => setItemFormData({ ...itemFormData, name: e.target.value })}
-                            className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingItem ? 'focus:border-blue-500' : 'focus:border-green-500'}`}
+                            className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingItem ? 'focus:border-slate-500' : 'focus:border-slate-500'}`}
                             placeholder="أدخل اسم العنصر"
                           />
                         </div>
@@ -3720,7 +3810,7 @@ function AdminPageContent() {
                             required
                             value={itemFormData.price}
                             onChange={(e) => setItemFormData({ ...itemFormData, price: e.target.value })}
-                            className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingItem ? 'focus:border-blue-500' : 'focus:border-green-500'}`}
+                            className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingItem ? 'focus:border-slate-500' : 'focus:border-slate-500'}`}
                             placeholder="0.00"
                           />
                         </div>
@@ -3735,7 +3825,7 @@ function AdminPageContent() {
                           value={itemFormData.discountedPrice}
                           onChange={(e) => setItemFormData({ ...itemFormData, discountedPrice: e.target.value })}
                           placeholder="هل يوجد خصم؟ ضع السعر الجديد"
-                          className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingItem ? 'focus:border-blue-500' : 'focus:border-green-500'}`}
+                          className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingItem ? 'focus:border-slate-500' : 'focus:border-slate-500'}`}
                         />
                       </div>
                       <ImageUploader
@@ -3755,7 +3845,7 @@ function AdminPageContent() {
                           onChange={(e) => setItemFormData({ ...itemFormData, description: e.target.value })}
                           rows={3}
                           placeholder="السطر الأول سيظهر بخط عريض، والباقي بخط عادي"
-                          className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingItem ? 'focus:border-blue-500' : 'focus:border-green-500'}`}
+                          className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingItem ? 'focus:border-slate-500' : 'focus:border-slate-500'}`}
                         />
                       </div>
                       <div className="flex gap-3">
@@ -3763,11 +3853,11 @@ function AdminPageContent() {
                           type="submit"
                           disabled={isUploadingImage || isSubmittingItem}
                           className={`flex-1 py-3 px-4 rounded-lg font-bold text-lg transition-all duration-200 transform hover:scale-[1.02] shadow-lg text-white disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none ${editingItem
-                            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
-                            : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700'
-                            }`}
-                        >
-                          {isUploadingImage ? 'جاري رفع الصورة...' : isSubmittingItem ? 'جاري الحفظ...' : editingItem ? 'تحديث' : 'إضافة العنصر'}
+? 'bg-gradient-to-r from-slate-600 to-slate-800 hover:from-slate-700 hover:to-slate-900'
+                      : 'bg-gradient-to-r from-slate-500 to-slate-600 hover:from-slate-600 hover:to-slate-700'
+                      }`}
+                  >
+                    {isUploadingImage ? 'جاري رفع الصورة...' : isSubmittingItem ? 'جاري الحفظ...' : editingItem ? 'تحديث' : 'إضافة العنصر'}
                         </button>
                         {editingItem && (
                           <button
@@ -3811,15 +3901,15 @@ function AdminPageContent() {
                                   <div className="flex gap-2 justify-center flex-wrap">
                                     <button
                                       onClick={() => handleEditItem(item)}
-                                      className="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-sm transition"
+                                      className="bg-slate-600 hover:bg-slate-700 text-white py-1 px-3 rounded text-sm transition"
                                     >
                                       تحديث
                                     </button>
                                     <button
                                       onClick={() => handleDeleteItem(item.id)}
-                                      className="bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded text-sm transition"
+                                      className="bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded text-sm transition inline-flex items-center gap-1.5"
                                     >
-                                      حذف
+                                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                     </button>
                                     {item.imageUrl && currentAdmin && isPlanActive('basic') && (
                                       <AdGenerator
@@ -3863,13 +3953,13 @@ function AdminPageContent() {
         {activeTab === 'orders' && (
           <div className="bg-white p-8 rounded-lg shadow-md">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">طلبات التوصيل</h2>
+              <h2 className="text-2xl font-bold text-gray-800">طلبات التوصيل الواردة</h2>
               {isPlanActive('basic') && (currentAdmin?.isAcceptingOrders || currentAdmin?.isAcceptingOrdersViaWhatsapp) && (
                 <div className="flex flex-col items-end gap-1">
                   <button
                     onClick={refreshOrders}
                     disabled={isRefreshingOrders}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     title="تحديث الطلبات"
                   >
                     <svg
@@ -3902,28 +3992,28 @@ function AdminPageContent() {
                     <div className="flex flex-wrap gap-1.5">
                       <button
                         onClick={() => { setStatusFilter('all'); setCurrentPage(1); }}
-                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${statusFilter === 'all' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${statusFilter === 'all' ? 'bg-emerald-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
                           }`}
                       >
                         الكل
                       </button>
                       <button
                         onClick={() => { setStatusFilter('pending'); setCurrentPage(1); }}
-                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${statusFilter === 'pending' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${statusFilter === 'pending' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
                           }`}
                       >
                         جديد
                       </button>
                       <button
                         onClick={() => { setStatusFilter('read'); setCurrentPage(1); }}
-                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${statusFilter === 'read' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${statusFilter === 'read' ? 'bg-emerald-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
                           }`}
                       >
                         مقروء
                       </button>
                       <button
                         onClick={() => { setStatusFilter('delivering'); setCurrentPage(1); }}
-                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${statusFilter === 'delivering' ? 'bg-teal-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${statusFilter === 'delivering' ? 'bg-emerald-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
                           }`}
                       >
                         قيد التوصيل
@@ -3944,14 +4034,14 @@ function AdminPageContent() {
                     <div className="flex flex-wrap gap-1.5">
                       <button
                         onClick={() => { setOrderTypeFilter('all'); setCurrentPage(1); }}
-                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${orderTypeFilter === 'all' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${orderTypeFilter === 'all' ? 'bg-emerald-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
                           }`}
                       >
                         الكل
                       </button>
                       <button
                         onClick={() => { setOrderTypeFilter('website'); setCurrentPage(1); }}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition flex items-center gap-1.5 ${orderTypeFilter === 'website' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition flex items-center gap-1.5 ${orderTypeFilter === 'website' ? 'bg-emerald-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
                           }`}
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3976,28 +4066,28 @@ function AdminPageContent() {
                     <div className="flex flex-wrap gap-1.5">
                       <button
                         onClick={() => { setDateFilter('all'); setCurrentPage(1); }}
-                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${dateFilter === 'all' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${dateFilter === 'all' ? 'bg-emerald-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
                           }`}
                       >
                         الكل
                       </button>
                       <button
                         onClick={() => { setDateFilter('today'); setCurrentPage(1); }}
-                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${dateFilter === 'today' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${dateFilter === 'today' ? 'bg-emerald-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
                           }`}
                       >
                         اليوم
                       </button>
                       <button
                         onClick={() => { setDateFilter('week'); setCurrentPage(1); }}
-                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${dateFilter === 'week' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${dateFilter === 'week' ? 'bg-emerald-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
                           }`}
                       >
                         أسبوع
                       </button>
                       <button
                         onClick={() => { setDateFilter('month'); setCurrentPage(1); }}
-                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${dateFilter === 'month' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                        className={`px-3 py-1 rounded-lg text-sm font-semibold transition ${dateFilter === 'month' ? 'bg-emerald-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
                           }`}
                       >
                         شهر
@@ -4012,7 +4102,7 @@ function AdminPageContent() {
                       <select
                         value={employeeFilter}
                         onChange={(e) => { setEmployeeFilter(e.target.value); setCurrentPage(1); }}
-                        className="w-full px-1.5 py-0.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors bg-white text-sm"
+                        className="w-full px-1.5 py-0.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors bg-white text-sm"
                       >
                         <option value="all">الكل</option>
                         <option value="">بدون عامل توصيل</option>
@@ -4033,7 +4123,7 @@ function AdminPageContent() {
                       <select
                         value={employeeFilter}
                         onChange={(e) => { setEmployeeFilter(e.target.value); setCurrentPage(1); }}
-                        className="w-full px-1.5 py-0.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors bg-white text-sm"
+                        className="w-full px-1.5 py-0.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors bg-white text-sm"
                       >
                         <option value="EMPLOYEE_ALL">كل طلباتي</option>
                         <option value="EMPLOYEE_MINE">المعينة لي فقط</option>
@@ -4093,10 +4183,10 @@ function AdminPageContent() {
                   };
 
                   return (
-                    <div key={order.id} className="border-2 border-gray-200 rounded-xl p-4 hover:shadow-lg transition-shadow relative">
+                    <div key={order.id} className="border-2 border-emerald-300 rounded-xl p-4 hover:shadow-lg transition-shadow relative bg-emerald-50">
                       {/* ANY_DELIVERY Badge - Absolute positioned in top-left corner */}
                       {userType === 'employee' && isDelivery && (order as any).assignedTo === 'ANY_DELIVERY' && (
-                        <div className="absolute -top-0.5 -left-0.5 w-8 h-5 bg-blue-700 rounded-full flex items-center justify-center  border-2 border-grey" title="لأي عامل توصيل">
+                        <div className="absolute -top-0.5 -left-0.5 w-8 h-5 bg-emerald-700 rounded-full flex items-center justify-center border-2 border-emerald-300" title="لأي عامل توصيل">
                           <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
                             <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
                           </svg>
@@ -4113,15 +4203,15 @@ function AdminPageContent() {
 
                         {/* Price - Row 1, Col 2 on small screens */}
                         <div className="flex flex-col justify-center items-end md:order-4 w-full max-w-full">
-                          <p className="text-2xl font-black text-blue-600 whitespace-nowrap">{order.totalPrice} جـ</p>
+                          <p className="text-2xl font-black text-gray-800 whitespace-nowrap">{order.totalPrice} جـ</p>
                           {order.totalDiscount > 0 && (
-                            <p className="text-sm text-green-600 font-bold whitespace-nowrap">وفر {order.totalDiscount} جـ</p>
+                            <p className="text-sm text-emerald-600 font-bold whitespace-nowrap">وفر {order.totalDiscount} جـ</p>
                           )}
                         </div>
 
                         {/* Customer Info - Row 2, Full Width on small screens */}
                         <div className="col-span-2 md:col-span-1 md:order-2 flex items-center justify-start">
-                          <div className="flex flex-wrap items-center justify-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 w-full max-w-full">
+                          <div className="flex flex-wrap items-center justify-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 w-full max-w-full">
                             {order.orderType === 'whatsapp' ? (
                               <>
                                 <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
@@ -4131,19 +4221,19 @@ function AdminPageContent() {
                               </>
                             ) : order.customerName && order.customerPhone ? (
                               <>
-                                <svg className="w-5 h-5 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-5 h-5 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                 </svg>
                                 <span className="text-sm font-bold text-gray-800 break-words">{order.customerName}</span>
-                                <span className="text-gray-400">•</span>
+                                <span className="text-emerald-400">•</span>
                                 <span className="text-sm font-bold text-gray-800 break-words">{order.customerPhone}</span>
                               </>
                             ) : (
                               <>
-                                <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-5 h-5 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                 </svg>
-                                <span className="text-sm text-gray-500 break-words">عميل</span>
+                                <span className="text-sm text-emerald-500 break-words">عميل</span>
                               </>
                             )}
                           </div>
@@ -4153,7 +4243,7 @@ function AdminPageContent() {
                         <div className="col-span-2 md:col-span-1 md:order-3 flex items-center justify-center">
                           <button
                             onClick={toggleExpand}
-                            className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold transition flex items-center gap-2 whitespace-nowrap w-full md:w-auto justify-center"
+                            className="bg-emerald-100 hover:bg-emerald-200 text-gray-700 px-4 py-2 rounded-lg font-semibold transition flex items-center gap-2 whitespace-nowrap w-full md:w-auto justify-center border border-emerald-200"
                           >
                             <svg
                               className={`w-5 h-5 ${isExpanded ? 'rotate-180' : ''}`}
@@ -4180,7 +4270,7 @@ function AdminPageContent() {
                         >
                           <div className="space-y-2 mt-3">
                             {order.items.map((item, idx) => (
-                              <div key={idx} className="flex items-center bg-gray-50 p-3 rounded-lg">
+                              <div key={idx} className="flex items-center bg-emerald-50 border border-emerald-200 p-3 rounded-lg">
                                 <div className="flex items-center gap-3 flex-1">
                                   {item.imageUrl && (
                                     <img src={item.imageUrl} alt={item.name} className="w-12 h-12 object-cover rounded-lg" />
@@ -4189,7 +4279,7 @@ function AdminPageContent() {
                                     <p className="font-bold text-gray-800">{item.quantity} {item.name}</p>
                                   </div>
                                 </div>
-                                <div className="border-r-2 border-gray-300 mx-3 self-stretch"></div>
+                                <div className="border-r-2 border-emerald-300 mx-3 self-stretch"></div>
                                 <div className="text-left flex-shrink-0">
                                   <p className="font-bold text-gray-800 whitespace-nowrap">
                                     {(item.discountedPrice || item.price) * item.quantity} جـ
@@ -4207,7 +4297,7 @@ function AdminPageContent() {
                       </div>
 
                       {/* Order Status Buttons */}
-                      <div className="mt-3 pt-3 border-t border-gray-200">
+                      <div className="mt-3 pt-3 border-t border-emerald-200">
                         <div className="flex gap-2 flex-wrap md:flex-nowrap md:items-center">
                           {/* Status Buttons */}
                           <div className="flex flex-wrap gap-1 flex-1 md:flex-initial">
@@ -4219,10 +4309,10 @@ function AdminPageContent() {
                                 : userType === 'employee' && isDelivery && !currentAdmin?.enableDeliveryEmployees && order.status === 'pending'
                                   ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
                                   : (order.status || 'pending') === 'pending'
-                                    ? 'bg-blue-600 text-white shadow-md'
+                                    ? 'bg-emerald-800 text-white shadow-md'
                                     : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'pending'
-                                      ? 'bg-blue-100 text-gray-700'
-                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                      ? 'bg-emerald-100 text-gray-700'
+                                      : 'bg-emerald-100 text-gray-700 hover:bg-emerald-200'
                                 }`}
                               title="جديد"
                             >
@@ -4236,10 +4326,10 @@ function AdminPageContent() {
                                 : userType === 'employee' && isDelivery && !currentAdmin?.enableDeliveryEmployees && order.status === 'read'
                                   ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
                                   : order.status === 'read'
-                                    ? 'bg-blue-500 text-white shadow-md'
+                                    ? 'bg-emerald-700 text-white shadow-md'
                                     : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'read'
-                                      ? 'bg-blue-100 text-gray-700'
-                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                      ? 'bg-emerald-100 text-gray-700'
+                                      : 'bg-emerald-100 text-gray-700 hover:bg-emerald-200'
                                 }`}
                               title="مقروء"
                             >
@@ -4253,10 +4343,10 @@ function AdminPageContent() {
                                 : userType === 'employee' && isDelivery && !currentAdmin?.enableDeliveryEmployees && order.status === 'delivering'
                                   ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
                                   : order.status === 'delivering'
-                                    ? 'bg-teal-500 text-white shadow-md'
+                                    ? 'bg-emerald-600 text-white shadow-md'
                                     : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'delivering'
-                                      ? 'bg-teal-100 text-gray-700'
-                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                      ? 'bg-emerald-100 text-gray-700'
+                                      : 'bg-emerald-100 text-gray-700 hover:bg-emerald-200'
                                 }`}
                               title="قيد التوصيل"
                             >
@@ -4270,10 +4360,10 @@ function AdminPageContent() {
                                 : userType === 'employee' && isDelivery && !currentAdmin?.enableDeliveryEmployees && order.status === 'delivered'
                                   ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
                                   : order.status === 'delivered'
-                                    ? 'bg-green-500 text-white shadow-md'
-                                    : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'delivered'
-                                      ? 'bg-green-100 text-gray-700'
-                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                  ? 'bg-emerald-500 text-white shadow-md'
+                                  : updatingOrderStatus?.orderId === order.id && updatingOrderStatus?.status === 'delivered'
+                                      ? 'bg-emerald-100 text-gray-700'
+                                      : 'bg-emerald-100 text-gray-700 hover:bg-emerald-200'
                                 }`}
                               title="تم"
                             >
@@ -4288,7 +4378,7 @@ function AdminPageContent() {
                                 value={assigningEmployee === order.id ? '' : ((order as any).assignedTo || '')}
                                 onChange={(e) => handleAssignEmployee(order.id, e.target.value || null)}
                                 disabled={assigningEmployee === order.id}
-                                className={`w-full px-3  border-2 border-gray-200 rounded-lg focus:outline-none focus:border-green-500 transition-colors ${assigningEmployee === order.id ? 'opacity-50 cursor-wait' : ''
+                                className={`w-full px-3 border-2 border-emerald-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors ${assigningEmployee === order.id ? 'opacity-50 cursor-wait' : ''
                                   }`}
                               >
                                 {assigningEmployee === order.id ? (
@@ -4337,12 +4427,12 @@ function AdminPageContent() {
                                 setDeletingOrderId(null);
                               }}
                               disabled={deletingOrderId === order.id}
-                              className={`w-full md:w-auto px-4 py-2 rounded-lg text-sm font-medium transition ${deletingOrderId === order.id
+                              className={`w-full md:w-auto px-4 py-2 rounded-lg text-sm font-medium transition inline-flex items-center justify-center gap-2 ${deletingOrderId === order.id
                                 ? 'bg-red-100 text-gray-400 cursor-not-allowed'
                                 : 'bg-red-500 hover:bg-red-600 text-white'
                                 }`}
                             >
-                              مسح
+                              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                             </button>
                           )}
                         </div>
@@ -4369,7 +4459,7 @@ function AdminPageContent() {
                       key={page}
                       onClick={() => setCurrentPage(page)}
                       className={`px-3 py-2 rounded-lg font-semibold transition ${currentPage === page
-                        ? 'bg-blue-500 text-white'
+                        ? 'bg-emerald-500 text-white'
                         : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
                         }`}
                     >
@@ -4390,12 +4480,13 @@ function AdminPageContent() {
         )}
 
         {activeTab === 'delivery' && (
-          <div className="bg-white p-8 rounded-lg shadow-md max-w-2xl mx-auto">
-            <h2 className="text-2xl font-bold mb-6 text-gray-800">إعدادات الطلبات</h2>
+          <div className="bg-white p-4 sm:p-6 md:p-8 rounded-lg shadow-md max-w-2xl mx-auto">
+            <h2 className="text-2xl font-bold mb-6 text-gray-800">إعدادات الطلبات{isPlanActive('basic') ? ' والعاملين' : ''}</h2>
 
             {/* نموذج إعدادات التوصيل */}
-            <form onSubmit={handleDeliverySubmit} className="space-y-6">
-              <h3 className="text-lg font-bold text-gray-800">إعدادات طلبات التوصيل</h3>
+            <div className="border-2 border-gray-200 rounded-lg p-6 mb-6 bg-gray-50">
+              <form onSubmit={handleDeliverySubmit} className="space-y-6">
+                <h3 className="text-lg font-bold text-gray-800 mb-4">إعدادات طلبات التوصيل</h3>
 
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
@@ -4445,7 +4536,7 @@ function AdminPageContent() {
                     type="tel"
                     value={deliveryFormData.whatsappNumber}
                     onChange={(e) => setDeliveryFormData({ ...deliveryFormData, whatsappNumber: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
                     placeholder="مثال: 201234567890"
                     required
                   />
@@ -4460,13 +4551,13 @@ function AdminPageContent() {
               >
                 {deliverySettingsSaving ? 'جاري الحفظ...' : 'حفظ إعدادات طلبات التوصيل'}
               </button>
-            </form>
-
-            <div className="border-t-2 border-gray-200 my-6"></div>
+              </form>
+            </div>
 
             {/* نموذج إعدادات الطاولات */}
-            <form onSubmit={handleTableSettingsSubmit} className="space-y-6">
-              <h3 className="text-lg font-bold text-gray-800">إعدادات طلبات الطاولة</h3>
+            <div className="border-2 border-gray-200 rounded-lg p-6 mb-6 bg-gray-50">
+              <form onSubmit={handleTableSettingsSubmit} className="space-y-6">
+                <h3 className="text-lg font-bold text-gray-800 mb-4">إعدادات طلبات الطاولة</h3>
 
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
@@ -4499,36 +4590,41 @@ function AdminPageContent() {
                   <label className="block text-sm font-bold text-gray-700 mb-2">
                     عدد الطاولات
                   </label>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setDeliveryFormData({
-                        ...deliveryFormData,
-                        tablesCount: Math.max(0, deliveryFormData.tablesCount - 1)
-                      })}
-                      className="w-9 h-9 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-bold text-lg transition-colors"
-                    >
-                      −
-                    </button>
-                    <input
-                      type="number"
-                      value={deliveryFormData.tablesCount}
-                      onChange={(e) => setDeliveryFormData({
-                        ...deliveryFormData,
-                        tablesCount: Math.max(0, parseInt(e.target.value) || 0)
-                      })}
-                      min="0"
-                      className="w-20 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400 transition-colors text-center font-bold"
-                    />
+                  <div className="inline-flex items-center h-9 bg-gray-700 text-white rounded-full shadow-lg">
                     <button
                       type="button"
                       onClick={() => setDeliveryFormData({
                         ...deliveryFormData,
                         tablesCount: deliveryFormData.tablesCount + 1
                       })}
-                      className="w-9 h-9 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-bold text-lg transition-colors"
+                      className="w-9 h-9 flex items-center justify-center hover:opacity-80 transition-opacity"
                     >
-                      +
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" />
+                      </svg>
+                    </button>
+                    <input
+                      type="number"
+                      value={deliveryFormData.tablesCount}
+                      onChange={(e) => setDeliveryFormData({
+                        ...deliveryFormData,
+                        tablesCount: Math.max(1, parseInt(e.target.value) || 1)
+                      })}
+                      min="1"
+                      className="text-sm font-bold w-8 text-center text-gray-900 border border-white/30 outline-none appearance-none rounded bg-white"
+                      style={{ MozAppearance: 'textfield', WebkitAppearance: 'none' } as React.CSSProperties}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setDeliveryFormData({
+                        ...deliveryFormData,
+                        tablesCount: Math.max(1, deliveryFormData.tablesCount - 1)
+                      })}
+                      className="w-9 h-9 flex items-center justify-center hover:opacity-80 transition-opacity"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M20 12H4" />
+                      </svg>
                     </button>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">سيتم إنشاء رابط و QR كود لكل طاولة</p>
@@ -4542,13 +4638,13 @@ function AdminPageContent() {
               >
                 {tableSettingsSaving ? 'جاري الحفظ...' : 'حفظ إعدادات طلبات الطاولة'}
               </button>
-            </form>
-
-            <div className="border-t-2 border-gray-200 my-6"></div>
+              </form>
+            </div>
 
             {/* قسم إعدادات العاملين */}
-            <form onSubmit={handleEmployeeSettingsSubmit} className="space-y-6">
-              <h3 className="text-lg font-bold text-gray-800">إعدادات العاملين</h3>
+            <div className="border-2 border-gray-200 rounded-lg p-6 mb-6 bg-gray-50">
+              <form onSubmit={handleEmployeeSettingsSubmit} className="space-y-6">
+                <h3 className="text-lg font-bold text-gray-800 mb-4">إعدادات العاملين</h3>
 
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
@@ -4584,7 +4680,7 @@ function AdminPageContent() {
                   <select
                     value={employeeSettingsForm.defaultDeliveryAssignment}
                     onChange={(e) => setEmployeeSettingsForm({ ...employeeSettingsForm, defaultDeliveryAssignment: e.target.value as 'ANY_DELIVERY' | '' })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
                   >
                     <option value="">بدون عامل توصيل</option>
                     <option value="ANY_DELIVERY">أي عامل يمكنه التوصيل</option>
@@ -4612,7 +4708,7 @@ function AdminPageContent() {
                       <select
                         value={employeeSettingsForm.defaultDeliveryAssignment}
                         onChange={(e) => setEmployeeSettingsForm({ ...employeeSettingsForm, defaultDeliveryAssignment: e.target.value as 'ANY_DELIVERY' | '' })}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
                       >
                         <option value="">بدون عامل توصيل</option>
                         <option value="ANY_DELIVERY">أي عامل يمكنه التوصيل</option>
@@ -4655,41 +4751,18 @@ function AdminPageContent() {
               >
                 {employeeSettingsSaving ? 'جاري الحفظ...' : 'حفظ إعدادات العاملين'}
               </button>
-            </form>
+              </form>
+            </div>
           </div>
         )}
 
-        {activeTab === 'settings' && (
-          <div className="bg-white p-8 rounded-lg shadow-md max-w-2xl mx-auto">
-            <h2 className="text-2xl font-bold mb-6 text-gray-800">إعدادات الحساب</h2>
-            <form onSubmit={handleSettingsSubmit} className="space-y-6">
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">
-                  الاسم الكامل
-                </label>
-                <input
-                  type="text"
-                  value={settingsFormData.name}
-                  onChange={(e) => setSettingsFormData({ ...settingsFormData, name: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
-                  placeholder="الاسم الكامل"
-                />
-                <p className="text-xs text-gray-500 mt-1">اسمك الذي سيظهر في لوحة التحكم</p>
-              </div>
+        {activeTab === 'clientSettings' && (
+          <div className="bg-white p-4 sm:p-6 md:p-8 rounded-lg shadow-md max-w-2xl mx-auto">
+            <h2 className="text-2xl font-bold mb-6 text-gray-800">إعدادات صفحة العميل</h2>
 
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">
-                  اسم المستخدم
-                </label>
-                <input
-                  type="text"
-                  value={settingsFormData.username}
-                  onChange={(e) => setSettingsFormData({ ...settingsFormData, username: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
-                  placeholder="اسم المستخدم"
-                />
-                <p className="text-xs text-gray-500 mt-1">اسم المستخدم الخاص بك</p>
-              </div>
+            <div className="border-2 border-gray-200 rounded-lg p-6 mb-6 bg-gray-50">
+              <form onSubmit={handleSettingsSubmit} className="space-y-6">
+                <h3 className="text-lg font-bold text-gray-800 mb-4">إعدادات القائمة</h3>
 
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">
@@ -4698,7 +4771,7 @@ function AdminPageContent() {
                 <select
                   value={settingsFormData.theme}
                   onChange={(e) => setSettingsFormData({ ...settingsFormData, theme: e.target.value as any })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
                 >
                   {Object.entries(THEMES).map(([key, value]) => (
                     <option key={key} value={key}>
@@ -4726,7 +4799,7 @@ function AdminPageContent() {
                 <select
                   value={settingsFormData.cardStyle || 'rounded'}
                   onChange={(e) => setSettingsFormData({ ...settingsFormData, cardStyle: e.target.value as any })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
                 >
                   <option value="rounded">مستدير - حواف دائرية</option>
                   <option value="sharp">حاد - حواف حادة مع إطار رمادي</option>
@@ -4745,7 +4818,7 @@ function AdminPageContent() {
                 <select
                   value={settingsFormData.fontFamily || 'baloo-bhaijaan'}
                   onChange={(e) => setSettingsFormData({ ...settingsFormData, fontFamily: e.target.value as any })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
                 >
                   <option value="cairo" className={FONTS.cairo}>هندسي قوي</option>
                   <option value="baloo-bhaijaan" className={FONTS['baloo-bhaijaan']}>لطيف ودود</option>
@@ -4778,7 +4851,7 @@ function AdminPageContent() {
                   value={settingsFormData.welcomeMessage}
                   onChange={(e) => setSettingsFormData({ ...settingsFormData, welcomeMessage: e.target.value })}
                   rows={3}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
                   placeholder="أهلا وسهلا بكم. نحن متخصصون في تقديم أفضل أنواع الـ.."
                 />
                 <p className="text-xs text-gray-500 mt-1">اختياري: رسالة تظهر في أول الصفحة بعد الشعار - اتركه فارغاً ولن تظهر أية رسالة</p>
@@ -4792,8 +4865,8 @@ function AdminPageContent() {
                   value={settingsFormData.contactMessage}
                   onChange={(e) => setSettingsFormData({ ...settingsFormData, contactMessage: e.target.value })}
                   rows={3}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
-                  placeholder="مثال: لطلب طلب تواصل معنا من خلال&#10;015231231"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
+                  placeholder={"مثال: لطلب طلب تواصل معنا من خلال\n015231231"}
                 />
                 <p className="text-xs text-gray-500 mt-1">اختياري: رسالة تظهر بعد كل قائمة - اتركه فارغاً ولن تظهر أية رسالة</p>
               </div>
@@ -4803,64 +4876,113 @@ function AdminPageContent() {
                 disabled={isUploadingImage}
                 className="w-full bg-gray-800 hover:bg-gray-900 text-white py-3 px-4 rounded-xl font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isUploadingImage ? 'جاري رفع الصورة...' : 'حفظ الإعدادات'}
+                {isUploadingImage ? 'جاري رفع الصورة...' : 'حفظ إعدادات القائمة'}
               </button>
+              </form>
+            </div>
+          </div>
+        )}
 
-              <div className="border-t-2 border-gray-200 pt-6">
-                <h3 className="text-lg font-bold text-gray-800 mb-4">تغيير كلمة المرور</h3>
+        {activeTab === 'settings' && (
+          <div className="bg-white p-4 sm:p-6 md:p-8 rounded-lg shadow-md max-w-2xl mx-auto">
+            <h2 className="text-2xl font-bold mb-6 text-gray-800">إعدادات الحساب</h2>
 
-                <div className="space-y-4">
+            {/* بيانات الحساب - الاسم واسم المستخدم */}
+            <div className="border-2 border-gray-200 rounded-lg p-6 mb-6 bg-gray-50">
+              <form onSubmit={handleProfileInfoSubmit} className="space-y-6">
+                <h3 className="text-lg font-bold text-gray-800 mb-4">بيانات الحساب</h3>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    الاسم الكامل
+                  </label>
+                  <input
+                    type="text"
+                    value={settingsFormData.name}
+                    onChange={(e) => setSettingsFormData({ ...settingsFormData, name: e.target.value })}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
+                    placeholder="الاسم الكامل"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">اسمك الذي سيظهر في لوحة التحكم</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    اسم المستخدم
+                  </label>
+                  <input
+                    type="text"
+                    value={settingsFormData.username}
+                    onChange={(e) => setSettingsFormData({ ...settingsFormData, username: e.target.value })}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
+                    placeholder="اسم المستخدم"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">اسم المستخدم الخاص بك</p>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={profileInfoSaving}
+                  className="w-full bg-gray-800 hover:bg-gray-900 text-white py-3 px-4 rounded-xl font-bold transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  {profileInfoSaving ? 'جاري الحفظ...' : 'حفظ بيانات الحساب'}
+                </button>
+              </form>
+            </div>
+
+            {/* تغيير كلمة المرور */}
+            <div className="border-2 border-gray-200 rounded-lg p-6 mb-6 bg-gray-50">
+              <h3 className="text-lg font-bold text-gray-800 mb-4">تغيير كلمة المرور</h3>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    كلمة المرور الجديدة
+                  </label>
+                  <input
+                    type="password"
+                    value={settingsFormData.newPassword}
+                    onChange={(e) => setSettingsFormData({ ...settingsFormData, newPassword: e.target.value })}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
+                    placeholder="أدخل كلمة المرور الجديدة"
+                  />
+                </div>
+
+                {settingsFormData.newPassword && (
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-2">
-                      كلمة المرور الجديدة
+                      كلمة المرور الحالية <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="password"
-                      value={settingsFormData.newPassword}
-                      onChange={(e) => setSettingsFormData({ ...settingsFormData, newPassword: e.target.value })}
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
-                      placeholder="أدخل كلمة المرور الجديدة"
+                      required
+                      value={settingsFormData.currentPassword}
+                      onChange={(e) => setSettingsFormData({ ...settingsFormData, currentPassword: e.target.value })}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
+                      placeholder="أدخل كلمة المرور الحالية للتأكيد"
                     />
+                    <p className="text-xs text-gray-500 mt-1">مطلوبة للتحقق من هويتك عند تغيير كلمة المرور</p>
                   </div>
+                )}
 
-                  {settingsFormData.newPassword && (
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2">
-                        كلمة المرور الحالية <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="password"
-                        required
-                        value={settingsFormData.currentPassword}
-                        onChange={(e) => setSettingsFormData({ ...settingsFormData, currentPassword: e.target.value })}
-                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
-                        placeholder="أدخل كلمة المرور الحالية للتأكيد"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">مطلوبة للتحقق من هويتك عند تغيير كلمة المرور</p>
-                    </div>
-                  )}
-                </div>
+                <button
+                  type="button"
+                  onClick={handlePasswordChange}
+                  className="w-full bg-gray-800 hover:bg-gray-900 text-white py-3 px-4 rounded-xl font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-4"
+                >
+                  تغيير كلمة المرور
+                </button>
               </div>
-
-              <button
-                type="button"
-                onClick={handlePasswordChange}
-                disabled={isUploadingImage}
-                className="w-full bg-gray-800 hover:bg-gray-900 text-white py-3 px-4 rounded-xl font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isUploadingImage ? 'جاري رفع الصورة...' : 'تغيير كلمة المرور'}
-              </button>
-            </form>
+            </div>
           </div>
         )}
 
         {/* Employees Tab */}
         {activeTab === 'employees' && (
-          <div className="bg-white p-8 rounded-lg shadow-md max-w-4xl mx-auto">
+          <div className="bg-white p-4 sm:p-6 md:p-8 rounded-lg shadow-md max-w-4xl mx-auto">
             <h2 className="text-2xl font-bold mb-6 text-gray-800">إدارة العاملين</h2>
 
             {/* Add/Edit Employee Form */}
-            <div ref={employeeFormRef} className={`border-2 rounded-lg p-6 mb-8 ${editingEmployeeId ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'}`}>
+            <div ref={employeeFormRef} className={`border-2 rounded-lg p-6 mb-8 ${editingEmployeeId ? 'bg-slate-100 border-slate-300' : 'bg-slate-100 border-slate-300'}`}>
               <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
                 {editingEmployeeId ? 'تحديث عامل' : (
                   <>
@@ -4881,7 +5003,7 @@ function AdminPageContent() {
                     required
                     value={employeeFormData.name}
                     onChange={(e) => setEmployeeFormData({ ...employeeFormData, name: e.target.value })}
-                    className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingEmployeeId ? 'focus:border-blue-500' : 'focus:border-green-500'}`}
+                    className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingEmployeeId ? 'focus:border-slate-500' : 'focus:border-slate-500'}`}
                     placeholder="أدخل اسم العامل"
                   />
                 </div>
@@ -4896,7 +5018,7 @@ function AdminPageContent() {
                     disabled={!!editingEmployeeId}
                     value={employeeFormData.username}
                     onChange={(e) => setEmployeeFormData({ ...employeeFormData, username: e.target.value })}
-                    className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingEmployeeId ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'focus:border-green-500'}`}
+                    className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingEmployeeId ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'focus:border-slate-500'}`}
                     placeholder="اسم مستخدم للتسجيل"
                   />
                   <p className="text-xs text-gray-500 mt-1">
@@ -4912,7 +5034,7 @@ function AdminPageContent() {
                     type="text"
                     value={employeeFormData.phone}
                     onChange={(e) => setEmployeeFormData({ ...employeeFormData, phone: e.target.value })}
-                    className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingEmployeeId ? 'focus:border-blue-500' : 'focus:border-green-500'}`}
+                    className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingEmployeeId ? 'focus:border-slate-500' : 'focus:border-slate-500'}`}
                     placeholder="مثال: 05xxxxxxxx"
                   />
                 </div>
@@ -4936,7 +5058,7 @@ function AdminPageContent() {
                       required={!editingEmployeeId}
                       value={employeeFormData.password}
                       onChange={(e) => setEmployeeFormData({ ...employeeFormData, password: e.target.value })}
-                      className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingEmployeeId ? 'focus:border-blue-500' : 'focus:border-green-500'}`}
+                      className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingEmployeeId ? 'focus:border-slate-500' : 'focus:border-slate-500'}`}
                       placeholder={editingEmployeeId ? 'اتركه فارغاً للإبقاء على كلمة المرور الحالية' : 'كلمة المرور'}
                       minLength={6}
                     />
@@ -4951,7 +5073,7 @@ function AdminPageContent() {
                       required={!editingEmployeeId}
                       value={employeeFormData.confirmPassword}
                       onChange={(e) => setEmployeeFormData({ ...employeeFormData, confirmPassword: e.target.value })}
-                      className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingEmployeeId ? 'focus:border-blue-500' : 'focus:border-green-500'}`}
+                      className={`w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none transition-colors ${editingEmployeeId ? 'focus:border-slate-500' : 'focus:border-slate-500'}`}
                       placeholder={editingEmployeeId ? 'تأكيد كلمة المرور الجديدة' : 'تأكيد كلمة المرور'}
                       minLength={6}
                     />
@@ -4967,7 +5089,7 @@ function AdminPageContent() {
                         type="checkbox"
                         checked={employeeFormData.isDelivery}
                         onChange={(e) => setEmployeeFormData({ ...employeeFormData, isDelivery: e.target.checked })}
-                        className={`w-5 h-5 border-gray-300 rounded transition-all ${editingEmployeeId ? 'text-blue-600 focus:ring-blue-500' : 'text-green-600 focus:ring-green-500'}`}
+                        className={`w-5 h-5 border-gray-300 rounded transition-all ${editingEmployeeId ? 'text-slate-600 focus:ring-slate-500' : 'text-slate-600 focus:ring-slate-500'}`}
                       />
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">عامل توصيل</span>
@@ -4979,7 +5101,7 @@ function AdminPageContent() {
                         type="checkbox"
                         checked={employeeFormData.isWaiter}
                         onChange={(e) => setEmployeeFormData({ ...employeeFormData, isWaiter: e.target.checked })}
-                        className={`w-5 h-5 border-gray-300 rounded transition-all ${editingEmployeeId ? 'text-blue-600 focus:ring-blue-500' : 'text-green-600 focus:ring-green-500'}`}
+                        className={`w-5 h-5 border-gray-300 rounded transition-all ${editingEmployeeId ? 'text-slate-600 focus:ring-slate-500' : 'text-slate-600 focus:ring-slate-500'}`}
                       />
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">نادل (طلبات الطاولة)</span>
@@ -4993,8 +5115,8 @@ function AdminPageContent() {
                     type="submit"
                     disabled={isUploadingEmployeePhoto || isSubmittingEmployee}
                     className={`flex-1 py-3 px-4 rounded-lg font-bold text-lg transition-all duration-200 transform hover:scale-[1.02] shadow-lg text-white disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none ${editingEmployeeId
-                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
-                      : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700'
+                      ? 'bg-gradient-to-r from-slate-600 to-slate-800 hover:from-slate-700 hover:to-slate-900'
+                      : 'bg-gradient-to-r from-slate-500 to-slate-600 hover:from-slate-600 hover:to-slate-700'
                       }`}
                   >
                     {isUploadingEmployeePhoto ? 'جاري رفع الصورة...' : isSubmittingEmployee ? 'جاري الحفظ...' : editingEmployeeId ? 'تحديث' : 'إضافة العامل'}
@@ -5026,7 +5148,58 @@ function AdminPageContent() {
                 </div>
               ) : (
                 <>
-                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  {/* عرض البطاقات — للشاشات الضيقة فقط */}
+                  <div className="md:hidden space-y-4">
+                    {Array.from(new Map(employees.map(emp => [emp.id, emp])).values()).map((employee) => (
+                      <div
+                        key={employee.id}
+                        className={`border border-gray-200 rounded-xl p-4 ${editingEmployeeId === employee.id ? 'bg-slate-100 border-slate-300' : 'bg-white'}`}
+                      >
+                        <div className="flex items-start gap-4">
+                          <div className="flex-shrink-0">
+                            {employee.imageUrl ? (
+                              <img src={employee.imageUrl} alt="" className="w-16 h-16 rounded-full object-cover border-2 border-gray-200" />
+                            ) : (
+                              <span className="inline-flex w-16 h-16 rounded-full bg-gray-200 items-center justify-center text-gray-400 text-lg">—</span>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-gray-800 text-lg truncate">{employee.name}</p>
+                            <p className="text-sm text-gray-500 mt-0.5">{employee.phone ?? '—'}</p>
+                            <p className="text-sm text-gray-500">@{employee.username}</p>
+                            <div className="flex gap-2 flex-wrap mt-2">
+                              {employee.isDelivery && (
+                                <span className="inline-block px-2 py-1 bg-emerald-100 text-emerald-700 text-xs font-medium rounded">عامل توصيل</span>
+                              )}
+                              {employee.isWaiter && (
+                                <span className="inline-block px-2 py-1 bg-amber-100 text-amber-700 text-xs font-medium rounded">نادل</span>
+                              )}
+                              {!employee.isDelivery && !employee.isWaiter && (
+                                <span className="inline-block px-2 py-1 bg-gray-100 text-gray-500 text-xs font-medium rounded">غير محدد</span>
+                              )}
+                            </div>
+                            <div className="flex gap-2 mt-3">
+                              <button
+                                onClick={() => handleEditEmployee(employee)}
+                                className="bg-slate-600 hover:bg-slate-700 text-white py-2 px-4 rounded-lg text-sm font-medium transition"
+                              >
+                                تحديث
+                              </button>
+                              <button
+                                onClick={() => handleDeleteEmployee(employee.id)}
+                                className="bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg text-sm font-medium transition inline-flex items-center gap-2"
+                              >
+                                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* الجدول — من md فما فوق */}
+                  <div className="hidden md:block border border-gray-200 rounded-lg overflow-hidden">
                     <table className="w-full">
                       <thead className="bg-gray-50">
                         <tr>
@@ -5040,12 +5213,12 @@ function AdminPageContent() {
                       </thead>
                       <tbody>
                         {Array.from(new Map(employees.map(emp => [emp.id, emp])).values()).map((employee) => (
-                          <tr key={employee.id} className={`border-t hover:bg-gray-50 ${editingEmployeeId === employee.id ? 'bg-blue-50' : ''}`}>
+                          <tr key={employee.id} className={`border-t hover:bg-gray-50 ${editingEmployeeId === employee.id ? 'bg-slate-100' : ''}`}>
                             <td className="px-4 py-3 text-center">
                               {employee.imageUrl ? (
-                                <img src={employee.imageUrl} alt="" className="w-10 h-10 rounded-full object-cover border border-gray-200 mx-auto" />
+                                <img src={employee.imageUrl} alt="" className="w-14 h-14 rounded-full object-cover border border-gray-200 mx-auto" />
                               ) : (
-                                <span className="inline-flex w-10 h-10 rounded-full bg-gray-200 items-center justify-center text-gray-400 text-xs">—</span>
+                                <span className="inline-flex w-14 h-14 rounded-full bg-gray-200 items-center justify-center text-gray-400 text-sm">—</span>
                               )}
                             </td>
                             <td className="px-4 py-3 text-gray-800 font-medium">{employee.name}</td>
@@ -5054,12 +5227,12 @@ function AdminPageContent() {
                             <td className="px-4 py-3">
                               <div className="flex gap-2 flex-wrap">
                                 {employee.isDelivery && (
-                                  <span className="inline-block px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                                  <span className="inline-block px-2 py-1 bg-emerald-100 text-emerald-700 text-xs font-medium rounded">
                                     عامل توصيل
                                   </span>
                                 )}
                                 {employee.isWaiter && (
-                                  <span className="inline-block px-2 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded">
+                                  <span className="inline-block px-2 py-1 bg-amber-100 text-amber-700 text-xs font-medium rounded">
                                     نادل
                                   </span>
                                 )}
@@ -5074,15 +5247,15 @@ function AdminPageContent() {
                               <div className="flex gap-2 justify-center">
                                 <button
                                   onClick={() => handleEditEmployee(employee)}
-                                  className="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-sm transition"
+                                  className="bg-slate-600 hover:bg-slate-700 text-white py-1 px-3 rounded text-sm transition"
                                 >
                                   تحديث
                                 </button>
                                 <button
                                   onClick={() => handleDeleteEmployee(employee.id)}
-                                  className="bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded text-sm transition"
+                                  className="bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded text-sm transition inline-flex items-center gap-1.5"
                                 >
-                                  حذف
+                                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                 </button>
                               </div>
                             </td>
@@ -5135,13 +5308,13 @@ function AdminPageContent() {
         {activeTab === 'tableOrders' && (
           <div className="bg-white p-8 rounded-lg shadow-md">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">طلبات الطاولة</h2>
+              <h2 className="text-2xl font-bold text-gray-800">طلبات الطاولة الواردة</h2>
               {currentAdmin?.isAcceptingTableOrders && (
                 <div className="flex flex-col items-end gap-1">
                   <button
                     onClick={refreshTableOrders}
                     disabled={isRefreshingTableOrders}
-                    className="flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     title="تحديث طلبات الطاولات"
                   >
                     <svg
@@ -5180,17 +5353,17 @@ function AdminPageContent() {
                   const tableOrdersForTable = tableOrders.filter(order => order.tableNumber === tableNum);
 
                   return (
-                    <div key={tableNum} className="border-2 border-purple-200 rounded-xl px-2 py-4 bg-purple-50">
+                    <div key={tableNum} className="border-2 border-amber-200 rounded-xl px-2 py-4 bg-amber-50">
                       {/* Table Header */}
                       <div className="flex flex-row justify-between items-start mb-4 gap-4">
                         <div className="flex-1">
-                          <h3 className="text-xl font-bold text-purple-800 mb-3">طاولة رقم {tableNum}</h3>
+                          <h3 className="text-xl font-bold text-amber-800 mb-3">طاولة رقم {tableNum}</h3>
                           <div className="flex flex-col sm:flex-row gap-2 items-start">
                             <a
                               href={tableUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="w-auto px-2 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-bold transition-colors whitespace-nowrap text-center"
+                              className="w-auto px-2 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-bold transition-colors whitespace-nowrap text-center"
                             >
                               عرض الصفحة
                             </a>
@@ -5208,7 +5381,7 @@ function AdminPageContent() {
 
                         {/* QR Code */}
                         <div className="flex-shrink-0">
-                          <div className="w-32 h-32 bg-white border-2 border-purple-300 rounded-lg p-2">
+                            <div className="w-32 h-32 bg-white border-2 border-amber-300 rounded-lg p-2">
                             <img
                               src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(tableUrl)}`}
                               alt={`QR Code للطاولة ${tableNum}`}
@@ -5220,11 +5393,11 @@ function AdminPageContent() {
 
                       {/* Orders for this table */}
                       <div className="mt-3">
-                        <h4 className="font-bold text-gray-700 mb-2">
+                        <h4 className="font-bold text-amber-800 mb-2">
                           الطلبات الواردة ({tableOrdersForTable.length})
                         </h4>
                         {tableOrdersForTable.length === 0 ? (
-                          <p className="text-gray-500 text-center py-4">لا توجد طلبات لهذه الطاولة بعد</p>
+                          <p className="text-amber-600 text-center py-4">لا توجد طلبات لهذه الطاولة بعد</p>
                         ) : (
                           <div className="space-y-3">
                             {tableOrdersForTable
@@ -5253,7 +5426,7 @@ function AdminPageContent() {
                                 };
 
                                 return (
-                                  <div key={order.id} className="bg-white border-2 border-gray-200 rounded-lg p-3">
+                                  <div key={order.id} className="bg-amber-50 border-2 border-amber-300 rounded-lg p-3">
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
                                       {/* Date & Order ID - Row 1, Left */}
                                       <div className="col-span-1 md:col-span-1">
@@ -5263,9 +5436,9 @@ function AdminPageContent() {
 
                                       {/* Price & Discount - Row 1, Right on mobile, Far right on desktop */}
                                       <div className="col-span-1 md:col-span-1 md:order-3 text-left">
-                                        <p className="text-2xl font-black text-purple-600">{order.totalPrice} جـ</p>
+                                        <p className="text-2xl font-black text-gray-800">{order.totalPrice} جـ</p>
                                         {order.totalDiscount > 0 && (
-                                          <p className="text-sm text-green-600 font-bold">وفر {order.totalDiscount} جـ</p>
+                                          <p className="text-sm text-amber-600 font-bold">وفر {order.totalDiscount} جـ</p>
                                         )}
                                       </div>
 
@@ -5273,7 +5446,7 @@ function AdminPageContent() {
                                       <div className="col-span-2 md:col-span-1 md:order-2 flex items-center justify-center">
                                         <button
                                           onClick={toggleExpand}
-                                          className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold transition flex items-center gap-2 whitespace-nowrap w-full md:w-auto justify-center"
+                                          className="bg-amber-100 hover:bg-amber-200 text-gray-700 px-4 py-2 rounded-lg font-semibold transition flex items-center gap-2 whitespace-nowrap w-full md:w-auto justify-center border border-amber-200"
                                         >
                                           <svg
                                             className={`w-5 h-5 ${isExpanded ? 'rotate-180' : ''}`}
@@ -5299,7 +5472,7 @@ function AdminPageContent() {
                                       >
                                         <div className="space-y-2 mb-3">
                                           {order.items.map((item: any, idx: number) => (
-                                            <div key={idx} className="flex items-center bg-gray-50 p-3 rounded-lg">
+                                            <div key={idx} className="flex items-center bg-amber-50 border border-amber-200 p-3 rounded-lg">
                                               <div className="flex items-center gap-3 flex-1">
                                                 {item.imageUrl && (
                                                   <img src={item.imageUrl} alt={item.name} className="w-12 h-12 object-cover rounded-lg" />
@@ -5308,7 +5481,7 @@ function AdminPageContent() {
                                                   <p className="font-bold text-gray-800">{item.quantity} {item.name}</p>
                                                 </div>
                                               </div>
-                                              <div className="border-r-2 border-gray-300 mx-3 self-stretch"></div>
+                                              <div className="border-r-2 border-amber-300 mx-3 self-stretch"></div>
                                               <div className="text-left flex-shrink-0">
                                                 <p className="font-bold text-gray-800 whitespace-nowrap">
                                                   {(item.discountedPrice || item.price) * item.quantity} جـ
@@ -5326,7 +5499,7 @@ function AdminPageContent() {
                                     </div>
 
                                     {/* Order Status Buttons */}
-                                    <div className="mt-3 pt-3 border-t border-gray-200">
+                                    <div className="mt-3 pt-3 border-t border-amber-200">
                                       <div className="flex gap-2 flex-wrap md:flex-nowrap md:items-center">
                                         {/* Status Buttons */}
                                         <div className="flex flex-wrap gap-1 flex-1 md:flex-initial">
@@ -5338,10 +5511,10 @@ function AdminPageContent() {
                                               : userType === 'employee' && !currentAdmin?.enableWaiters && (order.status || 'pending') === 'pending' ?
                                                 'bg-gray-400 text-gray-600 cursor-not-allowed'
                                                 : (order.status || 'pending') === 'pending'
-                                                  ? 'bg-purple-600 text-white shadow-md'
+                                                  ? 'bg-amber-800 text-white shadow-md'
                                                   : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'pending'
-                                                    ? 'bg-purple-200 text-gray-700'
-                                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                    ? 'bg-amber-200 text-gray-700'
+                                                    : 'bg-amber-100 text-gray-700 hover:bg-amber-200'
                                               }`}
                                             title="جديد"
                                           >
@@ -5355,10 +5528,10 @@ function AdminPageContent() {
                                               : userType === 'employee' && !currentAdmin?.enableWaiters && order.status === 'read' ?
                                                 'bg-gray-400 text-gray-600 cursor-not-allowed'
                                                 : order.status === 'read'
-                                                  ? 'bg-fuchsia-600 text-white shadow-md'
+                                                  ? 'bg-amber-700 text-white shadow-md'
                                                   : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'read'
-                                                    ? 'bg-fuchsia-200 text-gray-700'
-                                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                    ? 'bg-amber-200 text-gray-700'
+                                                    : 'bg-amber-100 text-gray-700 hover:bg-amber-200'
                                               }`}
                                             title="مقروء"
                                           >
@@ -5372,10 +5545,10 @@ function AdminPageContent() {
                                               : userType === 'employee' && !currentAdmin?.enableWaiters && order.status === 'served' ?
                                                 'bg-gray-400 text-gray-600 cursor-not-allowed'
                                                 : order.status === 'served'
-                                                  ? 'bg-pink-600 text-white shadow-md'
+                                                  ? 'bg-amber-600 text-white shadow-md'
                                                   : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'served'
-                                                    ? 'bg-pink-200 text-gray-700'
-                                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                    ? 'bg-amber-200 text-gray-700'
+                                                    : 'bg-amber-100 text-gray-700 hover:bg-amber-200'
                                               }`}
                                             title="تم التقديم"
                                           >
@@ -5389,10 +5562,10 @@ function AdminPageContent() {
                                               : userType === 'employee' && !currentAdmin?.enableWaiters && order.status === 'completed' ?
                                                 'bg-gray-400 text-gray-600 cursor-not-allowed'
                                                 : order.status === 'completed'
-                                                  ? 'bg-rose-600 text-white shadow-md'
+                                                  ? 'bg-amber-500 text-white shadow-md'
                                                   : updatingTableOrderStatus?.orderId === order.id && updatingTableOrderStatus?.status === 'completed'
-                                                    ? 'bg-rose-200 text-gray-700'
-                                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                    ? 'bg-amber-200 text-gray-700'
+                                                    : 'bg-amber-100 text-gray-700 hover:bg-amber-200'
                                               }`}
                                             title="تم"
                                           >
@@ -5422,12 +5595,12 @@ function AdminPageContent() {
                                               setDeletingTableOrderId(null);
                                             }}
                                             disabled={deletingTableOrderId === order.id}
-                                            className={`w-full md:w-auto px-4 py-2 rounded-lg text-sm font-medium transition ${deletingTableOrderId === order.id
+                                            className={`w-full md:w-auto px-4 py-2 rounded-lg text-sm font-medium transition inline-flex items-center justify-center gap-2 ${deletingTableOrderId === order.id
                                               ? 'bg-red-100 text-gray-400 cursor-not-allowed'
                                               : 'bg-red-500 hover:bg-red-600 text-white'
                                               }`}
                                           >
-                                            مسح
+                                            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                           </button>
                                         )}
                                       </div>

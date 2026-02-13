@@ -871,6 +871,47 @@ function appendTableCompletionsToOrdersOverTime(
   db.admins[adminIndex] = admin;
 }
 
+/** أول تاريخ YYYY-MM-DD يظهر في لوجز التوصيل أو الطاولة لهذا الأدمن؛ إن لم يوجد أي لوج يُرجع null. */
+function getEarliestLogDateKey(db: Database, adminId: string): string | null {
+  let earliest: string | null = null;
+  for (const log of db.deliveryOrderStatusLogs) {
+    if (log.adminId !== adminId || !log.createdAt) continue;
+    const key = toDateKey(log.createdAt);
+    if (!earliest || key < earliest) earliest = key;
+  }
+  for (const log of db.tableOrderStatusLogs) {
+    if (log.adminId !== adminId || !log.createdAt) continue;
+    const key = toDateKey(log.createdAt);
+    if (!earliest || key < earliest) earliest = key;
+  }
+  return earliest;
+}
+
+/** توقيت التقرير لتحديد «أمس»: يُستخدم حتى عند تشغيل السيرفر في UTC (مثلاً 1:45 ص مصر = لا يزال يوم 10 في UTC). */
+const REPORTING_TIMEZONE = 'Africa/Cairo';
+const REPORTING_UTC_OFFSET_HOURS = 2;
+
+/** كل تواريخ YYYY-MM-DD (UTC) من start إلى end شاملة. */
+function getDateKeysInRange(start: Date, end: Date): string[] {
+  const keys: string[] = [];
+  const d = new Date(start);
+  d.setUTCHours(0, 0, 0, 0);
+  const endDay = new Date(end);
+  endDay.setUTCHours(0, 0, 0, 0);
+  while (d.getTime() <= endDay.getTime()) {
+    keys.push(d.toISOString().slice(0, 10));
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return keys;
+}
+
+/** آخر لحظة من يوم معيّن (YYYY-MM-DD) في توقيت التقرير، كـ Date (UTC timestamp). */
+function endOfDayInReportingTZ(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const hourUTC = 23 - REPORTING_UTC_OFFSET_HOURS;
+  return new Date(Date.UTC(y, m - 1, d, hourUTC, 59, 59, 999));
+}
+
 /** إذا مرّ يوم على cachedAt يُلحَق التمام منذ اليوم التالي لآخر تاريخ موجود في الكاش حتى أمس (استبعاد اليوم). باقة Business فقط. */
 export function ensureOrdersOverTimeCacheRecomputed(db: Database, adminIndex: number): void {
   const admin = db.admins[adminIndex];
@@ -881,7 +922,14 @@ export function ensureOrdersOverTimeCacheRecomputed(db: Database, adminIndex: nu
   const oneDayMs = 24 * 60 * 60 * 1000;
   if (now.getTime() - cachedAt.getTime() < oneDayMs) return;
 
-  // بداية النطاق: اليوم التالي لآخر تاريخ له بيانات في الكاش (وليس اليوم التالي لـ cachedAt)
+  // نهاية النطاق: آخر لحظة من «أمس» بتوقيت التقرير (مصر)
+  const todayInReportingTZ = now.toLocaleDateString('en-CA', { timeZone: REPORTING_TIMEZONE });
+  const [y, mo, day] = todayInReportingTZ.split('-').map(Number);
+  const yesterdayDate = new Date(Date.UTC(y, mo - 1, day - 1));
+  const yesterdayStr = yesterdayDate.toISOString().slice(0, 10);
+  const end = endOfDayInReportingTZ(yesterdayStr);
+
+  // بداية النطاق: اليوم التالي لآخر تاريخ له بيانات في الكاش؛ إن كان الكاش فارغاً نعتمد أول يوم يظهر في اللوجز (لا نستخدم cachedAt فقد يكون 1970)
   const allDateKeys = [...Object.keys(cache.delivery), ...Object.keys(cache.table)];
   let start: Date;
   if (allDateKeys.length > 0) {
@@ -889,12 +937,14 @@ export function ensureOrdersOverTimeCacheRecomputed(db: Database, adminIndex: nu
     start = new Date(lastKey + 'T00:00:00.000Z');
     start.setUTCDate(start.getUTCDate() + 1);
   } else {
-    start = new Date(cachedAt);
-    start.setUTCHours(0, 0, 0, 0);
+    const earliestKey = getEarliestLogDateKey(db, admin.id);
+    if (earliestKey) {
+      start = new Date(earliestKey + 'T00:00:00.000Z');
+    } else {
+      start = new Date(end.getTime() + 1);
+    }
   }
-  const end = new Date(now);
-  end.setUTCDate(end.getUTCDate() - 1);
-  end.setUTCHours(23, 59, 59, 999);
+
   if (start.getTime() > end.getTime()) {
     cache.cachedAt = now.toISOString();
     db.admins[adminIndex] = admin;
@@ -902,6 +952,15 @@ export function ensureOrdersOverTimeCacheRecomputed(db: Database, adminIndex: nu
   }
   appendDeliveryCompletionsToOrdersOverTime(db, adminIndex, start, end);
   appendTableCompletionsToOrdersOverTime(db, adminIndex, start, end);
+
+  // أي يوم في النطاق بدون طلبات لا يُضاف من اللوجز — نملأه صراحة كيوم صفري
+  const dateKeysInRange = getDateKeysInRange(start, end);
+  const zeroDay = { completedCount: 0, revenue: 0, customerSaved: 0 };
+  for (const key of dateKeysInRange) {
+    if (!cache.delivery[key]) cache.delivery[key] = { ...zeroDay };
+    if (!cache.table[key]) cache.table[key] = { ...zeroDay };
+  }
+
   const admin2 = db.admins[adminIndex];
   if (admin2.ordersOverTimeCache) admin2.ordersOverTimeCache.cachedAt = now.toISOString();
   db.admins[adminIndex] = admin2;
