@@ -3233,21 +3233,21 @@ function AdminPageContent() {
                                   const S = (w as CardWithRank & { _S: number })._S;
                                   const R = (w as CardWithRank & { _R: number })._R;
                                   return (
-                                    <div className="space-y-3 text-center">
-                                      <div className="flex flex-wrap gap-1.5 justify-center">
-                                        <span className={`inline-flex flex-col items-center px-2 py-1 rounded-lg text-[10px] font-medium min-w-[3.5rem] leading-tight ${w.isDelivery ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-400'}`}>
+                                    <div className="space-y-2 sm:space-y-3 text-center">
+                                      <div className="flex flex-wrap gap-1 sm:gap-1.5 justify-center">
+                                        <span className={`inline-flex flex-col items-center px-1 py-0.5 sm:px-2 sm:py-1 rounded-lg text-[10px] font-medium min-w-0 sm:min-w-[3.5rem] leading-tight ${w.isDelivery ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-400'}`}>
                                           <span>موصِّل</span>
-                                          <span className="text-sm font-bold mt-0.5">{w.deliveryForward ?? '—'}</span>
+                                          <span className="text-sm font-bold mt-0 sm:mt-0.5">{w.deliveryForward ?? '—'}</span>
                                           <span className="text-[9px] text-gray-500 mt-0">{w.deliveryDowngrade ?? '—'}</span>
                                         </span>
-                                        <span className={`inline-flex flex-col items-center px-2 py-1 rounded-lg text-[10px] font-medium min-w-[3.5rem] leading-tight ${w.isWaiter ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-400'}`}>
+                                        <span className={`inline-flex flex-col items-center px-1 py-0.5 sm:px-2 sm:py-1 rounded-lg text-[10px] font-medium min-w-0 sm:min-w-[3.5rem] leading-tight ${w.isWaiter ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-400'}`}>
                                           <span>نادل</span>
-                                          <span className="text-sm font-bold mt-0.5">{w.tableForward ?? '—'}</span>
+                                          <span className="text-sm font-bold mt-0 sm:mt-0.5">{w.tableForward ?? '—'}</span>
                                           <span className="text-[9px] text-gray-500 mt-0">{w.tableDowngrade ?? '—'}</span>
                                         </span>
                                       </div>
-                                      <div className="space-y-1 text-xs text-gray-600">
-                                        <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5">
+                                      <div className="space-y-0.5 sm:space-y-1 text-xs text-gray-600">
+                                        <p className="flex flex-wrap items-center justify-center gap-x-1 sm:gap-x-2 gap-y-0.5">
                                           <span className="text-gray-500 font-medium">النقاط:</span>
                                           <span className="font-semibold text-gray-800">{fmt(S)}</span>
                                           <span className="text-gray-400">·</span>
@@ -3255,7 +3255,7 @@ function AdminPageContent() {
                                           <span className="text-gray-400">·</span>
                                           <span className="font-semibold text-amber-700">{fmt(pointsTable)}</span>
                                         </p>
-                                        <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5">
+                                        <p className="flex flex-wrap items-center justify-center gap-x-1 sm:gap-x-2 gap-y-0.5">
                                           <span className="text-gray-500 font-medium">الكفاءة:</span>
                                           <span className="font-semibold text-gray-800">{Math.round(R)}</span>
                                           <span className="text-gray-400">·</span>
@@ -3267,16 +3267,16 @@ function AdminPageContent() {
                                     </div>
                                   );
                                 })() : (
-                                  <div className="space-y-3 text-center">
-                                    <div className="flex flex-wrap gap-1.5 justify-center">
-                                      <span className={`inline-flex flex-col items-center px-2 py-1 rounded-lg text-[10px] font-medium min-w-[3.5rem] leading-tight ${w.isDelivery ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-400'}`}>
+                                  <div className="space-y-2 sm:space-y-3 text-center">
+                                    <div className="flex flex-wrap gap-1 sm:gap-1.5 justify-center">
+                                      <span className={`inline-flex flex-col items-center px-1 py-0.5 sm:px-2 sm:py-1 rounded-lg text-[10px] font-medium min-w-0 sm:min-w-[3.5rem] leading-tight ${w.isDelivery ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-400'}`}>
                                         <span>توصيل</span>
-                                        <span className="text-sm font-bold mt-0.5">{w.deliveryForward ?? '—'}</span>
+                                        <span className="text-sm font-bold mt-0 sm:mt-0.5">{w.deliveryForward ?? '—'}</span>
                                         <span className="text-[9px] text-gray-500 mt-0">{w.deliveryDowngrade ?? '—'}</span>
                                       </span>
-                                      <span className={`inline-flex flex-col items-center px-2 py-1 rounded-lg text-[10px] font-medium min-w-[3.5rem] leading-tight ${w.isWaiter ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-400'}`}>
+                                      <span className={`inline-flex flex-col items-center px-1 py-0.5 sm:px-2 sm:py-1 rounded-lg text-[10px] font-medium min-w-0 sm:min-w-[3.5rem] leading-tight ${w.isWaiter ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-400'}`}>
                                         <span>نادل</span>
-                                        <span className="text-sm font-bold mt-0.5">{w.tableForward ?? '—'}</span>
+                                        <span className="text-sm font-bold mt-0 sm:mt-0.5">{w.tableForward ?? '—'}</span>
                                         <span className="text-[9px] text-gray-500 mt-0">{w.tableDowngrade ?? '—'}</span>
                                       </span>
                                     </div>
@@ -3452,9 +3452,9 @@ function AdminPageContent() {
                                                       );
                                                     })}
                                                   </svg>
-                                                  <div className="absolute inset-x-0 flex justify-between px-[8%] gap-1" dir="rtl" style={{ top: '50%', transform: 'translateY(-50%)', marginTop: '-2px' }}>
+                                                  <div className="absolute inset-x-0 flex justify-between px-[8%] gap-0.5 sm:gap-1" dir="rtl" style={{ top: '50%', transform: 'translateY(-50%)', marginTop: '-2px' }}>
                                                     {labels.map((name, i) => (
-                                                      <span key={i} className="text-center text-[15px] font-medium text-slate-600 flex-1 bg-white/95 rounded-md px-2 py-1 border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.04)]" style={{ maxWidth: '24%' }}>{name}</span>
+                                                      <span key={i} className="text-center text-[10px] sm:text-[15px] font-medium text-slate-600 flex-1 bg-white/95 rounded px-0.5 py-0.5 sm:px-2 sm:py-1 sm:rounded-md border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.04)]" style={{ maxWidth: '24%' }}>{name}</span>
                                                     ))}
                                                   </div>
                                                 </div>
@@ -3864,9 +3864,9 @@ function AdminPageContent() {
                                         );
                                       })}
                                     </svg>
-                                    <div className="absolute inset-x-0 flex justify-between px-[8%] gap-1" dir="rtl" style={{ top: '50%', transform: 'translateY(-50%)', marginTop: '-2px' }}>
+                                    <div className="absolute inset-x-0 flex justify-between px-[8%] gap-0.5 sm:gap-1" dir="rtl" style={{ top: '50%', transform: 'translateY(-50%)', marginTop: '-2px' }}>
                                       {labels.map((name, i) => (
-                                        <span key={i} className="text-center text-[15px] font-medium text-slate-600 flex-1 bg-white/95 rounded-md px-2 py-1 border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.04)]" style={{ maxWidth: '24%' }}>{name}</span>
+                                        <span key={i} className="text-center text-[10px] sm:text-[15px] font-medium text-slate-600 flex-1 bg-white/95 rounded px-0.5 py-0.5 sm:px-2 sm:py-1 sm:rounded-md border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.04)]" style={{ maxWidth: '24%' }}>{name}</span>
                                       ))}
                                     </div>
                                   </div>
