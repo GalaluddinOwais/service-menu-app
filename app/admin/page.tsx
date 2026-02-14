@@ -110,11 +110,11 @@ function AdminPageContent() {
   const [selectedList, setSelectedList] = useState<MenuList | null>(null);
   const [editingList, setEditingList] = useState<MenuList | null>(null);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
-  type TabType = 'summary' | 'lists' | 'settings' | 'clientSettings' | 'delivery' | 'orders' | 'tableOrders' | 'employees' | 'workersActivity';
+  type TabType = 'summary' | 'lists' | 'settings' | 'clientSettings' | 'delivery' | 'orders' | 'tableOrders' | 'employees' | 'workersActivity' | 'customerActivity';
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const tabParam = searchParams.get('tab');
-  const TAB_VALUES: TabType[] = ['summary', 'lists', 'settings', 'clientSettings', 'delivery', 'orders', 'tableOrders', 'employees', 'workersActivity'];
+  const TAB_VALUES: TabType[] = ['summary', 'lists', 'settings', 'clientSettings', 'delivery', 'orders', 'tableOrders', 'employees', 'workersActivity', 'customerActivity'];
   const activeTab: TabType = TAB_VALUES.includes(tabParam as TabType) ? (tabParam as TabType) : 'summary';
   const setActiveTab = (tab: TabType) => {
     router.push(`${pathname}?tab=${tab}`, { scroll: false });
@@ -239,6 +239,24 @@ function AdminPageContent() {
   const [expandedWorkerDeliveryLogs, setExpandedWorkerDeliveryLogs] = useState<{ logs: unknown[]; total: number; page: number; limit: number }>({ logs: [], total: 0, page: 1, limit: 10 });
   const [expandedWorkerTableLogs, setExpandedWorkerTableLogs] = useState<{ logs: unknown[]; total: number; page: number; limit: number }>({ logs: [], total: 0, page: 1, limit: 10 });
   const [expandedWorkerLoading, setExpandedWorkerLoading] = useState(false);
+
+  // نشاط العملاء (Basic+): قائمة اسم+رقم+عداد فقط؛ التفاصيل (عنوان) بطلب منفصل عند النقر
+  type CustomerRow = { adminId: string; phone: string; name: string; orderCount: number };
+  type CustomerDetailRow = CustomerRow & { address?: string };
+  const [customerActivityCustomers, setCustomerActivityCustomers] = useState<CustomerRow[]>([]);
+  const [customerActivityTotal, setCustomerActivityTotal] = useState(0);
+  const [customerActivityPage, setCustomerActivityPage] = useState(1);
+  const [customerActivityTotalPages, setCustomerActivityTotalPages] = useState(1);
+  const [customerActivitySearch, setCustomerActivitySearch] = useState('');
+  const [customerActivitySearchSent, setCustomerActivitySearchSent] = useState('');
+  const [customerActivityLoading, setCustomerActivityLoading] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerRow | null>(null);
+  const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<CustomerDetailRow | null>(null);
+  const customerDetailsRef = useRef<HTMLDivElement>(null);
+  const CUSTOMER_ACTIVITY_PAGE_SIZE = 9;
+  type CustomerStatsRow = { orders: unknown[]; topItems: { name: string; count: number }[]; lastOrderAt: string | null; totalPaid: number; totalSaved: number; fromCache?: boolean };
+  const [customerActivityStats, setCustomerActivityStats] = useState<CustomerStatsRow | null>(null);
+  const [customerActivityStatsLoading, setCustomerActivityStatsLoading] = useState(false);
 
   // تقييم الموظف (نقاط، كفاءة، ترتيب عام، ترتيب توصيل، ترتيب ندلاء) — للموظف فقط (باقة البزنس)
   const [employeeRatingInfo, setEmployeeRatingInfo] = useState<{
@@ -589,6 +607,12 @@ function AdminPageContent() {
     if (activeTab !== 'workersActivity' || isPlanActive('business')) return;
     setActiveTab(userType === 'admin' ? 'summary' : isDelivery ? 'orders' : isWaiter ? 'tableOrders' : 'orders');
   }, [activeTab, userType, isDelivery, isWaiter, currentAdmin?.plan]);
+
+  // إذا فُتح تبويب نشاط العملاء دون Basic (أو بغير أدمن) — إعادة التوجيه
+  useEffect(() => {
+    if (activeTab !== 'customerActivity' || (userType === 'admin' && isPlanActive('basic'))) return;
+    setActiveTab('summary');
+  }, [activeTab, userType, currentAdmin?.plan]);
 
   const handleLogout = () => {
     localStorage.removeItem('admin_data');
@@ -994,6 +1018,41 @@ function AdminPageContent() {
   useEffect(() => {
     if (activeTab === 'workersActivity') fetchWorkersActivityList();
   }, [activeTab, userType, currentAdmin?.id, currentEmployeeId, currentAdmin?.plan, employees.length]);
+
+  const fetchCustomerActivityList = async () => {
+    if (!currentAdmin) return;
+    setCustomerActivityLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(customerActivityPage),
+        limit: String(CUSTOMER_ACTIVITY_PAGE_SIZE)
+      });
+      if (customerActivitySearchSent.trim()) params.set('search', customerActivitySearchSent.trim());
+      const res = await fetch(`/api/customers?${params}`, { headers: getAuthHeaders() });
+      const data = await res.json();
+      if (res.ok && Array.isArray(data.customers)) {
+        setCustomerActivityCustomers(data.customers);
+        setCustomerActivityTotal(data.total ?? 0);
+        setCustomerActivityTotalPages(Math.max(1, data.totalPages ?? 1));
+      } else {
+        setCustomerActivityCustomers([]);
+        setCustomerActivityTotal(0);
+        setCustomerActivityTotalPages(1);
+      }
+    } catch {
+      setCustomerActivityCustomers([]);
+      setCustomerActivityTotal(0);
+      setCustomerActivityTotalPages(1);
+    } finally {
+      setCustomerActivityLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'customerActivity' && currentAdmin) {
+      fetchCustomerActivityList();
+    }
+  }, [activeTab, currentAdmin?.id, customerActivityPage, customerActivitySearchSent]);
 
   // جلب تقييم الموظف (نقاط، كفاءة، ترتيب) عند فتح تبويب نشاطي — للموظف فقط
   useEffect(() => {
@@ -2131,6 +2190,19 @@ function AdminPageContent() {
                   }`}
               >
                 {userType === 'admin' ? 'نشاط العاملين' : 'نشاطي'}
+              </button>
+            )}
+
+            {/* نشاط العملاء — للأدمن فقط، Basic فأعلى */}
+            {userType === 'admin' && isPlanActive('basic') && (
+              <button
+                onClick={() => { setActiveTab('customerActivity'); setIsSidebarOpen(false); }}
+                className={`w-full text-right px-4 py-3 rounded-lg font-bold transition-colors ${activeTab === 'customerActivity'
+                  ? 'bg-gray-800 text-white'
+                  : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+              >
+                نشاط العملاء
               </button>
             )}
 
@@ -4016,6 +4088,185 @@ function AdminPageContent() {
             )}
           </div>
         )}
+
+        {activeTab === 'customerActivity' && (
+          <div className="w-full max-w-4xl mx-auto p-4 space-y-6" dir="rtl">
+            <h2 className="text-2xl font-bold text-gray-800">نشاط العملاء</h2>
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+              <input
+                type="search"
+                placeholder="بحث بالاسم أو الرقم أو العنوان..."
+                value={customerActivitySearch}
+                onChange={(e) => setCustomerActivitySearch(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && (setCustomerActivitySearchSent(customerActivitySearch), setCustomerActivityPage(1))}
+                className="flex-1 min-w-0 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400 text-gray-800"
+              />
+              <button
+                type="button"
+                onClick={() => { setCustomerActivitySearchSent(customerActivitySearch); setCustomerActivityPage(1); }}
+                className="px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white rounded-lg font-semibold transition"
+              >
+                بحث
+              </button>
+            </div>
+            {customerActivityLoading ? (
+              <p className="text-gray-500">جاري تحميل العملاء...</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {customerActivityCustomers.map((c) => (
+                    <button
+                      key={`${c.adminId}-${c.phone}`}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCustomer(c);
+                        setSelectedCustomerDetail(null);
+                        setCustomerActivityStats(null);
+                        fetch(`/api/customers/detail?phone=${encodeURIComponent(c.phone)}`, { headers: getAuthHeaders() })
+                          .then((r) => r.json())
+                          .then((data) => {
+                            if (data?.customer) setSelectedCustomerDetail({ ...data.customer, address: data.customer.address });
+                          })
+                          .catch(() => setSelectedCustomerDetail(null));
+                        if (isPlanActive('business')) {
+                          setCustomerActivityStatsLoading(true);
+                          fetch(`/api/customers/stats?phone=${encodeURIComponent(c.phone)}`, { headers: getAuthHeaders() })
+                            .then((r) => r.json())
+                            .then((data) => {
+                              if (!data.error) setCustomerActivityStats(data);
+                              else setCustomerActivityStats(null);
+                            })
+                            .catch(() => setCustomerActivityStats(null))
+                            .finally(() => setCustomerActivityStatsLoading(false));
+                        }
+                        setTimeout(() => customerDetailsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+                      }}
+                      className="bg-white rounded-xl shadow border border-gray-100 p-0 overflow-hidden text-right hover:bg-gray-50 transition-colors flex items-stretch"
+                    >
+                      <div className="flex-1 p-4 flex flex-col justify-center min-w-0 border-l border-gray-100">
+                        <p className="font-bold text-gray-800 truncate">{c.name || '—'}</p>
+                        <p className="text-sm text-gray-700 mt-1">{c.phone}</p>
+                      </div>
+                      <div className="relative flex flex-col justify-center items-center px-3 py-3 min-w-[4rem]" style={{ minHeight: '4.5rem' }} title="عدد الطلبات">
+                        <svg className="w-11 h-11 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                        <span className="absolute inset-0 flex items-center justify-center pt-4 translate-x-0.3 text-base font-black text-gray-800 tabular-nums">{c.orderCount ?? 0}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                {customerActivityTotal > CUSTOMER_ACTIVITY_PAGE_SIZE && (
+                  <div className="mt-6 flex justify-center items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCustomerActivityPage((p) => Math.max(1, p - 1))}
+                      disabled={customerActivityPage <= 1}
+                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      السابق
+                    </button>
+                    <div className="flex gap-1">
+                      {Array.from({ length: customerActivityTotalPages }, (_, i) => i + 1).map((page) => (
+                        <button
+                          key={page}
+                          type="button"
+                          onClick={() => setCustomerActivityPage(page)}
+                          className={`px-3 py-2 rounded-lg font-semibold transition ${customerActivityPage === page ? 'bg-gray-800 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+                        >
+                          {page}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCustomerActivityPage((p) => Math.min(customerActivityTotalPages, p + 1))}
+                      disabled={customerActivityPage >= customerActivityTotalPages}
+                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      التالي
+                    </button>
+                  </div>
+                )}
+                <div ref={customerDetailsRef} className="pt-6 border-t border-gray-200">
+                  {selectedCustomer && (
+                    <div className="bg-white rounded-xl shadow border border-gray-100 p-6 space-y-4">
+                      <h3 className="text-lg font-bold text-gray-800">تفاصيل العميل</h3>
+                      <p className="text-lg font-bold text-gray-800">{(selectedCustomerDetail ?? selectedCustomer).name || '—'}</p>
+                      <div className="flex flex-col gap-2 text-sm">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                          <span className="font-medium text-gray-800">{(selectedCustomerDetail ?? selectedCustomer).phone}</span>
+                        </div>
+                        {selectedCustomerDetail != null && (
+                          <div className="flex items-center gap-2">
+                            <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                            <span className="text-gray-800">{selectedCustomerDetail.address || '—'}</span>
+                          </div>
+                        )}
+                      </div>
+                      {isPlanActive('business') && (
+                        <div className="pt-4 border-t border-gray-100">
+                          {customerActivityStatsLoading ? (
+                            <p className="text-gray-500 text-sm">جاري تحميل الإحصائيات...</p>
+                          ) : customerActivityStats ? (
+                            <div className="space-y-4 text-sm">
+                              <div className="flex flex-wrap gap-6 items-baseline justify-between w-full">
+                                <div>
+                                  {customerActivityStats.lastOrderAt != null && (
+                                    <span className="text-gray-600">توقيت آخر طلب   <span className="text-gray-800 font-medium">{new Date(customerActivityStats.lastOrderAt).toLocaleString('ar-SA', { dateStyle: 'short', timeStyle: 'short' })}</span></span>
+                                  )}
+                                </div>
+                                <div className="flex flex-wrap gap-6 items-baseline">
+                                  <span className="text-gray-800">دفع إجمالا <span className="font-bold">{(customerActivityStats.totalPaid ?? 0).toFixed(0)} جـ</span></span>
+                                  <span className="text-gray-800">وفر إجمالا <span className="font-bold text-gray-700">{(customerActivityStats.totalSaved ?? 0).toFixed(0)} جـ</span></span>
+                                </div>
+                              </div>
+                              {customerActivityStats.topItems?.length > 0 && (() => {
+                                const PIE_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+                                const segments = customerActivityStats.topItems.map((s, i) => ({ ...s, color: PIE_COLORS[i % PIE_COLORS.length] }));
+                                const total = segments.reduce((sum, s) => sum + s.count, 0);
+                                let cumulative = 0;
+                                const conicParts = segments.map(s => {
+                                  const pct = total ? (s.count / total) * 100 : 0;
+                                  const part = `${s.color} ${cumulative}% ${cumulative + pct}%`;
+                                  cumulative += pct;
+                                  return part;
+                                });
+                                const centerCount = (selectedCustomerDetail ?? selectedCustomer).orderCount ?? 0;
+                                return (
+                                  <div className="flex flex-col items-center">
+                                    <div className="relative w-36 h-36 flex-shrink-0 flex items-center justify-center" title={segments.map(s => `${s.name}: ${s.count}`).join('\n')}>
+                                      <div className="absolute inset-0 rounded-full" style={{ background: `conic-gradient(${conicParts.join(', ')})` }} />
+                                      <div className="absolute inset-[22%] rounded-full bg-white" aria-hidden />
+                                      <div className="relative z-10 flex flex-col items-center justify-center text-center">
+                                        <span className="text-xl font-bold text-gray-800">{centerCount}</span>
+                                      </div>
+                                    </div>
+                                    <div className="mt-2 w-full flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs">
+                                      {segments.map((s, i) => (
+                                        <span key={i} className="inline-flex items-center gap-1.5">
+                                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} aria-hidden />
+                                          <span>{s.name}</span>
+                                          <span className="text-gray-600 font-medium">{s.count}</span>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          ) : (
+                            <p className="text-gray-500 text-sm">لا توجد إحصائيات أو لم يتم التحميل بعد.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {activeTab === 'lists' && (
           <div className="grid md:grid-cols-3 gap-6">
             {/* قسم إدارة القوائم */}

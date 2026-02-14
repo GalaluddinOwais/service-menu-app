@@ -180,6 +180,15 @@ export interface Customer {
   orderCount: number;
 }
 
+/** كاش إحصائيات عميل (باقة Business) — يُبطَل عند الطلب الجديد أو الحذف أو تغيير الرقم */
+export interface CustomerBusinessStats {
+  orders: Order[];
+  topItems: { name: string; count: number }[];
+  lastOrderAt: string | null;
+  totalPaid: number;
+  totalSaved: number;
+}
+
 export interface TableOrder {
   id: string;
   adminId: string;
@@ -283,6 +292,8 @@ interface Database {
   customers: Customer[];
   deliveryOrderStatusLogs: DeliveryOrderStatusLog[];
   tableOrderStatusLogs: TableOrderStatusLog[];
+  /** كاش إحصائيات العملاء (adminId -> phone -> { cachedAt, data }) — باقة Business فقط */
+  customerStatsCache?: Record<string, Record<string, { cachedAt: string; data: CustomerBusinessStats }>>;
 }
 
 // السمات المتاحة
@@ -347,17 +358,18 @@ async function readDB(): Promise<Database> {
   try {
     const data = await kv.get<Database>(KV_KEY);
     if (!data) {
-      return { admins: [], lists: [], items: [], orders: [], tableOrders: [], employees: [], customers: [], deliveryOrderStatusLogs: [], tableOrderStatusLogs: [] };
+      return { admins: [], lists: [], items: [], orders: [], tableOrders: [], employees: [], customers: [], deliveryOrderStatusLogs: [], tableOrderStatusLogs: [], customerStatsCache: {} };
     }
     if (!data.tableOrders) data.tableOrders = [];
     if (!data.employees) data.employees = [];
     if (!data.customers) data.customers = [];
     if (!data.deliveryOrderStatusLogs) data.deliveryOrderStatusLogs = [];
     if (!data.tableOrderStatusLogs) data.tableOrderStatusLogs = [];
+    if (!data.customerStatsCache) data.customerStatsCache = {};
     return data;
   } catch (error) {
     console.error('Error reading from KV:', error);
-    return { admins: [], lists: [], items: [], orders: [], tableOrders: [], employees: [], customers: [], deliveryOrderStatusLogs: [], tableOrderStatusLogs: [] };
+    return { admins: [], lists: [], items: [], orders: [], tableOrders: [], employees: [], customers: [], deliveryOrderStatusLogs: [], tableOrderStatusLogs: [], customerStatsCache: {} };
   }
 }
 
@@ -608,6 +620,12 @@ function decrementCustomerOrderCountInDb(db: Database, adminId: string, phone: s
   }
 }
 
+function invalidateCustomerStatsCache(db: Database, adminId: string, phone: string): void {
+  const p = String(phone).trim();
+  if (!p || !db.customerStatsCache?.[adminId]) return;
+  delete db.customerStatsCache[adminId][p];
+}
+
 // دوال إدارة الطلبات
 export async function getOrders(
   adminId?: string,
@@ -713,6 +731,81 @@ export async function getOrder(id: string): Promise<Order | null> {
   return db.orders.find(order => order.id === id) || null;
 }
 
+/** قائمة العملاء لأدمن مع pagination وبحث بالاسم/الرقم/العنوان */
+export async function getCustomers(
+  adminId: string,
+  options: { page?: number; limit?: number; search?: string }
+): Promise<{ customers: Customer[]; total: number }> {
+  const db = await readDB();
+  let list = db.customers.filter(c => c.adminId === adminId);
+  const search = options.search?.trim().toLowerCase();
+  if (search) {
+    list = list.filter(
+      c =>
+        (c.name && c.name.toLowerCase().includes(search)) ||
+        (c.phone && c.phone.toLowerCase().includes(search)) ||
+        (c.address && c.address.toLowerCase().includes(search))
+    );
+  }
+  const total = list.length;
+  list = [...list].sort((a, b) => (b.orderCount ?? 0) - (a.orderCount ?? 0));
+  const page = Math.max(1, options.page ?? 1);
+  const limit = Math.max(1, Math.min(50, options.limit ?? 10));
+  const start = (page - 1) * limit;
+  const customers = list.slice(start, start + limit);
+  return { customers, total };
+}
+
+/** عميل واحد بالرقم والأدمن */
+export async function getCustomerByPhone(adminId: string, phone: string): Promise<Customer | null> {
+  const db = await readDB();
+  const p = String(phone).trim();
+  return db.customers.find(c => c.adminId === adminId && c.phone === p) || null;
+}
+
+/** إحصائيات عميل (باقة Business) — من الكاش أو محسوبة ثم تخزين في الكاش */
+export async function getOrComputeCustomerBusinessStats(
+  adminId: string,
+  phone: string
+): Promise<{ data: CustomerBusinessStats; fromCache: boolean }> {
+  const db = await readDB();
+  const p = String(phone).trim();
+  if (!db.customerStatsCache) db.customerStatsCache = {};
+  if (!db.customerStatsCache[adminId]) db.customerStatsCache[adminId] = {};
+  const cached = db.customerStatsCache[adminId][p];
+  if (cached?.data) {
+    return { data: cached.data, fromCache: true };
+  }
+  const orders = db.orders.filter(o => o.adminId === adminId && (o.customerPhone ?? '').trim() === p);
+  const itemCounts: Record<string, number> = {};
+  let totalPaid = 0;
+  let totalSaved = 0;
+  let lastOrderAt: string | null = null;
+  for (const o of orders) {
+    totalPaid += o.totalPrice ?? 0;
+    totalSaved += o.totalDiscount ?? 0;
+    if (o.createdAt && (!lastOrderAt || o.createdAt > lastOrderAt)) lastOrderAt = o.createdAt;
+    for (const it of o.items || []) {
+      const name = it.name || '';
+      if (name) itemCounts[name] = (itemCounts[name] || 0) + (it.quantity || 1);
+    }
+  }
+  const topItems = Object.entries(itemCounts)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 20);
+  const data: CustomerBusinessStats = {
+    orders,
+    topItems,
+    lastOrderAt,
+    totalPaid,
+    totalSaved
+  };
+  db.customerStatsCache[adminId][p] = { cachedAt: new Date().toISOString(), data };
+  await writeDB(db);
+  return { data, fromCache: false };
+}
+
 /** تحديث بيانات عميل الطلب (اسم، رقم، عنوان) مع ضبط عدادات العملاء */
 export async function updateOrderDetails(
   orderId: string,
@@ -730,9 +823,13 @@ export async function updateOrderDetails(
   const newAddress = updates.customerAddress !== undefined ? String(updates.customerAddress).trim() : (order.customerAddress ?? '');
 
   if (newPhone !== oldPhone) {
-    if (oldPhone) decrementCustomerOrderCountInDb(db, adminId, oldPhone);
+    if (oldPhone) {
+      decrementCustomerOrderCountInDb(db, adminId, oldPhone);
+      invalidateCustomerStatsCache(db, adminId, oldPhone);
+    }
     if (newPhone) {
       getOrCreateCustomerInDb(db, adminId, newPhone, newName || undefined, newAddress || undefined);
+      invalidateCustomerStatsCache(db, adminId, newPhone);
     }
   } else if (newPhone) {
     const cust = db.customers.find(c => c.adminId === adminId && c.phone === newPhone);
@@ -779,6 +876,10 @@ export async function createOrder(order: Omit<Order, 'id' | 'createdAt'>): Promi
     ...(customerAddress !== undefined && { customerAddress }),
   };
   db.orders.push(newOrder);
+
+  if (customerPhone && customerPhone.trim()) {
+    invalidateCustomerStatsCache(db, order.adminId, customerPhone);
+  }
 
   // عدّادات الأدمن (باقة البزنس فقط): مصدر الطلب + نوع التعيين عند الإنشاء
   const adminIndex = db.admins.findIndex(a => a.id === order.adminId);
@@ -1363,6 +1464,7 @@ export async function deleteOrder(id: string): Promise<boolean> {
 
   if (orderToDelete.customerPhone && orderToDelete.customerPhone.trim()) {
     decrementCustomerOrderCountInDb(db, orderToDelete.adminId, orderToDelete.customerPhone);
+    invalidateCustomerStatsCache(db, orderToDelete.adminId, orderToDelete.customerPhone);
   }
 
   db.orders = db.orders.filter(order => order.id !== id);
