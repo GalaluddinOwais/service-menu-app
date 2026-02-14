@@ -37,7 +37,8 @@ export async function GET(request: NextRequest) {
       adminId: c.adminId,
       phone: c.phone,
       name: c.name,
-      orderCount: c.orderCount
+      orderCount: c.orderCount,
+      address: c.address
     }));
 
     return NextResponse.json({
