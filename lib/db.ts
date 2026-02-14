@@ -162,12 +162,22 @@ export interface Order {
   items: OrderItem[];
   totalPrice: number;
   totalDiscount: number;
-  customerName?: string; // اسم العميل (للطلبات من الموقع)
-  customerPhone?: string; // رقم العميل (للطلبات من الموقع)
+  customerName?: string; // اسم العميل (للطلبات من الموقع/واتساب)
+  customerPhone?: string; // رقم العميل — معرف العميل ضمن الأدمن
+  customerAddress?: string; // عنوان العميل
   createdAt: string;
   status?: 'pending' | 'read' | 'delivering' | 'delivered'; // حالة الطلب
   assignedTo?: string; // معرف العامل المسؤول عن الطلب
   assignedEmployee?: { id: string; name: string }; // بيانات العامل المعيّن (يتم إضافتها عند الجلب)
+}
+
+/** عميل أدمن — الرقم + الأدمن فريدان معاً؛ عداد الطلبات يُحدَّث عند الإنشاء/الحذف/تغيير الرقم */
+export interface Customer {
+  adminId: string;
+  phone: string;
+  name: string;
+  address: string;
+  orderCount: number;
 }
 
 export interface TableOrder {
@@ -270,6 +280,7 @@ interface Database {
   orders: Order[];
   tableOrders: TableOrder[];
   employees: Employee[];
+  customers: Customer[];
   deliveryOrderStatusLogs: DeliveryOrderStatusLog[];
   tableOrderStatusLogs: TableOrderStatusLog[];
 }
@@ -336,16 +347,17 @@ async function readDB(): Promise<Database> {
   try {
     const data = await kv.get<Database>(KV_KEY);
     if (!data) {
-      return { admins: [], lists: [], items: [], orders: [], tableOrders: [], employees: [], deliveryOrderStatusLogs: [], tableOrderStatusLogs: [] };
+      return { admins: [], lists: [], items: [], orders: [], tableOrders: [], employees: [], customers: [], deliveryOrderStatusLogs: [], tableOrderStatusLogs: [] };
     }
     if (!data.tableOrders) data.tableOrders = [];
     if (!data.employees) data.employees = [];
+    if (!data.customers) data.customers = [];
     if (!data.deliveryOrderStatusLogs) data.deliveryOrderStatusLogs = [];
     if (!data.tableOrderStatusLogs) data.tableOrderStatusLogs = [];
     return data;
   } catch (error) {
     console.error('Error reading from KV:', error);
-    return { admins: [], lists: [], items: [], orders: [], tableOrders: [], employees: [], deliveryOrderStatusLogs: [], tableOrderStatusLogs: [] };
+    return { admins: [], lists: [], items: [], orders: [], tableOrders: [], employees: [], customers: [], deliveryOrderStatusLogs: [], tableOrderStatusLogs: [] };
   }
 }
 
@@ -555,6 +567,47 @@ export async function deleteAdmin(id: string): Promise<boolean> {
   return true;
 }
 
+// ==================== العملاء (adminId + phone فريدان) ====================
+
+function getOrCreateCustomerInDb(
+  db: Database,
+  adminId: string,
+  phone: string,
+  name?: string,
+  address?: string
+): Customer {
+  const normalized = String(phone).trim();
+  if (!normalized) throw new Error('رقم العميل مطلوب');
+  let customer = db.customers.find(c => c.adminId === adminId && c.phone === normalized);
+  if (customer) {
+    if (name !== undefined) customer.name = name;
+    if (address !== undefined) customer.address = address;
+    customer.orderCount = (customer.orderCount ?? 0) + 1;
+    return customer;
+  }
+  customer = {
+    adminId,
+    phone: normalized,
+    name: name ?? '',
+    address: address ?? '',
+    orderCount: 1,
+  };
+  db.customers.push(customer);
+  return customer;
+}
+
+function decrementCustomerOrderCountInDb(db: Database, adminId: string, phone: string): void {
+  const normalized = String(phone).trim();
+  if (!normalized) return;
+  const idx = db.customers.findIndex(c => c.adminId === adminId && c.phone === normalized);
+  if (idx === -1) return;
+  const customer = db.customers[idx];
+  customer.orderCount = Math.max(0, (customer.orderCount ?? 1) - 1);
+  if (customer.orderCount === 0) {
+    db.customers.splice(idx, 1);
+  }
+}
+
 // دوال إدارة الطلبات
 export async function getOrders(
   adminId?: string,
@@ -660,13 +713,70 @@ export async function getOrder(id: string): Promise<Order | null> {
   return db.orders.find(order => order.id === id) || null;
 }
 
+/** تحديث بيانات عميل الطلب (اسم، رقم، عنوان) مع ضبط عدادات العملاء */
+export async function updateOrderDetails(
+  orderId: string,
+  updates: { customerName?: string; customerPhone?: string; customerAddress?: string }
+): Promise<Order | null> {
+  const db = await readDB();
+  const orderIndex = db.orders.findIndex(o => o.id === orderId);
+  if (orderIndex === -1) return null;
+
+  const order = db.orders[orderIndex];
+  const adminId = order.adminId;
+  const oldPhone = (order.customerPhone ?? '').trim();
+  const newPhone = updates.customerPhone !== undefined ? String(updates.customerPhone).trim() : oldPhone;
+  const newName = updates.customerName !== undefined ? String(updates.customerName).trim() : (order.customerName ?? '');
+  const newAddress = updates.customerAddress !== undefined ? String(updates.customerAddress).trim() : (order.customerAddress ?? '');
+
+  if (newPhone !== oldPhone) {
+    if (oldPhone) decrementCustomerOrderCountInDb(db, adminId, oldPhone);
+    if (newPhone) {
+      getOrCreateCustomerInDb(db, adminId, newPhone, newName || undefined, newAddress || undefined);
+    }
+  } else if (newPhone) {
+    const cust = db.customers.find(c => c.adminId === adminId && c.phone === newPhone);
+    if (cust) {
+      if (updates.customerName !== undefined) cust.name = newName;
+      if (updates.customerAddress !== undefined) cust.address = newAddress;
+    }
+  }
+
+  db.orders[orderIndex] = {
+    ...order,
+    ...(updates.customerName !== undefined && { customerName: newName }),
+    ...(updates.customerPhone !== undefined && { customerPhone: newPhone || undefined }),
+    ...(updates.customerAddress !== undefined && { customerAddress: newAddress || undefined }),
+  };
+  await writeDB(db);
+  return db.orders[orderIndex];
+}
+
 export async function createOrder(order: Omit<Order, 'id' | 'createdAt'>): Promise<Order> {
   const db = await readDB();
+  let customerName = order.customerName;
+  let customerPhone = order.customerPhone;
+  let customerAddress = order.customerAddress;
+  if (customerPhone && customerPhone.trim()) {
+    const customer = getOrCreateCustomerInDb(
+      db,
+      order.adminId,
+      customerPhone.trim(),
+      customerName?.trim(),
+      customerAddress?.trim()
+    );
+    customerName = customer.name;
+    customerPhone = customer.phone;
+    customerAddress = customer.address;
+  }
   const newOrder: Order = {
     ...order,
     id: `order_${Date.now()}`,
     createdAt: new Date().toISOString(),
-    status: order.status || 'pending', // Default status is 'pending'
+    status: order.status || 'pending',
+    ...(customerName !== undefined && { customerName }),
+    ...(customerPhone !== undefined && { customerPhone }),
+    ...(customerAddress !== undefined && { customerAddress }),
   };
   db.orders.push(newOrder);
 
@@ -1249,6 +1359,10 @@ export async function deleteOrder(id: string): Promise<boolean> {
       }
       db.admins[adminIndex].proOrderStats = stats;
     }
+  }
+
+  if (orderToDelete.customerPhone && orderToDelete.customerPhone.trim()) {
+    decrementCustomerOrderCountInDb(db, orderToDelete.adminId, orderToDelete.customerPhone);
   }
 
   db.orders = db.orders.filter(order => order.id !== id);

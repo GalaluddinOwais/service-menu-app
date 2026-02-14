@@ -5,7 +5,7 @@ import { verifySessionToken } from '@/lib/auth';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { adminId, orderType, items, totalPrice, totalDiscount, customerName, customerPhone } = body;
+    const { adminId, orderType, items, totalPrice, totalDiscount, customerName, customerPhone, customerAddress } = body;
 
     // التحقق من البيانات المطلوبة
     if (!adminId || !orderType || !items || !Array.isArray(items) || items.length === 0) {
@@ -49,8 +49,9 @@ export async function POST(request: Request) {
       totalDiscount: totalDiscount || 0,
       status: 'pending', // الحالة الابتدائية دائماً pending
       ...(defaultAssignment && { assignedTo: defaultAssignment }), // القيمة الافتراضية لعامل التوصيل
-      ...(customerName && { customerName }),
-      ...(customerPhone && { customerPhone }),
+      ...(customerName != null && { customerName: String(customerName) }),
+      ...(customerPhone != null && { customerPhone: String(customerPhone) }),
+      ...(customerAddress != null && { customerAddress: String(customerAddress) }),
     });
 
     return NextResponse.json(newOrder, { status: 201 });

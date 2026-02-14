@@ -37,11 +37,30 @@ export default function CartPopup({ themeColors, cardStyle, contactMessage, what
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [orderType, setOrderType] = useState<'website' | 'whatsapp' | 'table'>('website');
   const [isLoading, setIsLoading] = useState(false);
-  const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [customerAddress, setCustomerAddress] = useState('');
+
+  const STORAGE_KEY = typeof window !== 'undefined' ? `website_customer_${adminId}` : '';
+
+  // تعبئة الاسم والعنوان من localStorage عند تطابق الرقم
+  const loadStoredCustomer = (phone: string) => {
+    if (!STORAGE_KEY || !phone?.trim()) return;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw) as { phone?: string; name?: string; address?: string };
+      if (String(data.phone ?? '').trim() === phone.trim()) {
+        if (data.name != null) setCustomerName(String(data.name));
+        if (data.address != null) setCustomerAddress(String(data.address));
+      }
+    } catch {
+      // ignore
+    }
+  };
 
   // دالة لحفظ الطلب في قاعدة البيانات
-  const saveOrder = async (type: 'website' | 'whatsapp', name?: string, phone?: string) => {
+  const saveOrder = async (type: 'website' | 'whatsapp', name?: string, phone?: string, address?: string) => {
     setIsLoading(true);
     try {
       // تحويل عناصر السلة وإزالة id
@@ -59,8 +78,9 @@ export default function CartPopup({ themeColors, cardStyle, contactMessage, what
         items: orderItems,
         totalPrice: getTotalPrice(),
         totalDiscount: getTotalDiscount(),
-        ...(name && { customerName: name }),
-        ...(phone && { customerPhone: phone }),
+        ...(name != null && { customerName: String(name) }),
+        ...(phone != null && { customerPhone: String(phone) }),
+        ...(address != null && { customerAddress: String(address) }),
       };
 
       const response = await fetch('/api/orders', {
@@ -74,11 +94,21 @@ export default function CartPopup({ themeColors, cardStyle, contactMessage, what
       if (response.ok) {
         const savedOrder = await response.json();
         console.log('Order saved successfully', savedOrder);
+        if (type === 'website' && phone && STORAGE_KEY) {
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({
+              phone: String(phone).trim(),
+              name: (name ?? '').trim(),
+              address: (address ?? '').trim(),
+            }));
+          } catch {
+            // ignore
+          }
+        }
         setOrderType(type);
         setShowCustomerForm(false);
         setIsCartOpen(false);
         setShowConfirmation(true);
-        // لا نحذف السلة تلقائياً - سيكون هناك زر في رسالة التأكيد
         return savedOrder.id;
       } else {
         console.error('Failed to save order');
@@ -426,8 +456,9 @@ export default function CartPopup({ themeColors, cardStyle, contactMessage, what
             className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60]"
             onClick={() => {
               setShowCustomerForm(false);
-              setCustomerName('');
               setCustomerPhone('');
+              setCustomerName('');
+              setCustomerAddress('');
             }}
           />
 
@@ -449,8 +480,9 @@ export default function CartPopup({ themeColors, cardStyle, contactMessage, what
                 <button
                   onClick={() => {
                     setShowCustomerForm(false);
-                    setCustomerName('');
                     setCustomerPhone('');
+                    setCustomerName('');
+                    setCustomerAddress('');
                   }}
                   className="text-white hover:text-gray-200 transition-colors"
                   title="إغلاق"
@@ -461,9 +493,30 @@ export default function CartPopup({ themeColors, cardStyle, contactMessage, what
                 </button>
               </div>
 
-              {/* Form Fields */}
+              {/* Form Fields - ترتيب: رقم الهاتف → الاسم → العنوان */}
               <div className="p-8">
                 <div className="space-y-4 mb-6">
+                  {/* Phone Input */}
+                  <div>
+                    <label className="block text-gray-700 font-bold mb-2">رقم الهاتف</label>
+                    <input
+                      type="tel"
+                      value={customerPhone}
+                      onChange={(e) => {
+                        setCustomerPhone(e.target.value);
+                        loadStoredCustomer(e.target.value);
+                      }}
+                      placeholder="أدخل رقم الهاتف"
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 focus:outline-none transition-colors text-gray-800"
+                      onFocus={(e) => {
+                        e.target.style.borderColor = themeColors.primary;
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.borderColor = '#d1d5db';
+                      }}
+                    />
+                  </div>
+
                   {/* Name Input */}
                   <div>
                     <label className="block text-gray-700 font-bold mb-2">الاسم</label>
@@ -482,14 +535,14 @@ export default function CartPopup({ themeColors, cardStyle, contactMessage, what
                     />
                   </div>
 
-                  {/* Phone Input */}
+                  {/* Address Input */}
                   <div>
-                    <label className="block text-gray-700 font-bold mb-2">رقم الهاتف</label>
+                    <label className="block text-gray-700 font-bold mb-2">العنوان</label>
                     <input
-                      type="tel"
-                      value={customerPhone}
-                      onChange={(e) => setCustomerPhone(e.target.value)}
-                      placeholder="أدخل رقم الهاتف"
+                      type="text"
+                      value={customerAddress}
+                      onChange={(e) => setCustomerAddress(e.target.value)}
+                      placeholder="أدخل عنوان التوصيل"
                       className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 focus:outline-none transition-colors text-gray-800"
                       onFocus={(e) => {
                         e.target.style.borderColor = themeColors.primary;
@@ -504,14 +557,15 @@ export default function CartPopup({ themeColors, cardStyle, contactMessage, what
                 {/* Send Order Button */}
                 <button
                   onClick={async () => {
-                    if (!customerName.trim() || !customerPhone.trim()) {
+                    if (!customerPhone.trim() || !customerName.trim() || !customerAddress.trim()) {
                       return;
                     }
-                    await saveOrder('website', customerName, customerPhone);
-                    setCustomerName('');
+                    await saveOrder('website', customerName, customerPhone, customerAddress);
                     setCustomerPhone('');
+                    setCustomerName('');
+                    setCustomerAddress('');
                   }}
-                  disabled={isLoading || !customerName.trim() || !customerPhone.trim()}
+                  disabled={isLoading || !customerPhone.trim() || !customerName.trim() || !customerAddress.trim()}
                   className="w-full py-4 text-white font-bold rounded-2xl transition-all transform hover:scale-105 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
                   style={{
                     background: `linear-gradient(135deg, ${themeColors.primary}, ${themeColors.secondary})`
