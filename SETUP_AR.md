@@ -74,7 +74,7 @@ fetch('http://localhost:3000/api/admins', {
 يمكنك إنشاء مستخدمين إضافيين بنفس الطريقة، فقط غيّر username:
 ```json
 {
-  "username": "restaurant1",
+  "username": "pro1",
   "password": "password123",
   "theme": "sunset",
   "logoUrl": "https://example.com/logo.png",

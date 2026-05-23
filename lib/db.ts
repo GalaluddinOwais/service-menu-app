@@ -294,6 +294,8 @@ interface Database {
   tableOrderStatusLogs: TableOrderStatusLog[];
   /** كاش إحصائيات العملاء (adminId -> phone -> { cachedAt, data }) — باقة Business فقط */
   customerStatsCache?: Record<string, Record<string, { cachedAt: string; data: CustomerBusinessStats }>>;
+  /** طلبات اشتراك معلقة (order_id من بوابة الدفع -> { adminId, plan }) للربط عند استلام الـ webhook */
+  subscriptionPending?: Record<string, { adminId: string; plan: 'basic' | 'pro' | 'business' }>;
 }
 
 // السمات المتاحة
@@ -358,7 +360,7 @@ async function readDB(): Promise<Database> {
   try {
     const data = await kv.get<Database>(KV_KEY);
     if (!data) {
-      return { admins: [], lists: [], items: [], orders: [], tableOrders: [], employees: [], customers: [], deliveryOrderStatusLogs: [], tableOrderStatusLogs: [], customerStatsCache: {} };
+      return { admins: [], lists: [], items: [], orders: [], tableOrders: [], employees: [], customers: [], deliveryOrderStatusLogs: [], tableOrderStatusLogs: [], customerStatsCache: {}, subscriptionPending: {} };
     }
     if (!data.tableOrders) data.tableOrders = [];
     if (!data.employees) data.employees = [];
@@ -366,10 +368,11 @@ async function readDB(): Promise<Database> {
     if (!data.deliveryOrderStatusLogs) data.deliveryOrderStatusLogs = [];
     if (!data.tableOrderStatusLogs) data.tableOrderStatusLogs = [];
     if (!data.customerStatsCache) data.customerStatsCache = {};
+    if (!data.subscriptionPending) data.subscriptionPending = {};
     return data;
   } catch (error) {
     console.error('Error reading from KV:', error);
-    return { admins: [], lists: [], items: [], orders: [], tableOrders: [], employees: [], customers: [], deliveryOrderStatusLogs: [], tableOrderStatusLogs: [], customerStatsCache: {} };
+    return { admins: [], lists: [], items: [], orders: [], tableOrders: [], employees: [], customers: [], deliveryOrderStatusLogs: [], tableOrderStatusLogs: [], customerStatsCache: {}, subscriptionPending: {} };
   }
 }
 
@@ -521,6 +524,28 @@ export async function updateAdmin(id: string, updates: Partial<Admin>): Promise<
   db.admins[index] = { ...db.admins[index], ...updates, id };
   await writeDB(db);
   return db.admins[index];
+}
+
+/** حفظ طلب اشتراك معلق لربطه عند استلام webhook الدفع */
+export async function setSubscriptionPending(
+  orderId: string,
+  data: { adminId: string; plan: 'basic' | 'pro' | 'business' }
+): Promise<void> {
+  const db = await readDB();
+  if (!db.subscriptionPending) db.subscriptionPending = {};
+  db.subscriptionPending[orderId] = data;
+  await writeDB(db);
+}
+
+/** جلب وحذف طلب اشتراك معلق (بعد نجاح الدفع) */
+export async function getAndClearSubscriptionPending(orderId: string): Promise<{ adminId: string; plan: 'basic' | 'pro' | 'business' } | null> {
+  const db = await readDB();
+  const pending = db.subscriptionPending?.[orderId] ?? null;
+  if (pending && db.subscriptionPending) {
+    delete db.subscriptionPending[orderId];
+    await writeDB(db);
+  }
+  return pending;
 }
 
 /**
@@ -1156,6 +1181,16 @@ export function ensureOrdersOverTimeCacheRecomputed(db: Database, adminIndex: nu
     } else {
       start = new Date(end.getTime() + 1);
     }
+  }
+
+  // سقف 31 يوماً للبَكفِل: لو الفجوة (انتهاء الباقة ثم تجديد) أكبر من 31 يوماً، نملأ آخر 31 يوماً فقط
+  // ونترك الأيام الأقدم من الفجوة فارغة (الرسم يتخطّاها بدلاً من تصفيرها — أكثر صدقاً)
+  const BACKFILL_CAP_DAYS = 31;
+  const earliestAllowed = new Date(end);
+  earliestAllowed.setUTCDate(earliestAllowed.getUTCDate() - (BACKFILL_CAP_DAYS - 1));
+  earliestAllowed.setUTCHours(0, 0, 0, 0);
+  if (start.getTime() < earliestAllowed.getTime()) {
+    start = earliestAllowed;
   }
 
   if (start.getTime() > end.getTime()) {

@@ -9,6 +9,8 @@ function PaymentContent() {
     const plan = searchParams.get('plan');
     const [showManualDetails, setShowManualDetails] = useState(false);
     const [userData, setUserData] = useState<{ name: string, username: string } | null>(null);
+    const [cardLoading, setCardLoading] = useState(false);
+    const [cardError, setCardError] = useState<string | null>(null);
 
     useEffect(() => {
         // Fetch user data from localStorage
@@ -154,20 +156,53 @@ function PaymentContent() {
                                 )}
                             </div>
 
-                            {/* Card Payment - Coming Soon */}
-                            <div className="p-4 bg-gray-50 rounded-lg border-2 border-gray-200 opacity-60 cursor-not-allowed relative">
-                                <div className="absolute top-2 left-2 bg-gray-200 text-gray-600 text-xs px-2 py-1 rounded-full font-bold">قريباً</div>
+                            {/* Card Payment (Visa / Accept) */}
+                            <div
+                                role="button"
+                                onClick={async () => {
+                                    const token = typeof window !== 'undefined' ? localStorage.getItem('session_token') : null;
+                                    if (!token) {
+                                        setCardError('يجب تسجيل الدخول أولاً ثم العودة لصفحة الدفع.');
+                                        return;
+                                    }
+                                    setCardError(null);
+                                    setCardLoading(true);
+                                    try {
+                                        const res = await fetch('/api/payment/create-session', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                            body: JSON.stringify({ plan }),
+                                        });
+                                        const data = await res.json();
+                                        if (!res.ok) {
+                                            setCardError(data.error || 'فشل إنشاء جلسة الدفع');
+                                            return;
+                                        }
+                                        if (data.paymentUrl) {
+                                            window.location.href = data.paymentUrl;
+                                            return;
+                                        }
+                                        setCardError('لم تُرجع البوابة رابط الدفع');
+                                    } catch {
+                                        setCardError('خطأ في الاتصال. حاول مرة أخرى.');
+                                    } finally {
+                                        setCardLoading(false);
+                                    }
+                                }}
+                                className={`p-4 bg-gray-50 rounded-lg border-2 transition cursor-pointer group select-none ${cardLoading ? 'opacity-70 cursor-wait' : 'border-gray-200 hover:border-blue-300'}`}
+                            >
                                 <div className="flex items-center gap-3">
-                                    <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600">
+                                    <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition">
                                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                                         </svg>
                                     </div>
                                     <div className="text-right flex-1">
-                                        <h4 className="font-bold text-gray-800">الدفع بالبطاقة البنكية</h4>
-                                        <p className="text-xs text-gray-500">تفعيل فوري للاشتراك</p>
+                                        <h4 className="font-bold text-gray-800">الدفع بالبطاقة (Visa / Mastercard)</h4>
+                                        <p className="text-xs text-gray-500">{cardLoading ? 'جاري التحويل...' : 'تفعيل فوري للاشتراك'}</p>
                                     </div>
                                 </div>
+                                {cardError && <p className="mt-2 text-sm text-red-600">{cardError}</p>}
                             </div>
 
                             {/* Direct Contact */}
