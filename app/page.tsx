@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { getAdmins } from "@/lib/db";
 
-// Revalidate every 24 hours (86400 seconds)
-export const revalidate = 86400;
+// Force dynamic rendering on every request (no caching) — diagnostic
+export const dynamic = 'force-dynamic';
 
 interface Admin {
   id: string;
