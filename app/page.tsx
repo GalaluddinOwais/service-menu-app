@@ -28,12 +28,19 @@ export default async function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-r from-teal-50 via-cyan-50 to-cyan-50" dir="rtl">
+      {/* Brand */}
+      <div className="max-w-6xl mx-auto pt-8 flex justify-center lg:justify-start lg:px-8">
+        <h1 className="m-0">
+          <img src="/logo.png" alt="على النت" className="h-36 md:h-48 w-auto" />
+        </h1>
+      </div>
+
       {/* Hero Section */}
-      <div className="flex flex-col lg:flex-row p-8 pt-16 max-w-6xl mx-auto">
+      <div className="flex flex-col lg:flex-row px-8 pb-8 pt-4 max-w-6xl mx-auto">
         <div className="lg:w-1/2 text-center lg:text-right">
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 bg-gradient-to-r from-teal-500 via-cyan-600 to-cyan-600 bg-clip-text text-transparent pt-2 pb-2 leading-tight">
+          <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 bg-gradient-to-r from-teal-500 via-cyan-500 to-cyan-500 bg-clip-text text-transparent pt-2 pb-2 leading-tight">
             حوّل تجارتك إلى موقع على الإنترنت!
-          </h1>
+          </h2>
 
           <p className="text-xl text-gray-700 mb-2 leading-relaxed">
             احصل على موقع خاص يعرض منتجاتك على الإنترنت
